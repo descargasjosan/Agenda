@@ -6,8 +6,20 @@ const NEW_SUPABASE_URL = 'https://qmythlgbuawqgazokjrb.supabase.co';
 const NEW_SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFteXRobGdidWF3cWdhem9ranJiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTQwODgxMCwiZXhwIjoyMDg2OTg0ODEwfQ.O5nD0jMDLrIsMZr0WKtbZbceR5vkxagRAWWFcPFACTg';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  // Configurar CORS
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    return res.status(405).json({ 
+      error: 'Method not allowed',
+      message: 'Solo se permite POST'
+    });
   }
 
   try {
@@ -44,63 +56,72 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     
     // Migrar workers
     if (oldData.workers && oldData.workers.length > 0) {
-      const workersResponse = await fetch(`${NEW_SUPABASE_URL}/rest/v1/workers`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${NEW_SERVICE_KEY}`,
-          'Content-Type': 'application/json',
-          'Prefer': 'return=minimal'
-        },
-        body: JSON.stringify(oldData.workers)
-      });
-      
-      if (workersResponse.ok) {
-        results.push(`✅ ${oldData.workers.length} workers migrados`);
-      } else {
-        results.push(`❌ Error migrando workers: ${workersResponse.statusText}`);
+      try {
+        const workersResponse = await fetch(`${NEW_SUPABASE_URL}/rest/v1/workers`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${NEW_SERVICE_KEY}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=minimal'
+          },
+          body: JSON.stringify(oldData.workers)
+        });
+        
+        if (workersResponse.ok) {
+          results.push(`✅ ${oldData.workers.length} workers migrados`);
+        } else {
+          results.push(`❌ Error migrando workers: ${workersResponse.statusText}`);
+        }
+      } catch (error) {
+        results.push(`❌ Error migrando workers: ${error.message}`);
       }
     }
 
     // Migrar clients
     if (oldData.clients && oldData.clients.length > 0) {
-      const clientsResponse = await fetch(`${NEW_SUPABASE_URL}/rest/v1/clients`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${NEW_SERVICE_KEY}`,
-          'Content-Type': 'application/json',
-          'Prefer': 'return=minimal'
-        },
-        body: JSON.stringify(oldData.clients)
-      });
-      
-      if (clientsResponse.ok) {
-        results.push(`✅ ${oldData.clients.length} clients migrados`);
-      } else {
-        results.push(`❌ Error migrando clients: ${clientsResponse.statusText}`);
+      try {
+        const clientsResponse = await fetch(`${NEW_SUPABASE_URL}/rest/v1/clients`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${NEW_SERVICE_KEY}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=minimal'
+          },
+          body: JSON.stringify(oldData.clients)
+        });
+        
+        if (clientsResponse.ok) {
+          results.push(`✅ ${oldData.clients.length} clients migrados`);
+        } else {
+          results.push(`❌ Error migrando clients: ${clientsResponse.statusText}`);
+        }
+      } catch (error) {
+        results.push(`❌ Error migrando clients: ${error.message}`);
       }
     }
 
     // Migrar jobs
     if (oldData.jobs && oldData.jobs.length > 0) {
-      const jobsResponse = await fetch(`${NEW_SUPABASE_URL}/rest/v1/jobs`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${NEW_SERVICE_KEY}`,
-          'Content-Type': 'application/json',
-          'Prefer': 'return=minimal'
-        },
-        body: JSON.stringify(oldData.jobs)
-      });
-      
-      if (jobsResponse.ok) {
-        results.push(`✅ ${oldData.jobs.length} jobs migrados`);
-      } else {
-        results.push(`❌ Error migrando jobs: ${jobsResponse.statusText}`);
+      try {
+        const jobsResponse = await fetch(`${NEW_SUPABASE_URL}/rest/v1/jobs`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${NEW_SERVICE_KEY}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=minimal'
+          },
+          body: JSON.stringify(oldData.jobs)
+        });
+        
+        if (jobsResponse.ok) {
+          results.push(`✅ ${oldData.jobs.length} jobs migrados`);
+        } else {
+          results.push(`❌ Error migrando jobs: ${jobsResponse.statusText}`);
+        }
+      } catch (error) {
+        results.push(`❌ Error migrando jobs: ${error.message}`);
       }
     }
-
-    // Migrar otras entidades...
-    // (courses, holidays, etc.)
 
     console.log('🎉 Migración completada:', results);
 
@@ -114,7 +135,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error('❌ Error en migración:', error);
     res.status(500).json({
       error: 'Error durante la migración',
-      message: error.message
+      message: error.message || 'Error desconocido'
     });
   }
 }

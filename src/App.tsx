@@ -486,6 +486,8 @@ const App: React.FC = () => {
     try {
       showNotification('Iniciando migración de datos...', 'info');
       
+      console.log('🚀 Enviando petición a /api/migrate');
+      
       const response = await fetch('/api/migrate', {
         method: 'POST',
         headers: {
@@ -494,23 +496,44 @@ const App: React.FC = () => {
         body: JSON.stringify({ confirm: true })
       });
 
-      const result = await response.json();
+      console.log('📥 Response status:', response.status);
+      console.log('📥 Response headers:', response.headers);
 
-      if (response.ok) {
-        showNotification('✅ Migración completada exitosamente', 'success');
-        console.log('Resultados de la migración:', result.results);
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ Error response:', errorText);
         
+        let errorData;
+        try {
+          errorData = JSON.parse(errorText);
+        } catch {
+          errorData = { message: errorText };
+        }
+        
+        showNotification(`❌ Error en migración: ${errorData.message || response.statusText}`, 'error');
+        return;
+      }
+
+      const result = await response.json();
+      console.log('✅ Response data:', result);
+
+      showNotification('✅ Migración completada exitosamente', 'success');
+      
+      if (result.results && result.results.length > 0) {
+        console.log('📊 Resultados de la migración:');
+        result.results.forEach((result, index) => {
+          console.log(`${index + 1}. ${result}`);
+        });
+      }
+      
         // Recargar la página para mostrar los nuevos datos
         setTimeout(() => {
           window.location.reload();
         }, 2000);
-      } else {
-        showNotification(`❌ Error en migración: ${result.message}`, 'error');
-        console.error('Error en migración:', result);
-      }
+        
     } catch (error) {
+      console.error('❌ Error de conexión:', error);
       showNotification('❌ Error de conexión durante la migración', 'error');
-      console.error('Error de conexión:', error);
     }
   };
 
