@@ -1,0 +1,321 @@
+import React from 'react';
+import { Search, User, Car, Euro, CalendarCheck, Briefcase } from 'lucide-react';
+import { Worker, PlanningState, WorkerStatus, ContractType, Job, JobType } from '../lib/types';
+import { checkContinuityRisk, getWorkerDisplayName, getCurrentWorkerStatus } from '../lib/utils';
+
+interface WorkerSidebarProps {
+  workers: Worker[];
+  planning: PlanningState;
+  onDragStart: (worker: Worker) => void;
+  selectedWorkerId: string | null;
+  onSelectWorker: (id: string) => void;
+  onUpdateWorkerStatus: (workerId: string, status: WorkerStatus) => void;
+  getCorrectWorkerStatus?: (worker: Worker) => WorkerStatus;
+  onWorkerHighlight?: (workerId: string) => void;
+}
+
+const WorkerSidebar: React.FC<WorkerSidebarProps> = ({ 
+  workers, 
+  planning, 
+  onDragStart,
+  selectedWorkerId,
+  onSelectWorker,
+  getCorrectWorkerStatus,
+  onWorkerHighlight
+}) => {
+  const [searchTerm, setSearchTerm] = React.useState('');
+  const [availabilityFilter, setAvailabilityFilter] = React.useState<'all' | 'free' | 'assigned'>('all');
+  const [contractFilter, setContractFilter] = React.useState<'all' | 'fixedDiscontinuous' | 'others'>('all');
+
+  // Función para acortar el nombre: "Juan Domínguez" -> "Juan D."
+  const getShortName = (fullName: string) => {
+    const parts = fullName.trim().split(/\s+/);
+    if (parts.length <= 1) return fullName;
+    const firstName = parts[0];
+    const lastNameInitial = parts[1][0].toUpperCase();
+    return `${firstName} ${lastNameInitial}.`;
+  };
+
+  // Función para obtener el nombre corto, pero sin acortar los apodos
+  const getDisplayShortName = (worker: Worker) => {
+    const displayName = getWorkerDisplayName(worker);
+    // Si el operario tiene apodo, mostrarlo completo sin acortar
+    if (worker.apodo && worker.apodo.trim()) {
+      return displayName;
+    }
+    // Si no tiene apodo, acortar el nombre real
+    return getShortName(displayName);
+  };
+
+  // Función para determinar el estado de un operario en una fecha específica (basada en registros)
+  const getWorkerStatusForDate = (worker: Worker, date: string): WorkerStatus => {
+    if (!worker.statusRecords || worker.statusRecords.length === 0) {
+      return WorkerStatus.DISPONIBLE;
+    }
+
+    const targetDate = new Date(date);
+    
+    // Buscar registro activo para la fecha específica
+    const activeRecord = worker.statusRecords.find(record => {
+      const startDate = new Date(record.startDate);
+      const endDate = record.endDate ? new Date(record.endDate) : new Date('9999-12-31'); // INDEFINIDO
+      
+      return targetDate >= startDate && targetDate <= endDate;
+    });
+
+    return activeRecord ? activeRecord.status : WorkerStatus.DISPONIBLE;
+  };
+
+  // FILTRO: Muestra trabajadores activos/disponibles y gestiona las fechas de bajas/vacaciones
+  const filteredWorkers = workers.filter(w => {
+    // 1. Descartar archivados
+    if (w.isArchived) return false;
+
+    // 2. Filtro de búsqueda (Nombre o Código)
+    const matchesSearch = w.name.toLowerCase().includes(searchTerm.toLowerCase()) || w.code.includes(searchTerm);
+    if (!matchesSearch) return false;
+
+    // 3. Lógica de Estado - verificar disponibilidad para la fecha actual de planificación
+    const statusForCurrentDate = getWorkerStatusForDate(w, planning.currentDate);
+    const isUnavailableStatus = [
+      WorkerStatus.VACACIONES, 
+      WorkerStatus.BAJA_MEDICA, 
+      WorkerStatus.BAJA_PATERNIDAD
+    ].includes(statusForCurrentDate);
+
+    if (isUnavailableStatus) {
+      return false; // Si está no disponible en la fecha actual, no mostrar
+    }
+
+    // 4. Filtro por disponibilidad (libres/asignados)
+    if (availabilityFilter !== 'all') {
+      const todayJobs = planning.jobs.filter(job => job.date === planning.currentDate && !job.isCancelled);
+      const assignedWorkerIds = new Set(todayJobs.flatMap(job => job.assignedWorkerIds));
+      
+      if (availabilityFilter === 'free') {
+        if (assignedWorkerIds.has(w.id)) return false;
+      } else if (availabilityFilter === 'assigned') {
+        if (!assignedWorkerIds.has(w.id)) return false;
+      }
+    }
+
+    // 5. Filtro por tipo de contrato
+    if (contractFilter !== 'all') {
+      if (contractFilter === 'fixedDiscontinuous') {
+        if (w.contractType !== ContractType.FIJO_DISCONTINUO) return false;
+      } else if (contractFilter === 'others') {
+        if (w.contractType === ContractType.FIJO_DISCONTINUO) return false;
+      }
+    }
+
+    return true;
+  });
+
+  return (
+    <div className="w-60 border-r bg-white h-screen flex flex-col sticky top-0 shrink-0">
+      {/* Cabecera Compacta */}
+      <div className="p-3 border-b bg-white z-10">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-[10px] font-[900] tracking-tight uppercase text-slate-900 flex items-center gap-1.5">
+            <User className="w-3 h-3 text-slate-400" /> Disponibles
+          </h2>
+          <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded-md text-[9px] font-black border border-slate-200">
+            {filteredWorkers.length}
+          </span>
+        </div>
+        
+        {/* Búsqueda */}
+        <div className="relative mb-2">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Buscar..."
+            className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-bold focus:outline-none focus:ring-2 focus:ring-blue-50 transition-all"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+
+        {/* Filtros Compactos */}
+        <div className="flex gap-1 flex-wrap">
+          {/* Filtro Disponibilidad */}
+          <div className="flex gap-1">
+            <button
+              onClick={() => setAvailabilityFilter('all')}
+              className={`px-2 py-1 rounded text-[8px] font-[900] uppercase transition-all ${
+                availabilityFilter === 'all' 
+                  ? 'bg-blue-500 text-white border border-blue-600' 
+                  : 'bg-white border border-slate-200 text-slate-400 hover:border-blue-300 hover:text-blue-500'
+              }`}
+              title="Todos"
+            >
+              T
+            </button>
+            <button
+              onClick={() => setAvailabilityFilter('free')}
+              className={`px-2 py-1 rounded text-[8px] font-[900] uppercase transition-all ${
+                availabilityFilter === 'free' 
+                  ? 'bg-green-500 text-white border border-green-600' 
+                  : 'bg-white border border-slate-200 text-slate-400 hover:border-green-300 hover:text-green-500'
+              }`}
+              title="Libres"
+            >
+              L
+            </button>
+            <button
+              onClick={() => setAvailabilityFilter('assigned')}
+              className={`px-2 py-1 rounded text-[8px] font-[900] uppercase transition-all ${
+                availabilityFilter === 'assigned' 
+                  ? 'bg-amber-500 text-white border border-amber-600' 
+                  : 'bg-white border border-slate-200 text-slate-400 hover:border-amber-300 hover:text-amber-500'
+              }`}
+              title="Asignados"
+            >
+              A
+            </button>
+          </div>
+
+          {/* Espacio de separación entre bloques */}
+          <div className="w-8"></div>
+
+          {/* Filtro Contrato */}
+          <div className="flex gap-1">
+            <button
+              onClick={() => setContractFilter('all')}
+              className={`px-2 py-1 rounded text-[8px] font-[900] uppercase transition-all ${
+                contractFilter === 'all' 
+                  ? 'bg-blue-500 text-white border border-blue-600' 
+                  : 'bg-white border border-slate-200 text-slate-400 hover:border-blue-300 hover:text-blue-500'
+              }`}
+              title="Todos"
+            >
+              TC
+            </button>
+            <button
+              onClick={() => setContractFilter('fixedDiscontinuous')}
+              className={`px-2 py-1 rounded text-[8px] font-[900] uppercase transition-all ${
+                contractFilter === 'fixedDiscontinuous' 
+                  ? 'bg-purple-500 text-white border border-purple-600' 
+                  : 'bg-white border border-slate-200 text-slate-400 hover:border-purple-300 hover:text-purple-500'
+              }`}
+              title="Fijos Discontinuos"
+            >
+              FD
+            </button>
+            <button
+              onClick={() => setContractFilter('others')}
+              className={`px-2 py-1 rounded text-[8px] font-[900] uppercase transition-all ${
+                contractFilter === 'others' 
+                  ? 'bg-slate-500 text-white border border-slate-600' 
+                  : 'bg-white border border-slate-200 text-slate-400 hover:border-slate-300 hover:text-slate-500'
+              }`}
+              title="Indefinidos"
+            >
+              IN
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Lista Compacta */}
+      <div className="flex-1 overflow-y-auto custom-scrollbar bg-white">
+        {filteredWorkers.map(worker => {
+          const isSelected = selectedWorkerId === worker.id;
+          const assignedJobsCount = planning.jobs.filter(j => j.date === planning.currentDate && !j.isCancelled && j.assignedWorkerIds.includes(worker.id)).length;
+          const continuityGaps = checkContinuityRisk(worker, planning.currentDate, planning.jobs, planning.customHolidays);
+          
+          // Verificar si está técnicamente inactivo pero disponible por fecha (recuperado)
+          const isRecovered = [WorkerStatus.VACACIONES, WorkerStatus.BAJA_MEDICA, WorkerStatus.BAJA_PATERNIDAD].includes(worker.status) && worker.statusEndDate && planning.currentDate > worker.statusEndDate;
+          
+          let avatarClass = '';
+          if (worker.contractType === ContractType.INDEFINIDO) {
+             avatarClass = 'bg-slate-900 text-white border-slate-900 shadow-sm'; 
+          } else if (worker.contractType === ContractType.AUTONOMO || worker.contractType === ContractType.AUTONOMA_COLABORADORA) {
+             avatarClass = 'bg-blue-50 text-blue-600 border-blue-100';
+          } else {
+             avatarClass = 'bg-red-50 text-red-600 border-red-100';
+          }
+
+          return (
+            <div
+              key={worker.id}
+              draggable
+              onDragStart={() => onDragStart(worker)}
+              onClick={() => {
+                onSelectWorker(worker.id);
+                if (onWorkerHighlight) {
+                  onWorkerHighlight(worker.id);
+                }
+              }}
+              title={`${getWorkerDisplayName(worker)}\nTel: ${worker.phone}\nClick para resaltar en planificación`}
+              className={`
+                group flex items-center gap-2 p-2 border-b border-slate-50 cursor-grab active:cursor-grabbing transition-all hover:bg-slate-50
+                ${isSelected ? 'bg-blue-50/80 border-blue-100' : ''}
+                ${continuityGaps ? 'bg-amber-50/40' : ''}
+              `}
+            >
+              {/* CÓDIGO (Avatar pequeño) */}
+              <div className={`
+                w-7 h-7 rounded-lg flex items-center justify-center font-black text-[9px] shrink-0 border relative
+                ${avatarClass}
+              `}>
+                {worker.code}
+                {isRecovered && (
+                  <div className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full border border-white" title="Disponible por fin de periodo" />
+                )}
+              </div>
+
+              {/* INFORMACIÓN PRINCIPAL (Nombre Abreviado) */}
+              <div className="flex-1 min-w-0 flex flex-col justify-center">
+                <div className="flex items-center gap-1">
+                  <p className={`text-[10px] font-black truncate leading-none ${isSelected ? 'text-blue-700' : 'text-slate-800'}`}>
+                    {getDisplayShortName(worker)}
+                  </p>
+                  {continuityGaps && (
+                    <div title="Riesgo Cotización">
+                      <Euro className="w-2.5 h-2.5 text-amber-500 shrink-0" />
+                    </div>
+                  )}
+                  {isRecovered && (
+                    <div title="Vuelta de baja/vacaciones">
+                      <CalendarCheck className="w-2.5 h-2.5 text-green-500 shrink-0" />
+                    </div>
+                  )}
+                </div>
+                
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tight truncate leading-none">
+                    {worker.role}
+                  </p>
+                  {worker.hasVehicle && (
+                    <div className="flex items-center text-slate-300" title="Vehículo Propio">
+                      <Car className="w-2 h-2" />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* ESTADO (Badge Derecha) */}
+              <div className={`
+                px-1.5 py-0.5 rounded-[4px] text-[7px] font-[900] uppercase tracking-tighter shrink-0 border
+                ${assignedJobsCount > 0 
+                  ? 'bg-blue-100 text-blue-700 border-blue-200' 
+                  : 'bg-green-50 text-green-700 border-green-100'}
+              `}>
+                {assignedJobsCount > 0 ? `${assignedJobsCount} ASIG` : 'LIBRE'}
+              </div>
+            </div>
+          );
+        })}
+        
+        {filteredWorkers.length === 0 && (
+          <div className="p-8 text-center opacity-40">
+            <p className="text-[9px] font-black uppercase text-slate-400">Sin resultados</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default WorkerSidebar;
