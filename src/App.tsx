@@ -478,6 +478,42 @@ const App: React.FC = () => {
     });
   }, [setPlanning]);
 
+  const handleMigrateData = async () => {
+    if (!confirm('⚠️ ESTA ACCIÓN IMPORTARÁ TODOS LOS DATOS DEL PROYECTO ANTIGUO\n\nEsto sobrescribirá cualquier dato existente. ¿Estás seguro de continuar?')) {
+      return;
+    }
+
+    try {
+      showNotification('Iniciando migración de datos...', 'info');
+      
+      const response = await fetch('/api/migrate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ confirm: true })
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        showNotification('✅ Migración completada exitosamente', 'success');
+        console.log('Resultados de la migración:', result.results);
+        
+        // Recargar la página para mostrar los nuevos datos
+        setTimeout(() => {
+          window.location.reload();
+        }, 2000);
+      } else {
+        showNotification(`❌ Error en migración: ${result.message}`, 'error');
+        console.error('Error en migración:', result);
+      }
+    } catch (error) {
+      showNotification('❌ Error de conexión durante la migración', 'error');
+      console.error('Error de conexión:', error);
+    }
+  };
+
   const handleOpenNewJob = (clientId: string = '', date?: string) => {
     const firstClient = clientId ? planning.clients.find(c => c.id === clientId) : planning.clients[0];
     const newJob: Job = { id: `j-${Date.now()}`, date: date || planning.currentDate, clientId: firstClient?.id || '', centerId: firstClient?.centers?.[0]?.id || '', type: JobType.DESCARGA, startTime: '09:00', endTime: '13:00', requiredWorkers: 3, assignedWorkerIds: [], ref: '', deliveryNote: '', locationDetails: '', isCancelled: false };
@@ -2115,6 +2151,8 @@ const App: React.FC = () => {
                   
                   <button onClick={exportBackup} className="w-full py-4 bg-blue-50 rounded-2xl font-black text-xs uppercase tracking-widest text-blue-600 hover:bg-blue-100 flex items-center justify-center gap-2 transition-colors"><DownloadCloud className="w-4 h-4" /> Exportar Backup COMPLETO</button>
                   <button onClick={exportDatabaseToExcel} className="w-full py-4 bg-green-50 rounded-2xl font-black text-xs uppercase tracking-widest text-green-600 hover:bg-green-100 flex items-center justify-center gap-2 transition-colors"><FileSpreadsheet className="w-4 h-4" /> Exportar Todo a Excel</button>
+                  
+                  <button onClick={handleMigrateData} className="w-full py-4 bg-red-50 rounded-2xl font-black text-xs uppercase tracking-widest text-red-600 hover:bg-red-100 flex items-center justify-center gap-2 transition-colors"><Database className="w-4 h-4" /> Importar Datos Antiguos</button>
                   
                   <button onClick={() => backupInputRef.current?.click()} className="w-full py-4 bg-slate-100 rounded-2xl font-black text-xs uppercase tracking-widest text-slate-600 hover:bg-slate-200 flex items-center justify-center gap-2 transition-colors"><Upload className="w-4 h-4" /> Importar Excel / JSON</button>
                </div>
