@@ -420,7 +420,16 @@ const App: React.FC = () => {
     }
     setPlanning(prev => ({ ...prev, jobs: updatedJobs }));
     // Guardar cada job individualmente
-    await Promise.all(updatedJobs.map(job => persistJob(job)));
+    console.log('🔄 About to save jobs:', updatedJobs.length);
+    try {
+      await Promise.all(updatedJobs.map(job => {
+        console.log('💾 Saving job:', job.id);
+        return persistJob(job);
+      }));
+      console.log('✅ All jobs saved successfully');
+    } catch (error) {
+      console.error('❌ Error saving jobs:', error);
+    }
     if (!validation.warning) showNotification("Mozo asignado", "success");
   }, [planning, persistJob, showNotification]);
 

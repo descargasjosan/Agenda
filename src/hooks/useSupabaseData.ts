@@ -299,12 +299,15 @@ export function useSupabaseData(): UseSupabaseDataReturn {
   const upsert = useCallback(async (table: string, id: string, data: any, extraFields?: Record<string, any>) => {
     setIsSaving(true);
     const row: any = { id, data, ...extraFields };
+    console.log(`💾 Saving to ${table}:`, { id, data, extraFields });
     const { error } = await supabase.from(table).upsert(row);
     setIsSaving(false);
     if (error) {
       console.error(`Error guardando en ${table}:`, error);
       showNotification(`Error al guardar: ${error.message}`, 'error');
       throw error;
+    } else {
+      console.log(`✅ Successfully saved to ${table}`);
     }
   }, [showNotification]);
 
