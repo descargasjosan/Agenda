@@ -407,7 +407,18 @@ const App: React.FC = () => {
       let workerTimes = { ...j.workerTimes };
       if (sourceJobId && j.id === sourceJobId) { assigned = assigned.filter(id => id !== workerId); if (workerTimes[workerId]) delete workerTimes[workerId]; }
       if (j.id === jobId) { assigned = [...assigned.filter(id => id !== workerId), workerId]; }
-      return { ...j, assignedWorkerIds: assigned, workerTimes };
+      const newJob = { ...j, assignedWorkerIds: assigned, workerTimes };
+      // Solo incluir si realmente cambió
+      if (JSON.stringify(j.assignedWorkerIds) !== JSON.stringify(newJob.assignedWorkerIds) ||
+          JSON.stringify(j.workerTimes) !== JSON.stringify(newJob.workerTimes)) {
+        return newJob;
+      }
+      return j; // No cambió, retornar original
+    }).filter(j => {
+      // Solo guardar los que realmente cambiaron
+      const original = planning.jobs.find(orig => orig.id === j.id);
+      return JSON.stringify(original?.assignedWorkerIds) !== JSON.stringify(j.assignedWorkerIds) ||
+             JSON.stringify(original?.workerTimes) !== JSON.stringify(j.workerTimes);
     });
     const targetJob = updatedJobs.find(j => j.id === jobId);
     const sourceJob = sourceJobId ? updatedJobs.find(j => j.id === sourceJobId) : null;
