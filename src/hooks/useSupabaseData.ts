@@ -310,6 +310,23 @@ export function useSupabaseData(): UseSupabaseDataReturn {
       throw error;
     } else {
       console.log(`✅ Successfully saved to ${table}`);
+      
+      // Forzar refresco si es la tabla jobs para sincronización inmediata
+      if (table === 'jobs') {
+        console.log('🔄 Forcing immediate refresh for jobs table...');
+        try {
+          const { data: refreshedJobs } = await supabase.from('jobs').select('data');
+          if (refreshedJobs && !refreshedJobs.error) {
+            setPlanning(prev => ({
+              ...prev,
+              jobs: extractRows<Job>(refreshedJobs.data),
+            }));
+            console.log('✅ Jobs table refreshed successfully');
+          }
+        } catch (refreshError) {
+          console.error('Error refreshing jobs:', refreshError);
+        }
+      }
     }
   }, [showNotification]);
 
