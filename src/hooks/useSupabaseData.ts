@@ -226,12 +226,14 @@ export function useSupabaseData(): UseSupabaseDataReturn {
         }));
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' }, (payload) => {
+        console.log('🏢 Clients change received:', payload);
         setPlanning((prev) => ({
           ...prev,
           clients: applyChange<Client>(prev.clients, payload),
         }));
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'jobs' }, (payload) => {
+        console.log('📋 Jobs change received:', payload);
         setPlanning((prev) => ({
           ...prev,
           jobs: applyChange<Job>(prev.jobs, payload),
