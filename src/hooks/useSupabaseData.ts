@@ -185,6 +185,34 @@ export function useSupabaseData(): UseSupabaseDataReturn {
     loadAll();
   }, []);
 
+  // ─── Polling automático para sincronización ───────────────────────────────
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      if (dbStatus === 'connected') {
+        try {
+          const [workersRes, clientsRes, jobsRes] = await Promise.all([
+            supabase.from('workers').select('data'),
+            supabase.from('clients').select('data'),
+            supabase.from('jobs').select('data'),
+          ]);
+
+          if (!workersRes.error && !clientsRes.error && !jobsRes.error) {
+            setPlanning(prev => ({
+              ...prev,
+              workers: extractRows<Worker>(workersRes.data),
+              clients: extractRows<Client>(clientsRes.data),
+              jobs: extractRows<Job>(jobsRes.data),
+            }));
+          }
+        } catch (error) {
+          console.log('Error en polling automático:', error);
+        }
+      }
+    }, 30000); // 30 segundos
+
+    return () => clearInterval(interval);
+  }, [dbStatus]);
+
   // ─── Realtime: suscripción por tabla ──────────────────────────────────
   useEffect(() => {
     const channel = supabase
