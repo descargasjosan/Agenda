@@ -111,6 +111,13 @@ const WorkerSidebar: React.FC<WorkerSidebarProps> = ({
     return true;
   });
 
+  // Ordenar por código numérico
+  const sortedFilteredWorkers = filteredWorkers.sort((a, b) => {
+    const numA = parseInt(a.code.replace(/\D/g, ''), 10);
+    const numB = parseInt(b.code.replace(/\D/g, ''), 10);
+    return numA - numB;
+  });
+
   return (
     <div className="w-60 border-r bg-white h-screen flex flex-col sticky top-0 shrink-0">
       {/* Cabecera Compacta */}
@@ -120,7 +127,7 @@ const WorkerSidebar: React.FC<WorkerSidebarProps> = ({
             <User className="w-3 h-3 text-slate-400" /> Disponibles
           </h2>
           <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded-md text-[9px] font-black border border-slate-200">
-            {filteredWorkers.length}
+            {sortedFilteredWorkers.length}
           </span>
         </div>
         
@@ -219,7 +226,7 @@ const WorkerSidebar: React.FC<WorkerSidebarProps> = ({
 
       {/* Lista Compacta */}
       <div className="flex-1 overflow-y-auto custom-scrollbar bg-white">
-        {filteredWorkers.map(worker => {
+        {sortedFilteredWorkers.map(worker => {
           const isSelected = selectedWorkerId === worker.id;
           const assignedJobsCount = planning.jobs.filter(j => j.date === planning.currentDate && !j.isCancelled && j.assignedWorkerIds.includes(worker.id)).length;
           const continuityGaps = checkContinuityRisk(worker, planning.currentDate, planning.jobs, planning.customHolidays);

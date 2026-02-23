@@ -10,6 +10,7 @@ import CompactPlanningView from './components/CompactPlanningView';
 import FleetManager from './components/FleetManager';
 import { PlanningState, Worker, Client, Job, Holiday, Vehicle, FuelRecord, DailyNote, MedicalCourse, Course, StandardTask, VehicleAssignment, ContractType, WorkerStatus, WorkerStatusRecord, ViewType, JobType, NoteType } from './lib/types';
 import { formatDateDMY, isHoliday, getWorkerDisplayName, getCurrentWorkerStatus, getNextStatusChange, addOrUpdateStatusRecord, removeStatusRecord, validateAssignment, getWorkerSSFormat } from './lib/utils';
+import { WORKER_ROLES } from './lib/constants';
 
 // Función para formatear fechas en formato DD/MM/YYYY
 const formatDateEuropean = (dateStr: string) => {
@@ -1653,7 +1654,11 @@ const App: React.FC = () => {
                            {/* Espacio para futuras funcionalidades */}
                         </td>
                         <td className="px-6 py-3 text-right">
-                           <button onClick={() => setEditingWorker(worker)} className="p-2 hover:bg-blue-50 text-slate-400 hover:text-blue-600 rounded-xl transition-colors">
+                           <button onClick={() => {
+                             console.log('🔍 Editando worker:', worker);
+                             console.log('🔍 Estado actual editingWorker:', editingWorker);
+                             setEditingWorker(worker);
+                           }} className="p-2 hover:bg-blue-50 text-slate-400 hover:text-blue-600 rounded-xl transition-colors">
                               <Edit2 className="w-4 h-4" />
                            </button>
                         </td>
@@ -2595,7 +2600,9 @@ const App: React.FC = () => {
         </div>
       )}
       
-      {editingWorker && (
+      {editingWorker && (() => {
+        console.log('🎨 Renderizando modal de edición para:', editingWorker);
+        return (
         <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4" onClick={() => setEditingWorker(null)}>
           <div className="bg-white w-full max-w-4xl rounded-[32px] p-8 shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar" onClick={e => e.stopPropagation()}>
             
@@ -3035,7 +3042,8 @@ const App: React.FC = () => {
 
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {editingClient && (
         <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4" onClick={() => setEditingClient(null)}>
