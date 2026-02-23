@@ -393,7 +393,7 @@ const CompactPlanningView: React.FC<CompactPlanningViewProps> = ({ planning }) =
                                                  elements.push(
                                                      <div key={wid} className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded border text-[10px] font-bold uppercase whitespace-nowrap ${bgClass}`} title={w.role}>
                                                          <span className={`font-black ${codeColorClass}`}>{w.code}</span>
-                                                         <span className="truncate max-w-[80px] text-slate-900">{w.name.split(' ')[0]}</span>
+                                                         <span className="truncate max-w-[80px] text-slate-900">{w.apodo || w.name.split(' ')[0]}</span>
                                                      </div>
                                                  );
                                              });
