@@ -215,9 +215,11 @@ export function useSupabaseData(): UseSupabaseDataReturn {
 
   // ─── Realtime: suscripción por tabla ──────────────────────────────────
   useEffect(() => {
+    console.log('🔗 Setting up Realtime channel...');
     const channel = supabase
       .channel('app-sync-v2')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'workers' }, (payload) => {
+        console.log('👷 Workers change received:', payload);
         setPlanning((prev) => ({
           ...prev,
           workers: applyChange<Worker>(prev.workers, payload),
@@ -283,9 +285,12 @@ export function useSupabaseData(): UseSupabaseDataReturn {
           customHolidays: applyHolidayChange(prev.customHolidays, payload),
         }));
       })
-      .subscribe();
+      .subscribe((status) => {
+        console.log('📡 Realtime subscription status:', status);
+      });
 
     return () => {
+      console.log('🔌 Cleaning up Realtime channel...');
       supabase.removeChannel(channel);
     };
   }, []);
@@ -536,11 +541,17 @@ export function useSupabaseData(): UseSupabaseDataReturn {
 function applyChange<T extends { id: string }>(arr: T[], payload: any): T[] {
   const { eventType, new: newRow, old: oldRow } = payload;
   
+  console.log('🔄 Realtime change received:', { eventType, table: payload.table, newRow, oldRow });
+  
   if (eventType === 'DELETE') {
+    console.log('🗑️ Deleting item:', oldRow.id);
     return arr.filter((item) => item.id !== oldRow.id);
   }
   
-  const updated = newRow.data as T;
+  // Extraer datos correctamente de Supabase
+  const updated = newRow.data ? newRow.data as T : newRow as T;
+  
+  console.log('✨ Applying change to item:', updated.id);
   
   if (eventType === 'INSERT') {
     // Evitar duplicados si ya lo añadimos optimísticamente
