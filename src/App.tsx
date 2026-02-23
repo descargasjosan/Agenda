@@ -419,7 +419,8 @@ const App: React.FC = () => {
       showNotification(`${assignedWorker.name} movido de otra tarea`, "info");
     }
     setPlanning(prev => ({ ...prev, jobs: updatedJobs }));
-    await persistJobs(updatedJobs);
+    // Guardar cada job individualmente
+    await Promise.all(updatedJobs.map(job => persistJob(job)));
     if (!validation.warning) showNotification("Mozo asignado", "success");
   }, [planning, persistJob, showNotification]);
 
