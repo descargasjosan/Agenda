@@ -234,10 +234,18 @@ export function useSupabaseData(): UseSupabaseDataReturn {
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'jobs' }, (payload) => {
         console.log('📋 Jobs change received:', payload);
-        setPlanning((prev) => ({
-          ...prev,
-          jobs: applyChange<Job>(prev.jobs, payload),
-        }));
+        console.log('📋 Event type:', payload.eventType);
+        console.log('📋 New data:', payload.new);
+        console.log('📋 Old data:', payload.old);
+        
+        setPlanning((prev) => {
+          const updatedJobs = applyChange<Job>(prev.jobs, payload);
+          console.log('📋 Jobs updated from', prev.jobs.length, 'to', updatedJobs.length);
+          return {
+            ...prev,
+            jobs: updatedJobs,
+          };
+        });
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'standard_tasks' }, (payload) => {
         setPlanning((prev) => ({
@@ -310,23 +318,8 @@ export function useSupabaseData(): UseSupabaseDataReturn {
       throw error;
     } else {
       console.log(`✅ Successfully saved to ${table}`);
-      
-      // Forzar refresco si es la tabla jobs para sincronización inmediata
-      if (table === 'jobs') {
-        console.log('🔄 Forcing immediate refresh for jobs table...');
-        try {
-          const { data: refreshedJobs } = await supabase.from('jobs').select('data');
-          if (refreshedJobs && !refreshedJobs.error) {
-            setPlanning(prev => ({
-              ...prev,
-              jobs: extractRows<Job>(refreshedJobs.data),
-            }));
-            console.log('✅ Jobs table refreshed successfully');
-          }
-        } catch (refreshError) {
-          console.error('Error refreshing jobs:', refreshError);
-        }
-      }
+      // Eliminado el refresco forzado para evitar delays
+      // Ahora confiamos en Realtime para la sincronización
     }
   }, [showNotification]);
 
@@ -563,7 +556,7 @@ export function useSupabaseData(): UseSupabaseDataReturn {
 function applyChange<T extends { id: string }>(arr: T[], payload: any): T[] {
   const { eventType, new: newRow, old: oldRow } = payload;
   
-  console.log('🔄 Realtime change received:', { eventType, table: payload.table, newRow, oldRow });
+  console.log('🔄 Realtime change received:', { eventType, table: payload.table, newRowId: newRow?.id, oldRowId: oldRow?.id });
   
   if (eventType === 'DELETE') {
     console.log('🗑️ Deleting item:', oldRow.id);
@@ -574,15 +567,20 @@ function applyChange<T extends { id: string }>(arr: T[], payload: any): T[] {
   const updated = newRow.data ? newRow.data as T : newRow as T;
   
   console.log('✨ Applying change to item:', updated.id);
+  console.log('📝 Updated data structure:', { hasData: !!newRow.data, updatedKeys: Object.keys(updated) });
   
   if (eventType === 'INSERT') {
-    // Evitar duplicados si ya lo añadimos optimísticamente
-    return arr.some((item) => item.id === updated.id)
-      ? arr.map((item) => (item.id === updated.id ? updated : item))
-      : [...arr, updated];
+    const exists = arr.some((item) => item.id === updated.id);
+    if (exists) {
+      console.log('🔄 Updating existing item:', updated.id);
+      return arr.map((item) => (item.id === updated.id ? updated : item));
+    } else {
+      console.log('➕ Inserting new item:', updated.id);
+      return [...arr, updated];
+    }
   }
   
-  // UPDATE
+  console.log('🔄 Updating item (UPDATE):', updated.id);
   return arr.map((item) => (item.id === updated.id ? updated : item));
 }
 
