@@ -429,7 +429,16 @@ const App: React.FC = () => {
     if (sourceJob && assignedWorker) {
       showNotification(`${assignedWorker.name} movido de otra tarea`, "info");
     }
-    setPlanning(prev => ({ ...prev, jobs: updatedJobs }));
+    
+    // Actualizar el estado local manteniendo TODOS los jobs, solo modificando los que cambiaron
+    setPlanning(prev => {
+      const allJobs = prev.jobs.map(job => {
+        const updatedJob = updatedJobs.find(uj => uj.id === job.id);
+        return updatedJob || job;
+      });
+      return { ...prev, jobs: allJobs };
+    });
+    
     // Guardar cada job individualmente
     console.log('🔄 About to save jobs:', updatedJobs.length);
     try {
