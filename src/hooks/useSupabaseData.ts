@@ -209,7 +209,7 @@ export function useSupabaseData(): UseSupabaseDataReturn {
           console.log('Error en polling automático:', error);
         }
       }
-    }, 5000); // 5 segundos para sincronización casi instantánea
+    }, 10000); // 10 segundos - compromiso entre velocidad y consumo
 
     return () => clearInterval(interval);
   }, [dbStatus]);
