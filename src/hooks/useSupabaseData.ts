@@ -185,34 +185,33 @@ export function useSupabaseData(): UseSupabaseDataReturn {
     loadAll();
   }, []);
 
-  // ─── Polling automático ELIMINADO para reducir consumo de datos ───────────────
-  // El Realtime ya mantiene la sincronización en tiempo real
-  // useEffect(() => {
-  //   const interval = setInterval(async () => {
-  //     if (dbStatus === 'connected') {
-  //       try {
-  //         const [workersRes, clientsRes, jobsRes] = await Promise.all([
-  //           supabase.from('workers').select('data'),
-  //           supabase.from('clients').select('data'),
-  //           supabase.from('jobs').select('data'),
-  //         ]);
+  // ─── Polling ligero para sincronización (solo jobs, cada 2 minutos) ───────
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      if (dbStatus === 'connected') {
+        try {
+          // Solo sincronizar jobs críticos, no todas las tablas
+          const jobsRes = await supabase.from('jobs').select('data');
+          
+          if (!jobsRes.error) {
+            const updatedJobs = extractRows<Job>(jobsRes.data);
+            setPlanning(prev => {
+              // Solo actualizar si realmente hay cambios
+              if (JSON.stringify(prev.jobs) !== JSON.stringify(updatedJobs)) {
+                console.log('🔄 Polling ligero: jobs actualizados', prev.jobs.length, '→', updatedJobs.length);
+                return { ...prev, jobs: updatedJobs };
+              }
+              return prev;
+            });
+          }
+        } catch (error) {
+          console.log('Error en polling ligero:', error);
+        }
+      }
+    }, 120000); // 2 minutos (120 segundos)
 
-  //         if (!workersRes.error && !clientsRes.error && !jobsRes.error) {
-  //           setPlanning(prev => ({
-  //             ...prev,
-  //             workers: extractRows<Worker>(workersRes.data),
-  //             clients: extractRows<Client>(clientsRes.data),
-  //             jobs: extractRows<Job>(jobsRes.data),
-  //           }));
-  //         }
-  //       } catch (error) {
-  //         console.log('Error en polling automático:', error);
-  //       }
-  //     }
-  //   }, 30000); // 30 segundos
-
-  //   return () => clearInterval(interval);
-  // }, [dbStatus]);
+    return () => clearInterval(interval);
+  }, [dbStatus]);
 
   // ─── Realtime: suscripción por tabla ──────────────────────────────────
   useEffect(() => {
