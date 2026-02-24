@@ -564,25 +564,38 @@ function applyChange<T extends { id: string }>(arr: T[], payload: any): T[] {
     return arr.filter((item) => item.id !== oldRow.id);
   }
   
-  // Extraer datos correctamente de Supabase
+  // Extraer datos correctamente de Supabase (los datos están en newRow.data)
   const updated = newRow.data ? newRow.data as T : newRow as T;
   
   console.log('✨ Applying change to item:', updated.id);
   console.log('📝 Updated data structure:', { hasData: !!newRow.data, updatedKeys: Object.keys(updated) });
+  console.log('📊 Original array length:', arr.length);
   
   if (eventType === 'INSERT') {
     const exists = arr.some((item) => item.id === updated.id);
     if (exists) {
-      console.log('🔄 Updating existing item:', updated.id);
-      return arr.map((item) => (item.id === updated.id ? updated : item));
+      console.log('🔄 INSERT found existing item, treating as UPDATE:', updated.id);
+      // Si ya existe, tratar como UPDATE
+      const newArr = arr.map((item) => (item.id === updated.id ? { ...updated } : item));
+      console.log('📊 Updated array length after INSERT->UPDATE:', newArr.length);
+      return newArr;
     } else {
       console.log('➕ Inserting new item:', updated.id);
-      return [...arr, updated];
+      const newArr = [...arr, updated];
+      console.log('📊 Updated array length after INSERT:', newArr.length);
+      return newArr;
     }
   }
   
-  console.log('🔄 Updating item (UPDATE):', updated.id);
-  return arr.map((item) => (item.id === updated.id ? updated : item));
+  if (eventType === 'UPDATE') {
+    console.log('🔄 Updating item (UPDATE):', updated.id);
+    const newArr = arr.map((item) => (item.id === updated.id ? { ...updated } : item));
+    console.log('📊 Updated array length after UPDATE:', newArr.length);
+    return newArr;
+  }
+  
+  console.log('❓ Unknown event type:', eventType);
+  return arr;
 }
 
 // ─── Helper específico para medical_courses (preserva ID en realtime) ───────
