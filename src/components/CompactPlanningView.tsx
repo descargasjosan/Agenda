@@ -47,7 +47,10 @@ const CalendarSelector: React.FC<CalendarSelectorProps> = ({ currentDate, custom
     dayElements.push(
       <button 
         key={i} 
-        onClick={() => onSelect(dateStr)}
+        onClick={() => {
+          onSelect(dateStr);
+          onClose(); // Asegurar que el calendario se cierre inmediatamente
+        }}
         className={`h-10 rounded-lg flex flex-col items-center justify-center transition-all relative group ${
           isSelected ? 'bg-slate-900 text-white shadow-md' : 
           holiday ? 'bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-100' :

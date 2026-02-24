@@ -574,7 +574,16 @@ const App: React.FC = () => {
     setEditingJob(newJob);
   };
 
-  const handleOpenDuplicate = (job: Job) => { setDuplicatingJob(job); setDuplicationDate(job.date); setKeepWorkersOnDuplicate(false); };
+  const handleOpenDuplicate = (job: Job) => { 
+    // Calcular el día siguiente
+    const nextDay = new Date(job.date);
+    nextDay.setDate(nextDay.getDate() + 1);
+    const nextDayStr = nextDay.toISOString().split('T')[0];
+    
+    setDuplicatingJob(job); 
+    setDuplicationDate(nextDayStr); // ✅ Usa el día siguiente
+    setKeepWorkersOnDuplicate(false); 
+  };
 
   const handleDuplicateJob = useCallback(async () => {
     if (!duplicatingJob || !duplicationDate) return;
@@ -825,18 +834,56 @@ const App: React.FC = () => {
 
   const handleCopyList = (list: Worker[], type: 'altas' | 'bajas') => {
     console.log('🔍 handleCopyList llamado con:', { type, listLength: list.length, list: list.slice(0, 3) });
-    const text = list.map(w => `${getWorkerSSFormat(w)}`).join('\n');
+    
+    // Obtener fecha actual en formato DD-MM-YYYY
+    const today = new Date();
+    const dateStr = today.toLocaleDateString('es-ES', { 
+      day: '2-digit', 
+      month: '2-digit', 
+      year: 'numeric' 
+    }).replace(/\//g, '-');
+    
+    // Crear encabezado y lista
+    const header = `${type.toUpperCase()} ${dateStr}`;
+    const workerList = list.map(w => `${getWorkerSSFormat(w)}`).join('\n');
+    const text = `${header}\n\n${workerList}`;
+    
     console.log('📝 Texto a copiar:', text);
-    console.log('📱 Navigator.clipboard disponible:', !!navigator.clipboard);
-    console.log('📱 Navigator.clipboard.writeText disponible:', !!navigator.clipboard?.writeText);
     
-    if (!navigator.clipboard) {
-      console.error('❌ Navigator.clipboard no disponible');
-      showNotification('Error al copiar: clipboard no disponible', 'error');
-      return;
-    }
+    // Función para copiar texto (fallback para navegadores que no soportan clipboard API)
+    const copyToClipboard = (text: string) => {
+      // Método 1: Usar clipboard API si está disponible
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        return navigator.clipboard.writeText(text);
+      }
+      
+      // Método 2: Fallback para navegadores antiguos
+      const textArea = document.createElement('textarea');
+      textArea.value = text;
+      textArea.style.position = 'fixed';
+      textArea.style.left = '-999999px';
+      textArea.style.top = '-999999px';
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      
+      return new Promise<void>((resolve, reject) => {
+        try {
+          const successful = document.execCommand('copy');
+          document.body.removeChild(textArea);
+          if (successful) {
+            resolve();
+          } else {
+            reject(new Error('Fallback copy failed'));
+          }
+        } catch (err) {
+          document.body.removeChild(textArea);
+          reject(err);
+        }
+      });
+    };
     
-    navigator.clipboard.writeText(text).then(() => {
+    copyToClipboard(text).then(() => {
       console.log('✅ Texto copiado al clipboard');
       showNotification(`Lista de ${type} copiada`, 'success');
     }).catch((error) => {
