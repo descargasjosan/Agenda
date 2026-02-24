@@ -185,30 +185,31 @@ export function useSupabaseData(): UseSupabaseDataReturn {
     loadAll();
   }, []);
 
-  // ─── Polling ligero para sincronización (solo jobs, cada 2 minutos) ───────
+  // ─── Polling automático para sincronización instantánea ───────────────────────
   useEffect(() => {
     const interval = setInterval(async () => {
       if (dbStatus === 'connected') {
         try {
-          // Solo sincronizar jobs críticos, no todas las tablas
-          const jobsRes = await supabase.from('jobs').select('data');
-          
-          if (!jobsRes.error) {
-            const updatedJobs = extractRows<Job>(jobsRes.data);
-            setPlanning(prev => {
-              // Solo actualizar si realmente hay cambios
-              if (JSON.stringify(prev.jobs) !== JSON.stringify(updatedJobs)) {
-                console.log('🔄 Polling ligero: jobs actualizados', prev.jobs.length, '→', updatedJobs.length);
-                return { ...prev, jobs: updatedJobs };
-              }
-              return prev;
-            });
+          const [workersRes, clientsRes, jobsRes] = await Promise.all([
+            supabase.from('workers').select('data'),
+            supabase.from('clients').select('data'),
+            supabase.from('jobs').select('data'),
+          ]);
+
+          if (!workersRes.error && !clientsRes.error && !jobsRes.error) {
+            setPlanning(prev => ({
+              ...prev,
+              workers: extractRows<Worker>(workersRes.data),
+              clients: extractRows<Client>(clientsRes.data),
+              jobs: extractRows<Job>(jobsRes.data),
+            }));
+            console.log('🔄 Polling: Sincronización completada');
           }
         } catch (error) {
-          console.log('Error en polling ligero:', error);
+          console.log('Error en polling automático:', error);
         }
       }
-    }, 120000); // 2 minutos (120 segundos)
+    }, 5000); // 5 segundos para sincronización casi instantánea
 
     return () => clearInterval(interval);
   }, [dbStatus]);
