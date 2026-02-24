@@ -303,16 +303,31 @@ const App: React.FC = () => {
       console.log('🔍 Nombre limpio:', `"${cleanClientName}"`);
       console.log('🔍 Caracteres del nombre:', Array.from(cleanClientName).map(c => `${c} (${c.charCodeAt(0)})`));
       
+      // Obtener número de exportación para el sufijo
+      const exportCount = (currentHistory[exportKey]?.exportCount || 0) + 1;
+      const suffix = exportCount > 1 ? `-${exportCount}` : '';
+      
       const fileName = isFirstExport 
-        ? `LISTADO ACCESO "${cleanClientName}" ${formattedDate}.xlsx` 
-        : `NUEVOS ACCESO "${cleanClientName}" ${formattedDate}_${new Date().toLocaleTimeString('es-ES', {hour:'2-digit',minute:'2-digit'}).replace(':','-')}.xlsx`;
+        ? `LISTADO ACCESO "${cleanClientName}" ${formattedDate}${suffix}.xlsx` 
+        : `NUEVOS ACCESO "${cleanClientName}" ${formattedDate}${suffix}.xlsx`;
       
       console.log('🔍 Nombre final del archivo:', fileName);
       const wb = XLSX.utils.book_new();
+      // Operarios fijos siempre al principio
+      const fixedWorkers = [
+        { dni: '24371414Q', name: 'JOSE LUIS RUIZ TARREGA' },
+        { dni: '44876073Z', name: 'ANGEL SANCHEZ MIGALLON' }
+      ];
+
+      // Combinar operarios fijos + resto (evitando duplicados)
+      const fixedDnis = new Set(fixedWorkers.map(w => w.dni));
+      const otherWorkers = finalWorkers.filter(w => !fixedDnis.has(w.dni));
+      const allWorkers = [...fixedWorkers, ...otherWorkers];
+
       const excelData = [
         [`${fileName.replace('.xlsx', '')}`],
         ['NIF', 'NOMBRE', 'APELLIDOS', 'EMPRESA'],
-        ...finalWorkers.map(worker => {
+        ...allWorkers.map(worker => {
           const nameParts = (worker.name || '').split(' ');
           return [worker.dni || '', nameParts[0] || '', nameParts.slice(1).join(' ') || '', 'DESCARGAS JOSAN SL'];
         })
