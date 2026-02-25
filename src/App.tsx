@@ -722,6 +722,42 @@ const App: React.FC = () => {
       }
     });
     
+    // Calcular nóminas (bloques de trabajo consecutivos)
+    const nominasCount = (() => {
+      if (workedDays.size === 0) return 0;
+      
+      // Obtener todos los días del mes ordenados
+      const allDaysInMonth = daysInMonth.map(date => formatDateLocal(date));
+      const workedDaysArray = Array.from(workedDays).sort();
+      
+      let nominas = 1; // Al menos una nómina si hay días trabajados
+      let inWorkBlock = false;
+      let firstWorkDayFound = false;
+      
+      for (const day of allDaysInMonth) {
+        const isWorked = workedDays.has(day);
+        const isWeekend = weekendDays.has(day);
+        const isEffectiveWorkDay = isWorked || isWeekend; // Días que cuentan como trabajo
+        
+        if (!firstWorkDayFound && isEffectiveWorkDay) {
+          // Encontramos el primer día de trabajo
+          firstWorkDayFound = true;
+          inWorkBlock = true;
+        } else if (firstWorkDayFound) {
+          if (isEffectiveWorkDay && !inWorkBlock) {
+            // Volvemos a trabajar después de un break → nueva nómina
+            nominas++;
+            inWorkBlock = true;
+          } else if (!isEffectiveWorkDay && inWorkBlock) {
+            // Dejamos de trabajar → empieza un break
+            inWorkBlock = false;
+          }
+        }
+      }
+      
+      return nominas;
+    })();
+    
     // Generar array con información de cada día
     const calendarDays = daysInMonth.map(date => {
       const dateStr = formatDateLocal(date);
@@ -760,7 +796,8 @@ const App: React.FC = () => {
       calendarDays: adjustedCalendarDays,
       workedCount,
       weekendCount,
-      totalCount
+      totalCount,
+      nominasCount
     };
   }, [planning.jobs]);
   const handleOpenNewWorker = () => {
@@ -3528,7 +3565,7 @@ const App: React.FC = () => {
                  
                  {workerDaysModal.calculationResult && (
                     <div className="space-y-4">
-                       <div className="grid grid-cols-3 gap-4 p-4 bg-slate-50 rounded-xl">
+                       <div className="grid grid-cols-4 gap-4 p-4 bg-slate-50 rounded-xl">
                           <div className="text-center">
                              <div className="text-2xl font-black text-green-600">{workerDaysModal.calculationResult.workedCount}</div>
                              <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Días Trabajados</div>
@@ -3540,6 +3577,10 @@ const App: React.FC = () => {
                           <div className="text-center">
                              <div className="text-2xl font-black text-blue-600">{workerDaysModal.calculationResult.totalCount}</div>
                              <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total</div>
+                          </div>
+                          <div className="text-center">
+                             <div className="text-2xl font-black text-purple-600">{workerDaysModal.calculationResult.nominasCount}</div>
+                             <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">NÓMINAS</div>
                           </div>
                        </div>
                        
