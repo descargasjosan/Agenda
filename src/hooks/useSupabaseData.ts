@@ -185,31 +185,72 @@ export function useSupabaseData(): UseSupabaseDataReturn {
     loadAll();
   }, []);
 
-  // ─── Polling automático para sincronización instantánea ───────────────────────
+  // ─── Polling inteligente con timestamps ─────────────────────────────────────
   useEffect(() => {
     const interval = setInterval(async () => {
       if (dbStatus === 'connected') {
         try {
+          const now = new Date().toISOString();
+          const tenSecondsAgo = new Date(Date.now() - 10000).toISOString();
+          
+          console.log('🔄 Polling inteligente:', {
+            checkTime: tenSecondsAgo,
+            currentTime: now
+          });
+          
+          // Solo descargar registros modificados en los últimos 10 segundos
           const [workersRes, clientsRes, jobsRes] = await Promise.all([
-            supabase.from('workers').select('data'),
-            supabase.from('clients').select('data'),
-            supabase.from('jobs').select('data'),
+            supabase.from('workers')
+              .select('id, data, updated_at')
+              .gt('updated_at', tenSecondsAgo),
+            supabase.from('clients')
+              .select('id, data, updated_at')
+              .gt('updated_at', tenSecondsAgo),
+            supabase.from('jobs')
+              .select('id, data, updated_at')
+              .gt('updated_at', tenSecondsAgo),
           ]);
 
           if (!workersRes.error && !clientsRes.error && !jobsRes.error) {
-            setPlanning(prev => ({
-              ...prev,
-              workers: extractRows<Worker>(workersRes.data),
-              clients: extractRows<Client>(clientsRes.data),
-              jobs: extractRows<Job>(jobsRes.data),
-            }));
-            console.log('🔄 Polling: Sincronización completada');
+            const workersChanges = extractRows<Worker>(workersRes.data);
+            const clientsChanges = extractRows<Client>(clientsRes.data);
+            const jobsChanges = extractRows<Job>(jobsRes.data);
+            
+            const hasChanges = workersChanges.length > 0 || clientsChanges.length > 0 || jobsChanges.length > 0;
+            
+            if (hasChanges) {
+              setPlanning(prev => {
+                const newPlanning = { ...prev };
+                
+                // Fusionar cambios solo para los registros que se modificaron
+                if (workersChanges.length > 0) {
+                  newPlanning.workers = mergeChanges(prev.workers, workersChanges);
+                }
+                if (clientsChanges.length > 0) {
+                  newPlanning.clients = mergeChanges(prev.clients, clientsChanges);
+                }
+                if (jobsChanges.length > 0) {
+                  newPlanning.jobs = mergeChanges(prev.jobs, jobsChanges);
+                }
+                
+                return newPlanning;
+              });
+              
+              console.log('🔄 Polling: Cambios detectados y aplicados:', {
+                workers: workersChanges.length,
+                clients: clientsChanges.length,
+                jobs: jobsChanges.length,
+                totalKB: estimateDataSize(workersChanges, clientsChanges, jobsChanges)
+              });
+            } else {
+              console.log('🔄 Polling: Sin cambios (0 KB descargados)');
+            }
           }
         } catch (error) {
-          console.log('Error en polling automático:', error);
+          console.log('Error en polling inteligente:', error);
         }
       }
-    }, 10000); // 10 segundos - compromiso entre velocidad y consumo
+    }, 10000); // 10 segundos
 
     return () => clearInterval(interval);
   }, [dbStatus]);
@@ -622,6 +663,29 @@ function applyChange<T extends { id: string }>(arr: T[], payload: any): T[] {
   
   console.log('❓ Unknown event type:', eventType);
   return arr;
+}
+
+// ─── Helper para fusionar cambios del polling inteligente ─────────────────────
+function mergeChanges<T extends { id: string }>(current: T[], changes: T[]): T[] {
+  if (changes.length === 0) return current;
+  
+  const result = [...current];
+  changes.forEach(change => {
+    const index = result.findIndex(item => item.id === change.id);
+    if (index >= 0) {
+      result[index] = change; // Actualizar existente
+    } else {
+      result.push(change); // Añadir nuevo
+    }
+  });
+  
+  return result;
+}
+
+// ─── Helper para estimar tamaño de datos descargados ───────────────────────
+function estimateDataSize(...arrays: any[][]): number {
+  const jsonString = JSON.stringify(arrays.flat());
+  return Math.round(jsonString.length / 1024); // KB
 }
 
 // ─── Helper específico para medical_courses (preserva ID en realtime) ───────
