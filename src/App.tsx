@@ -602,7 +602,13 @@ const App: React.FC = () => {
 
   const handleDuplicateJob = useCallback(async () => {
     if (!duplicatingJob || !duplicationDate) return;
-    const newJob: Job = { ...duplicatingJob, id: `j-${Date.now()}`, date: duplicationDate, assignedWorkerIds: keepWorkersOnDuplicate ? duplicatingJob.assignedWorkerIds : [] };
+    const newJob: Job = { 
+      ...duplicatingJob, 
+      id: `j-${Date.now()}`, 
+      date: duplicationDate, 
+      assignedWorkerIds: keepWorkersOnDuplicate ? duplicatingJob.assignedWorkerIds : [],
+      ref: '' // ✅ Dejar albarán vacío al duplicar
+    };
     await persistJob(newJob);
     setDuplicatingJob(null);
     showNotification("Tarea duplicada", "success");
