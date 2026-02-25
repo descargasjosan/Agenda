@@ -196,6 +196,7 @@ const App: React.FC = () => {
   const [duplicatingJob, setDuplicatingJob] = useState<Job | null>(null);
   const [duplicationDate, setDuplicationDate] = useState<string>('');
   const [keepWorkersOnDuplicate, setKeepWorkersOnDuplicate] = useState(false);
+  const [keepDeliveryNoteOnDuplicate, setKeepDeliveryNoteOnDuplicate] = useState(false);
   const [newCourseName, setNewCourseName] = useState('');
   const [dbTab, setDbTab] = useState<'tasks' | 'courses'>('tasks');
   const [editingStandardTask, setEditingStandardTask] = useState<StandardTask | null>(null);
@@ -639,17 +640,24 @@ const App: React.FC = () => {
 
   const handleDuplicateJob = useCallback(async () => {
     if (!duplicatingJob || !duplicationDate) return;
+    
+    // Extraer todas las propiedades excepto las que vamos a controlar explícitamente
+    const { id, date, assignedWorkerIds, ref, deliveryNote, ...jobData } = duplicatingJob;
+    
     const newJob: Job = { 
-      ...duplicatingJob, 
+      ...jobData, // Copiar todo excepto id, date, assignedWorkerIds, ref, deliveryNote
       id: `j-${Date.now()}`, 
       date: duplicationDate, 
       assignedWorkerIds: keepWorkersOnDuplicate ? duplicatingJob.assignedWorkerIds : [],
-      ref: '' // ✅ Dejar albarán vacío al duplicar
+      ref: keepDeliveryNoteOnDuplicate ? (duplicatingJob.ref || '') : '', // Control explícito del ref
+      deliveryNote: keepDeliveryNoteOnDuplicate ? (duplicatingJob.deliveryNote || '') : '' // Control explícito del deliveryNote
     };
+    
     await persistJob(newJob);
     setDuplicatingJob(null);
+    setKeepDeliveryNoteOnDuplicate(false); // Resetear estado
     showNotification("Tarea duplicada", "success");
-  }, [duplicatingJob, duplicationDate, keepWorkersOnDuplicate, persistJob, showNotification]);
+  }, [duplicatingJob, duplicationDate, keepWorkersOnDuplicate, keepDeliveryNoteOnDuplicate, persistJob, showNotification]);
 
   const handleOpenNote = (workerId: string) => {
     const existing = planning.dailyNotes?.find(n => n.workerId === workerId && n.date === planning.currentDate);
@@ -3319,14 +3327,14 @@ const App: React.FC = () => {
 
       {/* MODAL DUPLICAR TAREA */}
       {duplicatingJob && (
-        <div className="fixed inset-0 z-[300] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4" onClick={() => setDuplicatingJob(null)}>
+        <div className="fixed inset-0 z-[300] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4" onClick={() => { setDuplicatingJob(null); setKeepDeliveryNoteOnDuplicate(false); }}>
            <div className="bg-white w-full max-w-sm rounded-[32px] p-8 shadow-2xl animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
               <div className="flex justify-between items-center mb-6">
                  <div>
                     <h3 className="text-xl font-black text-slate-900 italic uppercase">Duplicar Tarea</h3>
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{duplicatingJob.customName || duplicatingJob.type}</p>
                  </div>
-                 <button onClick={() => setDuplicatingJob(null)} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><X className="w-5 h-5 text-slate-400" /></button>
+                 <button onClick={() => { setDuplicatingJob(null); setKeepDeliveryNoteOnDuplicate(false); }} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><X className="w-5 h-5 text-slate-400" /></button>
               </div>
               
               <div className="space-y-4 mb-8">
@@ -3340,25 +3348,36 @@ const App: React.FC = () => {
                     />
                  </div>
                  
-                 <label className="flex items-center gap-3 bg-slate-50 px-4 py-3 rounded-xl cursor-pointer hover:bg-slate-100 transition-colors border border-transparent hover:border-slate-200 group">
-                    <div className={`w-5 h-5 rounded flex items-center justify-center border transition-all ${keepWorkersOnDuplicate ? 'bg-blue-600 border-blue-600' : 'border-slate-300 bg-white'}`}>
-                        {keepWorkersOnDuplicate && <CheckCircle2 className="w-3.5 h-3.5 text-white" />}
-                    </div>
-                    <input 
-                       type="checkbox" 
-                       className="hidden"
-                       checked={keepWorkersOnDuplicate}
-                       onChange={e => setKeepWorkersOnDuplicate(e.target.checked)}
-                    />
-                    <div className="flex flex-col">
-                       <span className="text-xs font-black text-slate-700 uppercase group-hover:text-blue-700 transition-colors">Mantener Operarios</span>
-                       <span className="text-[9px] font-bold text-slate-400">Copiar la asignación actual</span>
-                    </div>
-                 </label>
+                 <div className="space-y-3">
+                    <label className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer group">
+                       <input 
+                          type="checkbox" 
+                          checked={keepWorkersOnDuplicate}
+                          onChange={e => setKeepWorkersOnDuplicate(e.target.checked)}
+                       />
+                       <div className="flex flex-col">
+                          <span className="text-xs font-black text-slate-700 uppercase group-hover:text-blue-700 transition-colors">Mantener Operarios</span>
+                          <span className="text-[9px] font-bold text-slate-400">Copiar la asignación actual</span>
+                       </div>
+                    </label>
+                    
+                    <label className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer group">
+                       <input 
+                          type="checkbox" 
+                          checked={keepDeliveryNoteOnDuplicate}
+                          onChange={e => setKeepDeliveryNoteOnDuplicate(e.target.checked)}
+                       />
+                       <div className="flex flex-col">
+                          <span className="text-xs font-black text-slate-700 uppercase group-hover:text-blue-700 transition-colors">Mantener Albarán</span>
+                          <span className="text-[9px] font-bold text-slate-400">Copiar número de albarán</span>
+                       </div>
+                    </label>
+                 </div>
+
               </div>
 
               <div className="flex gap-3">
-                 <button onClick={() => setDuplicatingJob(null)} className="flex-1 py-3 rounded-xl font-bold text-slate-500 hover:bg-slate-50 transition-colors text-xs uppercase tracking-widest">Cancelar</button>
+                 <button onClick={() => { setDuplicatingJob(null); setKeepDeliveryNoteOnDuplicate(false); }} className="flex-1 py-3 rounded-xl font-bold text-slate-500 hover:bg-slate-50 transition-colors text-xs uppercase tracking-widest">Cancelar</button>
                  <button onClick={handleDuplicateJob} className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all flex items-center justify-center gap-2 transform active:scale-95">
                     <Copy className="w-4 h-4" /> Duplicar
                  </button>
