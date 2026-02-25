@@ -3594,7 +3594,7 @@ const App: React.FC = () => {
                              <div 
                                 key={index}
                                 className={`
-                                   aspect-square flex items-center justify-center text-xs font-black rounded-lg transition-colors
+                                   flex items-center justify-center text-xs font-black rounded-lg transition-colors h-8
                                    ${!dayInfo ? '' : 
                                      dayInfo.isWorked ? 'bg-green-100 text-green-700' : 
                                      dayInfo.isWeekend ? 'bg-orange-100 text-orange-700' : 
