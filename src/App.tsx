@@ -197,6 +197,7 @@ const App: React.FC = () => {
   const [duplicationDate, setDuplicationDate] = useState<string>('');
   const [keepWorkersOnDuplicate, setKeepWorkersOnDuplicate] = useState(false);
   const [keepDeliveryNoteOnDuplicate, setKeepDeliveryNoteOnDuplicate] = useState(false);
+  const [workerDaysModal, setWorkerDaysModal] = useState<{worker: Worker, month: string} | null>(null);
   const [newCourseName, setNewCourseName] = useState('');
   const [dbTab, setDbTab] = useState<'tasks' | 'courses'>('tasks');
   const [editingStandardTask, setEditingStandardTask] = useState<StandardTask | null>(null);
@@ -664,7 +665,104 @@ const App: React.FC = () => {
     setEditingDailyNote(existing || { id: `note-${Date.now()}`, workerId, date: planning.currentDate, text: '', type: 'info' });
   };
 
-  // ── CRUD: Workers ──────────────────────────────────────────────────────────
+  // ── Cálculo de días trabajados para FIJOS DISCONTINUOS ───────────────────────
+  const calculateWorkerDays = useCallback((workerId: string, yearMonth: string) => {
+    const [year, month] = yearMonth.split('-').map(Number);
+    const firstDay = new Date(year, month - 1, 1);
+    const lastDay = new Date(year, month, 0);
+    
+    // Función para formatear fecha local sin desfase UTC
+    const formatDateLocal = (date: Date) => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+    
+    // Obtener todos los días del mes
+    const daysInMonth = [];
+    for (let day = 1; day <= lastDay.getDate(); day++) {
+      daysInMonth.push(new Date(year, month - 1, day));
+    }
+    
+    // Filtrar tareas del operario en el mes
+    const workerJobs = planning.jobs.filter(job => 
+      job.assignedWorkerIds.includes(workerId) &&
+      job.date.startsWith(yearMonth)
+    );
+    
+    // Obtener días trabajados
+    const workedDays = new Set<string>();
+    workerJobs.forEach(job => {
+      workedDays.add(job.date);
+    });
+    
+    // Detectar fines de semana (viernes+lunes trabajados)
+    const weekendDays = new Set<string>();
+    const workedDates = Array.from(workedDays).map(dateStr => new Date(dateStr + 'T00:00:00')); // Añadir hora para evitar desfase
+    
+    workedDates.forEach(date => {
+      const dayOfWeek = date.getDay(); // 0=domingo, 1=lunes, ..., 5=viernes, 6=sábado
+      
+      if (dayOfWeek === 5) { // Viernes
+        // Buscar si hay lunes trabajado en los próximos 3 días
+        const monday = new Date(date);
+        monday.setDate(date.getDate() + 3); // viernes -> lunes
+        
+        if (monday.getMonth() === month - 1 && workedDays.has(formatDateLocal(monday))) {
+          // Añadir sábado y domingo (usando las fechas correctas)
+          const saturday = new Date(date);
+          saturday.setDate(date.getDate() + 1); // sábado
+          const sunday = new Date(date);
+          sunday.setDate(date.getDate() + 2); // domingo
+          
+          weekendDays.add(formatDateLocal(saturday));
+          weekendDays.add(formatDateLocal(sunday));
+        }
+      }
+    });
+    
+    // Generar array con información de cada día
+    const calendarDays = daysInMonth.map(date => {
+      const dateStr = formatDateLocal(date);
+      const isWorked = workedDays.has(dateStr);
+      const isWeekend = weekendDays.has(dateStr);
+      const dayOfWeek = date.getDay();
+      
+      return {
+        date: dateStr,
+        day: date.getDate(),
+        isWorked,
+        isWeekend,
+        isWeekendDay: dayOfWeek === 0 || dayOfWeek === 6, // domingo o sábado
+        dayOfWeek
+      };
+    });
+    
+    // Ajustar para que la semana empiece en lunes (calendario español)
+    const adjustedCalendarDays = [];
+    const firstDayOfWeek = firstDay.getDay(); // 0=domingo, 1=lunes, ..., 6=sábado
+    const emptyDaysAtStart = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1; // Si es domingo, 6 días vacíos, si es lunes 0, etc.
+    
+    // Añadir días vacíos al inicio
+    for (let i = 0; i < emptyDaysAtStart; i++) {
+      adjustedCalendarDays.push(null);
+    }
+    
+    // Añadir los días del mes
+    adjustedCalendarDays.push(...calendarDays);
+    
+    const workedCount = Array.from(workedDays).length;
+    const weekendCount = weekendDays.size;
+    const totalCount = workedCount + weekendCount;
+    
+    return {
+      calendarDays: adjustedCalendarDays,
+      workedCount,
+      weekendCount,
+      totalCount
+    };
+  }, [planning.jobs]);
   const handleOpenNewWorker = () => {
     setEditingWorker({ id: `w-${Date.now()}`, code: '', name: '', apodo: undefined, dni: '', phone: '', role: 'Mozo Almacén', status: WorkerStatus.DISPONIBLE, contractType: ContractType.FIJO_DISCONTINUO, hasVehicle: false, startTime: '09:00', endTime: '17:00', restrictions: [], restrictedClientIds: [], skills: [JobType.MANIPULACION], completedCourses: [] });
   };
@@ -1794,7 +1892,17 @@ const App: React.FC = () => {
                            })()}
                         </td>
                         <td className="px-6 py-3 text-center">
-                           {/* Espacio para futuras funcionalidades */}
+                           {worker.contractType === ContractType.FIJO_DISCONTINUO ? (
+                              <button 
+                                onClick={() => setWorkerDaysModal({worker, month: new Date().toISOString().slice(0, 7)})}
+                                className="p-2 hover:bg-blue-50 text-slate-400 hover:text-blue-600 rounded-xl transition-colors"
+                                title="Calcular días trabajados"
+                              >
+                                 <Calendar className="w-4 h-4" />
+                              </button>
+                           ) : (
+                              <span className="text-slate-300 text-xs">-</span>
+                           )}
                         </td>
                         <td className="px-6 py-3 text-right">
                            <button onClick={() => {
@@ -3381,6 +3489,83 @@ const App: React.FC = () => {
                  <button onClick={handleDuplicateJob} className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all flex items-center justify-center gap-2 transform active:scale-95">
                     <Copy className="w-4 h-4" /> Duplicar
                  </button>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {/* MODAL CÁLCULO DÍAS TRABAJADOS */}
+      {workerDaysModal && (
+        <div className="fixed inset-0 z-[300] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4" onClick={() => setWorkerDaysModal(null)}>
+           <div className="bg-white w-full max-w-4xl rounded-[32px] p-8 shadow-2xl animate-in zoom-in-95 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+              <div className="flex justify-between items-center mb-6">
+                 <div>
+                    <h3 className="text-xl font-black text-slate-900 italic uppercase">Días Trabajados</h3>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{workerDaysModal.worker.name} - {workerDaysModal.worker.code}</p>
+                 </div>
+                 <button onClick={() => setWorkerDaysModal(null)} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><X className="w-5 h-5 text-slate-400" /></button>
+              </div>
+              
+              <div className="space-y-6 mb-8">
+                 <div className="flex items-center gap-4">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Mes</label>
+                    <input 
+                       type="month" 
+                       className="bg-slate-50 border-none rounded-xl px-4 py-3 font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none"
+                       value={workerDaysModal.month}
+                       onChange={e => setWorkerDaysModal({...workerDaysModal, month: e.target.value})}
+                    />
+                    <button 
+                       onClick={() => {
+                         const result = calculateWorkerDays(workerDaysModal.worker.id, workerDaysModal.month);
+                         setWorkerDaysModal({...workerDaysModal, calculationResult: result});
+                       }}
+                       className="px-6 py-3 bg-blue-600 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all"
+                    >
+                       Calcular
+                    </button>
+                 </div>
+                 
+                 {workerDaysModal.calculationResult && (
+                    <div className="space-y-4">
+                       <div className="grid grid-cols-3 gap-4 p-4 bg-slate-50 rounded-xl">
+                          <div className="text-center">
+                             <div className="text-2xl font-black text-green-600">{workerDaysModal.calculationResult.workedCount}</div>
+                             <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Días Trabajados</div>
+                          </div>
+                          <div className="text-center">
+                             <div className="text-2xl font-black text-orange-500">{workerDaysModal.calculationResult.weekendCount}</div>
+                             <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Fines de Semana</div>
+                          </div>
+                          <div className="text-center">
+                             <div className="text-2xl font-black text-blue-600">{workerDaysModal.calculationResult.totalCount}</div>
+                             <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total</div>
+                          </div>
+                       </div>
+                       
+                       <div className="grid grid-cols-7 gap-1 p-4 bg-white border border-slate-200 rounded-xl">
+                          {['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'].map(day => (
+                             <div key={day} className="text-center text-[10px] font-black text-slate-400 uppercase tracking-widest py-2">
+                                {day}
+                             </div>
+                          ))}
+                          {workerDaysModal.calculationResult.calendarDays.map((dayInfo, index) => (
+                             <div 
+                                key={index}
+                                className={`
+                                   aspect-square flex items-center justify-center text-xs font-black rounded-lg transition-colors
+                                   ${!dayInfo ? '' : 
+                                     dayInfo.isWorked ? 'bg-green-100 text-green-700' : 
+                                     dayInfo.isWeekend ? 'bg-orange-100 text-orange-700' : 
+                                     dayInfo.isWeekendDay ? 'bg-slate-100 text-slate-400' : 'text-slate-600'}
+                                `}
+                             >
+                                {dayInfo ? dayInfo.day : ''}
+                             </div>
+                          ))}
+                       </div>
+                    </div>
+                 )}
               </div>
            </div>
         </div>
