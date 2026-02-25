@@ -491,13 +491,50 @@ const App: React.FC = () => {
   const handleUpdateJobReinforcementGroups = useCallback(async (jobId: string, groups: ReinforcementGroup[]) => {
     const job = planning.jobs.find(j => j.id === jobId);
     if (!job) return;
+    
     const reinforcementWorkerIds = groups.flatMap(group => group.workerIds);
     const newWorkerTimes: Record<string, string> = {};
-    groups.forEach(group => { group.workerIds.forEach(workerId => { newWorkerTimes[workerId] = group.startTime; }); });
-    const updatedJob = { ...job, reinforcementGroups: groups, workerTimes: { ...job.workerTimes, ...newWorkerTimes }, assignedWorkerIds: [...job.assignedWorkerIds.filter(id => !reinforcementWorkerIds.includes(id)), ...reinforcementWorkerIds] };
-    await persistJob(updatedJob);
+    groups.forEach(group => { 
+      group.workerIds.forEach(workerId => { 
+        newWorkerTimes[workerId] = group.startTime; 
+      }); 
+    });
+    
+    // CORRECCIÓN: Mantener solo workerTimes de operarios principales y refuerzos activos
+    const mainWorkerTimes: Record<string, string> = {};
+    job.assignedWorkerIds.forEach(workerId => {
+      // Si no está en refuerzo, mantener hora principal
+      if (!reinforcementWorkerIds.includes(workerId)) {
+        mainWorkerTimes[workerId] = job.workerTimes?.[workerId] || job.startTime;
+      }
+    });
+    
+    // Combinar workerTimes principales + de refuerzo
+    const finalWorkerTimes = { ...mainWorkerTimes, ...newWorkerTimes };
+    
+    // CORRECCIÓN: Si no hay grupos de refuerzo, solo mantener operarios principales (sin horarios especiales)
+    const mainWorkerIds = groups.length === 0 
+      ? job.assignedWorkerIds.filter(id => !job.workerTimes || job.workerTimes[id] === job.startTime)
+      : job.assignedWorkerIds.filter(id => !reinforcementWorkerIds.includes(id));
+    
+    // CORRECCIÓN: Limpiar workerTimes de operarios eliminados
+    const cleanedWorkerTimes: Record<string, string> = {};
+    [...mainWorkerIds, ...reinforcementWorkerIds].forEach(workerId => {
+      cleanedWorkerTimes[workerId] = finalWorkerTimes[workerId] || job.startTime;
+    });
+    
+    const updatedJob = { 
+      ...job, 
+      reinforcementGroups: groups, 
+      workerTimes: cleanedWorkerTimes, 
+      assignedWorkerIds: [...mainWorkerIds, ...reinforcementWorkerIds] 
+    };
+    
+    // Usar saveJob en lugar de persistJob para actualizar estado local
+    await saveJob(updatedJob);
+    
     showNotification("Grupos de refuerzo actualizados", "success");
-  }, [planning.jobs, persistJob, showNotification]);
+  }, [planning.jobs, saveJob, showNotification]);
 
   const handleReorderJobs = useCallback(async (sourceJobId: string, targetJobId: string) => {
     // Reorder is local-only (no need to persist order)

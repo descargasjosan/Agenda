@@ -714,17 +714,15 @@ const PlanningBoard: React.FC<PlanningBoardProps> = ({
                           // Eliminar grupo
                           const updatedGroups = reinforcementModal.groups.filter(g => g.id !== group.id);
                           
-                          // Eliminar operarios de la tarea principal
-                          const currentJob = planning.jobs.find(j => j.id === reinforcementModal.jobId);
-                          if (currentJob) {
-                            // Eliminar cada operario del grupo de la tarea usando onRemoveWorker
-                            workersToRemove.forEach(workerId => {
-                              onRemoveWorker(workerId, reinforcementModal.jobId);
-                            });
-                          }
+                          // Actualizar estado local del modal inmediatamente
+                          setReinforcementModal({ 
+                            jobId: reinforcementModal.jobId, 
+                            groups: updatedGroups
+                          });
                           
+                          // Solo actualizar grupos (la función handleUpdateJobReinforcementGroups ya elimina los operarios)
                           onUpdateJobReinforcementGroups(reinforcementModal.jobId, updatedGroups);
-                          setReinforcementModal({ ...reinforcementModal, groups: updatedGroups });
+                          
                           showNotification(`Grupo de ${group.startTime} eliminado. ${workersToRemove.length} operarios eliminados de la tarea.`, "info");
                         }}
                         className="text-red-400 hover:text-red-600 transition-colors"
@@ -758,15 +756,19 @@ const PlanningBoard: React.FC<PlanningBoardProps> = ({
                                   showNotification(`${getWorkerDisplayName(worker)} eliminado del grupo de ${group.startTime}.`, "info");
                                 }
                                 
-                                // Actualizar operarios en la tarea principal
-                                const currentJob = planning.jobs.find(j => j.id === reinforcementModal.jobId);
-                                if (currentJob) {
-                                  // Eliminar el operario específico de la tarea usando onRemoveWorker
-                                  onRemoveWorker(workerId, reinforcementModal.jobId);
-                                }
-                                
+                                // Solo actualizar grupos (la función handleUpdateJobReinforcementGroups ya gestiona los operarios)
                                 onUpdateJobReinforcementGroups(reinforcementModal.jobId, updatedGroups);
-                                setReinforcementModal({ ...reinforcementModal, groups: updatedGroups });
+                                
+                                // Forzar recarga del modal con datos actualizados
+                                setTimeout(() => {
+                                  const updatedJob = planning.jobs.find(j => j.id === reinforcementModal.jobId);
+                                  if (updatedJob) {
+                                    setReinforcementModal({ 
+                                      jobId: reinforcementModal.jobId, 
+                                      groups: updatedJob.reinforcementGroups || []
+                                    });
+                                  }
+                                }, 100);
                               }}
                               className="text-slate-300 hover:text-red-500 transition-colors"
                             >

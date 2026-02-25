@@ -379,12 +379,22 @@ export function useSupabaseData(): UseSupabaseDataReturn {
 
   // ─── Jobs ─────────────────────────────────────────────────────────────
   const saveJob = useCallback(async (job: Job) => {
-    setPlanning((prev) => ({
-      ...prev,
-      jobs: prev.jobs.some((j) => j.id === job.id)
-        ? prev.jobs.map((j) => (j.id === job.id ? job : j))
-        : [...prev.jobs, job],
-    }));
+    console.log('🔄 saveJob called with:', job.id);
+    console.log('🔄 saveJob - reinforcementGroups:', job.reinforcementGroups);
+    console.log('🔄 saveJob - assignedWorkerIds:', job.assignedWorkerIds);
+    console.log('🔄 saveJob - workerTimes:', job.workerTimes);
+    setPlanning((prev) => {
+      const newJob = JSON.parse(JSON.stringify(job)); // Forzar nueva referencia
+      const updatedPlanning = {
+        ...prev,
+        jobs: prev.jobs.some((j) => j.id === job.id)
+          ? prev.jobs.map((j) => (j.id === job.id ? newJob : j))
+          : [...prev.jobs, newJob],
+      };
+      console.log('🔄 saveJob updated planning, jobs count:', updatedPlanning.jobs.length);
+      console.log('🔄 saveJob - updated job in planning:', updatedPlanning.jobs.find(j => j.id === job.id)?.reinforcementGroups);
+      return updatedPlanning;
+    });
     await upsert('jobs', job.id, job, { date: job.date });
   }, [upsert]);
 
@@ -576,7 +586,15 @@ function applyChange<T extends { id: string }>(arr: T[], payload: any): T[] {
     if (exists) {
       console.log('🔄 INSERT found existing item, treating as UPDATE:', updated.id);
       // Si ya existe, tratar como UPDATE
-      const newArr = arr.map((item) => (item.id === updated.id ? { ...updated } : item));
+      const newArr = arr.map((item) => {
+        if (item.id === updated.id) {
+          // Forzar nueva referencia para que React detecte el cambio
+          const newItem = JSON.parse(JSON.stringify(updated));
+          console.log('🔄 Replacing existing item with new reference:', item.id);
+          return newItem;
+        }
+        return item;
+      });
       console.log('📊 Updated array length after INSERT->UPDATE:', newArr.length);
       return newArr;
     } else {
@@ -589,7 +607,15 @@ function applyChange<T extends { id: string }>(arr: T[], payload: any): T[] {
   
   if (eventType === 'UPDATE') {
     console.log('🔄 Updating item (UPDATE):', updated.id);
-    const newArr = arr.map((item) => (item.id === updated.id ? { ...updated } : item));
+    const newArr = arr.map((item) => {
+      if (item.id === updated.id) {
+        // Forzar nueva referencia para que React detecte el cambio
+        const newItem = JSON.parse(JSON.stringify(updated));
+        console.log('🔄 Replacing item with new reference:', item.id);
+        return newItem;
+      }
+      return item;
+    });
     console.log('📊 Updated array length after UPDATE:', newArr.length);
     return newArr;
   }
