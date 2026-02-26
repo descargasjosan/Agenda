@@ -368,11 +368,27 @@ const App: React.FC = () => {
 
   // ── CRUD: Medical courses ──────────────────────────────────────────────────
   const addMedicalCourse = useCallback(async (course: Omit<MedicalCourse, 'id' | 'createdAt' | 'updatedAt'>) => {
-    const newCourse: MedicalCourse = { ...course, id: Date.now().toString(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-    await persistMedicalCourse(newCourse);
-    const updatedAlerts = calculateMedicalAlerts([...planning.medicalCourses, newCourse], planning.workers);
-    setPlanning(prev => ({ ...prev, medicalAlerts: updatedAlerts }));
-    showNotification('Registro médico añadido', 'success');
+    // Crear un registro por cada operario seleccionado
+    const newCourses: MedicalCourse[] = course.assignedWorkerIds.map(workerId => ({
+      ...course,
+      id: `${Date.now()}-${workerId}`, // ID único por operario
+      assignedWorkerIds: [workerId], // Un solo operario por registro
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }));
+
+    // Guardar todos los registros
+    for (const newCourse of newCourses) {
+      await persistMedicalCourse(newCourse);
+    }
+
+    const updatedAlerts = calculateMedicalAlerts([...planning.medicalCourses, ...newCourses], planning.workers);
+    setPlanning(prev => ({ 
+      ...prev, 
+      medicalCourses: [...prev.medicalCourses, ...newCourses],
+      medicalAlerts: updatedAlerts 
+    }));
+    showNotification(`${newCourses.length} registro(s) médico(s) añadido(s)`, 'success');
   }, [persistMedicalCourse, planning.medicalCourses, planning.workers, calculateMedicalAlerts, showNotification, setPlanning]);
 
   const updateMedicalCourse = useCallback(async (id: string, course: Partial<MedicalCourse>) => {
