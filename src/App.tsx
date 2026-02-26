@@ -377,15 +377,15 @@ const App: React.FC = () => {
       updatedAt: new Date().toISOString()
     }));
 
-    // Guardar todos los registros
+    // Guardar todos los registros (saveMedicalCourse ya actualiza el estado)
     for (const newCourse of newCourses) {
       await persistMedicalCourse(newCourse);
     }
 
+    // Calcular alertas y actualizar solo esa parte del estado
     const updatedAlerts = calculateMedicalAlerts([...planning.medicalCourses, ...newCourses], planning.workers);
     setPlanning(prev => ({ 
       ...prev, 
-      medicalCourses: [...prev.medicalCourses, ...newCourses],
       medicalAlerts: updatedAlerts 
     }));
     showNotification(`${newCourses.length} registro(s) médico(s) añadido(s)`, 'success');
@@ -405,7 +405,7 @@ const App: React.FC = () => {
     await persistDeleteMedicalCourse(id);
     const remaining = planning.medicalCourses.filter(c => c.id !== id);
     const updatedAlerts = calculateMedicalAlerts(remaining, planning.workers);
-    setPlanning(prev => ({ ...prev, medicalAlerts: updatedAlerts }));
+    setPlanning(prev => ({ ...prev, medicalCourses: remaining, medicalAlerts: updatedAlerts }));
     showNotification('Registro médico eliminado', 'success');
   }, [persistDeleteMedicalCourse, planning.medicalCourses, planning.workers, calculateMedicalAlerts, showNotification, setPlanning]);
 
@@ -2088,10 +2088,9 @@ const App: React.FC = () => {
                     );
                     
                     return filteredCourses.map(course => {
-                      const assignedWorkers = course.assignedWorkerIds.slice(0, 2).map(workerId => {
-                        const worker = planning.workers.find(w => w.id === workerId);
-                        return worker ? worker.name : '';
-                      }).filter(name => name);
+                      const assignedWorker = course.assignedWorkerIds[0]; // Solo hay un operario por registro
+                      const worker = planning.workers.find(w => w.id === assignedWorker);
+                      const workerName = worker ? worker.name : '';
                       
                       return (
                         <div key={course.id} className="grid grid-cols-6 gap-2 p-3 border-b border-slate-100 hover:bg-slate-50 items-center">
@@ -2102,17 +2101,7 @@ const App: React.FC = () => {
                             {course.provider}
                           </div>
                           <div className="text-sm text-slate-600">
-                            {assignedWorkers.length > 0 ? (
-                              <div className="flex gap-1 flex-wrap">
-                                {assignedWorkers.map((name, index) => (
-                                  <span key={index}>
-                                    {name}
-                                  </span>
-                                ))}
-                              </div>
-                            ) : (
-                              <span className="text-slate-400">-</span>
-                            )}
+                            {workerName || '-'}
                           </div>
                           <div className="text-sm text-slate-600">
                             {formatDateEuropean(course.issueDate) || '-'}
@@ -2130,8 +2119,6 @@ const App: React.FC = () => {
                             </button>
                             <button 
                               onClick={() => {
-                                console.log('🔍 ID del registro a eliminar:', course.id);
-                                console.log('🔍 Registro completo:', course);
                                 if (confirm('¿Eliminar este registro médico?')) {
                                   deleteMedicalCourseHandler(course.id);
                                 }
@@ -2230,7 +2217,7 @@ const App: React.FC = () => {
              )}
 
              {/* Operarios */}
-             {planning.selectedMedicalTab === 'workers' && (
+            {planning.selectedMedicalTab === 'workers' && (
                <div className="space-y-4">
                  {planning.workers.filter(worker => !worker.isArchived).sort((a, b) => {
                     // Extraer números del código (ej: X001 -> 001, 002, etc.)
