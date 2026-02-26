@@ -624,7 +624,7 @@ const App: React.FC = () => {
 
   const handleOpenNewJob = (clientId: string = '', date?: string) => {
     const firstClient = clientId ? planning.clients.find(c => c.id === clientId) : planning.clients[0];
-    const newJob: Job = { id: `j-${Date.now()}`, date: date || planning.currentDate, clientId: firstClient?.id || '', centerId: firstClient?.centers?.[0]?.id || '', type: JobType.DESCARGA, startTime: '09:00', endTime: '13:00', requiredWorkers: 3, assignedWorkerIds: [], ref: '', deliveryNote: '', locationDetails: '', isCancelled: false };
+    const newJob: Job = { id: `j-${Date.now()}`, date: date || planning.currentDate, clientId: firstClient?.id || '', centerId: firstClient?.centers?.[0]?.id || '', type: JobType.DESCARGA, startTime: '09:00', endTime: '13:00', requiredWorkers: 3, assignedWorkerIds: [], ref: '', deliveryNote: '', notes: '', isCancelled: false };
     setEditingJob(newJob);
   };
 
@@ -2754,6 +2754,17 @@ const App: React.FC = () => {
                        )}
                     </div>
                     
+                    <div className="relative">
+                       <Edit2 className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
+                       <input 
+                          type="text"
+                          placeholder="Nombre personalizado de la tarea (Opcional)" 
+                          className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2.5 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-blue-100 outline-none"
+                          value={editingJob.customName || ''}
+                          onChange={e => setEditingJob({...editingJob, customName: e.target.value})}
+                       />
+                    </div>
+                    
                     <div className="grid grid-cols-2 gap-4">
                        <div className="relative">
                           <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
@@ -2776,23 +2787,13 @@ const App: React.FC = () => {
                     </div>
                     
                     <div className="relative">
-                       <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
-                       <input 
-                          placeholder="Ubicación exacta (Muelle, Puerta, Nave...)" 
-                          className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2.5 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-blue-100 outline-none"
-                          value={editingJob.locationDetails || ''}
-                          onChange={e => setEditingJob({...editingJob, locationDetails: e.target.value})}
-                       />
-                    </div>
-
-                    <div className="relative">
-                       <Edit2 className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
-                       <input 
-                          type="text"
-                          placeholder="Nombre personalizado de la tarea (Opcional)" 
-                          className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2.5 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-blue-100 outline-none"
-                          value={editingJob.customName || ''}
-                          onChange={e => setEditingJob({...editingJob, customName: e.target.value})}
+                       <StickyNote className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
+                       <textarea 
+                          placeholder="Notas de la tarea..." 
+                          className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2.5 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-blue-100 outline-none resize-none"
+                          rows={3}
+                          value={editingJob.notes || ''}
+                          onChange={e => setEditingJob({...editingJob, notes: e.target.value})}
                        />
                     </div>
                  </div>

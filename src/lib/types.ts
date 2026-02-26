@@ -183,7 +183,7 @@ export interface Job {
   reinforcementGroups?: ReinforcementGroup[]; // Grupos de refuerzo con múltiples horarios
   ref?: string;
   deliveryNote?: string;
-  locationDetails?: string;
+  notes?: string; // Antes locationDetails
   isCancelled?: boolean; 
   cancellationReason?: string; 
   isFinished?: boolean;

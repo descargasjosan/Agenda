@@ -146,7 +146,7 @@ export const MOCK_JOBS: Job[] = [
     requiredWorkers: 4,
     assignedWorkerIds: ['w1', 'w2'],
     ref: '#OP-8832',
-    locationDetails: 'Muelle 12'
+    notes: 'Muelle 12'
   }
 ];
 

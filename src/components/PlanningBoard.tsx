@@ -456,8 +456,28 @@ const PlanningBoard: React.FC<PlanningBoardProps> = ({
                                 <div className="lg:w-64 px-4 py-1 border-b lg:border-b-0 lg:border-r border-slate-100 shrink-0 group/actions">
                                   <div className="flex items-center justify-between">
                                     {/* Columna A: Texto y Referencia */}
-                                    <div className="text-left">
-                                      <p className="text-[11px] font-black text-slate-900 leading-tight truncate">{job.customName || job.type}</p>
+                                    <div className="text-left flex-1">
+                                      <div className="flex items-center gap-1">
+                                        <p className="text-[11px] font-black text-slate-900 leading-tight truncate">
+                                          {(job.customName || job.type).length > 256 
+                                            ? `${(job.customName || job.type).substring(0, 256)}...` 
+                                            : (job.customName || job.type)}
+                                        </p>
+                                        {job.notes && (
+                                          <button
+                                            onClick={(e) => { e.stopPropagation(); }}
+                                            className="p-0.5 text-orange-500 hover:text-orange-600 transition-colors relative group"
+                                            title="Ver notas"
+                                          >
+                                            <StickyNote className="w-3 h-3" />
+                                            {/* Tooltip */}
+                                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-orange-100 text-black text-[10px] font-medium rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 border border-orange-200">
+                                              <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 w-0 h-0 border-l-4 border-l-transparent border-r-4 border-r-transparent border-t-4 border-t-orange-100"></div>
+                                              {job.notes.length > 100 ? `${job.notes.substring(0, 100)}...` : job.notes}
+                                            </div>
+                                          </button>
+                                        )}
+                                      </div>
                                       {job.ref && <p className="text-[8px] font-bold text-slate-400 truncate italic">Ref: {job.ref}</p>}
                                     </div>
                                     
