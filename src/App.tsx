@@ -1200,9 +1200,14 @@ const App: React.FC = () => {
     if (!worker) return '';
     const workerJobs = planning.jobs.filter(j => j.date === planning.currentDate && !j.isCancelled && j.assignedWorkerIds.includes(workerId));
     if (workerJobs.length === 0) return `Hola ${getWorkerDisplayName(worker)}, mañana no tienes asignación.`;
-    const client = planning.clients.find(c => c.id === workerJobs[0].clientId);
-    const center = client?.centers.find(ct => ct.id === workerJobs[0].centerId);
-    return `Hola ${getWorkerDisplayName(worker)}, mañana ${formatDateWithDay(planning.currentDate)} tienes asignación en *${client?.name || 'cliente'}* (${center?.name || 'sede'}) de ${workerJobs[0].startTime} a ${workerJobs[0].endTime}.`;
+    
+    // Ordenar tareas por hora de inicio para tomar la primera del día
+    const sortedJobs = workerJobs.sort((a, b) => a.startTime.localeCompare(b.startTime));
+    const firstJob = sortedJobs[0];
+    
+    const client = planning.clients.find(c => c.id === firstJob.clientId);
+    const center = client?.centers.find(ct => ct.id === firstJob.centerId);
+    return `Hola ${getWorkerDisplayName(worker)}, mañana ${formatDateWithDay(planning.currentDate)} tienes asignación en *${client?.name || 'cliente'}* (${center?.name || 'sede'}) de ${firstJob.startTime} a ${firstJob.endTime}.`;
   };
 
   // ── Memos ──────────────────────────────────────────────────────────────────
