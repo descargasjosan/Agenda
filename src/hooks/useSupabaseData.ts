@@ -250,7 +250,7 @@ export function useSupabaseData(): UseSupabaseDataReturn {
           console.log('Error en polling inteligente:', error);
         }
       }
-    }, 10000); // 10 segundos
+    }, 5000); // 5 segundos
 
     return () => clearInterval(interval);
   }, [dbStatus]);
