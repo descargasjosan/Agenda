@@ -15,11 +15,10 @@ export enum ContractType {
 }
 
 export enum JobType {
-  CARGA = 'Carga',
   DESCARGA = 'Descarga',
-  PICKING = 'Picking',
-  MANIPULACION = 'Manipulación',
-  OPERATIVA_EXTERNA = 'Operativa Externa'
+  CARGA = 'Carga',
+  TRABAJOS_ALMACEN = 'Trabajos Almacén',
+  OFICINA = 'Oficina'
 }
 
 export type NoteType = 'info' | 'time' | 'medical';
