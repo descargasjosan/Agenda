@@ -46,7 +46,10 @@ function extractRows<T>(rows: any[] | null): T[] {
 // ─── Helper específico para medical_courses (preserva ID) ───────────────────
 function extractMedicalCourses(rows: any[] | null): (MedicalCourse & { id: string })[] {
   if (!rows) return [];
-  return rows.map((r) => ({ ...r.data, id: r.id }));
+  console.log('🔍 extractMedicalCourses llamado con:', rows);
+  const result = rows.map((r) => ({ ...r.data, id: r.id }));
+  console.log('🔍 extractMedicalCourses resultado:', result.map(c => ({ id: c.id, provider: c.provider })));
+  return result;
 }
 
 // ─── Tipos del hook ────────────────────────────────────────────────────────
@@ -226,6 +229,13 @@ export function useSupabaseData(): UseSupabaseDataReturn {
             const hasChanges = workersChanges.length > 0 || clientsChanges.length > 0 || jobsChanges.length > 0 || medicalCoursesChanges.length > 0;
             
             if (hasChanges) {
+              console.log('🔄 Polling: Cambios detectados ANTES de filtrar:', {
+                workersChanges: workersChanges.length,
+                clientsChanges: clientsChanges.length,
+                jobsChanges: jobsChanges.length,
+                medicalCoursesChanges: medicalCoursesChanges.length
+              });
+              
               // Filtrar cambios para ignorar registros modificados recientemente
               const filteredWorkersChanges = workersChanges.filter(change => !recentlyModified.has(`workers-${change.id}`));
               const filteredClientsChanges = clientsChanges.filter(change => !recentlyModified.has(`clients-${change.id}`));
@@ -239,7 +249,11 @@ export function useSupabaseData(): UseSupabaseDataReturn {
                 medicalCourses: { total: medicalCoursesChanges.length, filtered: filteredMedicalCoursesChanges.length }
               });
               
+              console.log('🔄 Polling: medicalCoursesChanges detallados:', medicalCoursesChanges.map(c => ({ id: c.id, provider: c.provider })));
+              
               setPlanning(prev => {
+                console.log('🔄 Polling: medicalCourses ANTES de actualizar:', prev.medicalCourses.map(c => ({ id: c.id, provider: c.provider })));
+                
                 const newPlanning = { ...prev };
                 
                 // Fusionar cambios solo con los registros filtrados
@@ -253,8 +267,11 @@ export function useSupabaseData(): UseSupabaseDataReturn {
                   newPlanning.jobs = mergeChanges(prev.jobs, filteredJobsChanges);
                 }
                 if (filteredMedicalCoursesChanges.length > 0) {
+                  console.log('🔄 Polling: Aplicando cambios medical_courses:', filteredMedicalCoursesChanges.map(c => ({ id: c.id, provider: c.provider })));
                   newPlanning.medicalCourses = mergeChanges(prev.medicalCourses, filteredMedicalCoursesChanges);
                 }
+                
+                console.log('🔄 Polling: medicalCourses DESPUÉS de actualizar:', newPlanning.medicalCourses.map(c => ({ id: c.id, provider: c.provider })));
                 
                 return newPlanning;
               });
@@ -369,6 +386,41 @@ export function useSupabaseData(): UseSupabaseDataReturn {
       console.log('🔌 Cleaning up Realtime channel...');
       supabase.removeChannel(channel);
     };
+  }, []);
+
+  // ─── Helper: limpiar estado corrupto y recargar ─────────────────────────────
+  const reloadMedicalCoursesFromSupabase = useCallback(async () => {
+    console.log('🔄 Recargando medical_courses desde Supabase...');
+    try {
+      const { data, error } = await supabase
+        .from('medical_courses')
+        .select('id, data, updated_at');
+      
+      if (error) {
+        console.error('Error recargando medical_courses:', error);
+        return;
+      }
+      
+      console.log('🔄 Datos crudos de Supabase:', data);
+      console.log('🔄 Estructura de cada registro:', data?.map(r => ({ 
+        id: r.id, 
+        hasData: !!r.data, 
+        dataKeys: r.data ? Object.keys(r.data) : [],
+        dataId: r.data?.id 
+      })));
+      
+      const medicalCourses = extractMedicalCourses(data);
+      console.log('🔄 medical_courses recargados:', medicalCourses.map(c => ({ id: c.id, provider: c.provider })));
+      
+      setPlanning(prev => ({
+        ...prev,
+        medicalCourses
+      }));
+      
+      console.log('✅ medical_courses recargados exitosamente');
+    } catch (error) {
+      console.error('Error en reloadMedicalCoursesFromSupabase:', error);
+    }
   }, []);
 
   // ─── Helper genérico de upsert ────────────────────────────────────────
@@ -662,73 +714,13 @@ export function useSupabaseData(): UseSupabaseDataReturn {
     saveFuelRecord, deleteFuelRecord,
     saveDailyNote, deleteDailyNote,
     saveMedicalCourse, deleteMedicalCourse,
+    reloadMedicalCoursesFromSupabase,
     saveCourse, deleteCourse,
     saveHoliday, deleteHoliday,
     saveAppSettings,
     showNotification,
     notification,
   };
-}
-
-// ─── Helper Realtime: aplica INSERT / UPDATE / DELETE al array local ──────
-function applyChange<T extends { id: string }>(arr: T[], payload: any): T[] {
-  const { eventType, new: newRow, old: oldRow } = payload;
-  
-  console.log('🔄 Realtime change received:', { eventType, table: payload.table, newRowId: newRow?.id, oldRowId: oldRow?.id });
-  
-  if (eventType === 'DELETE') {
-    console.log('🗑️ Deleting item:', oldRow.id);
-    return arr.filter((item) => item.id !== oldRow.id);
-  }
-  
-  // Extraer datos correctamente de Supabase (los datos están en newRow.data)
-  const updated = newRow.data ? newRow.data as T : newRow as T;
-  
-  console.log('✨ Applying change to item:', updated.id);
-  console.log('📝 Updated data structure:', { hasData: !!newRow.data, updatedKeys: Object.keys(updated) });
-  console.log('📊 Original array length:', arr.length);
-  
-  if (eventType === 'INSERT') {
-    const exists = arr.some((item) => item.id === updated.id);
-    if (exists) {
-      console.log('🔄 INSERT found existing item, treating as UPDATE:', updated.id);
-      // Si ya existe, tratar como UPDATE
-      const newArr = arr.map((item) => {
-        if (item.id === updated.id) {
-          // Forzar nueva referencia para que React detecte el cambio
-          const newItem = JSON.parse(JSON.stringify(updated));
-          console.log('🔄 Replacing existing item with new reference:', item.id);
-          return newItem;
-        }
-        return item;
-      });
-      console.log('📊 Updated array length after INSERT->UPDATE:', newArr.length);
-      return newArr;
-    } else {
-      console.log('➕ Inserting new item:', updated.id);
-      const newArr = [...arr, updated];
-      console.log('📊 Updated array length after INSERT:', newArr.length);
-      return newArr;
-    }
-  }
-  
-  if (eventType === 'UPDATE') {
-    console.log('🔄 Updating item (UPDATE):', updated.id);
-    const newArr = arr.map((item) => {
-      if (item.id === updated.id) {
-        // Forzar nueva referencia para que React detecte el cambio
-        const newItem = JSON.parse(JSON.stringify(updated));
-        console.log('🔄 Replacing item with new reference:', item.id);
-        return newItem;
-      }
-      return item;
-    });
-    console.log('📊 Updated array length after UPDATE:', newArr.length);
-    return newArr;
-  }
-  
-  console.log('❓ Unknown event type:', eventType);
-  return arr;
 }
 
 // ─── Helper para fusionar cambios del polling inteligente ─────────────────────

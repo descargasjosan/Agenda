@@ -1,5 +1,7 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { CalendarIcon, Users, Building2, Car, HeartPulse, Settings, Download, Upload, Cloud, CloudOff, AlertCircle, CheckCircle2, X, ChevronLeft, ChevronRight, CalendarDays, Search, Plus, Trash2, Edit2, Copy, FileText, Loader2, LayoutGrid, Table, ListTodo, Bell, MessageSquare, Send, Filter, ArrowRight, Clock, User, Mail, Phone, MapPin, Briefcase, Star, TrendingUp, Activity, DownloadCloud, Database, RotateCcw, BarChart3, MessageCircle, Calendar, CheckCircle, GraduationCap, FileSpreadsheet, ChevronDown, Sparkles, ClipboardList, Hash, Save, StickyNote, Fuel, AlertTriangle } from 'lucide-react';
+import { 
+  CalendarIcon, Users, Building2, Car, HeartPulse, Settings, Download, Upload, Cloud, CloudOff, AlertCircle, CheckCircle2, X, ChevronLeft, ChevronRight, CalendarDays, Search, Plus, Trash2, Edit2, Copy, FileText, Loader2, LayoutGrid, Table, ListTodo, Bell, MessageSquare, Send, Filter, ArrowRight, Clock, User, Mail, Phone, MapPin, Briefcase, Star, TrendingUp, Activity, DownloadCloud, Database, RotateCcw, BarChart3, MessageCircle, Calendar, CheckCircle, GraduationCap, FileSpreadsheet, ChevronDown, Sparkles, ClipboardList, Hash, Save, StickyNote, Fuel, AlertTriangle, RefreshCw 
+} from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { useSupabaseData } from './hooks/useSupabaseData';
 import LoginScreen from './components/LoginScreen';
@@ -156,6 +158,7 @@ const App: React.FC = () => {
     deleteDailyNote: persistDeleteDailyNote,
     saveMedicalCourse: persistMedicalCourse,
     deleteMedicalCourse: persistDeleteMedicalCourse,
+    reloadMedicalCoursesFromSupabase,
     saveCourse: persistCourse,
     deleteCourse: persistDeleteCourse,
     saveHoliday: persistHoliday,
@@ -2031,8 +2034,19 @@ const App: React.FC = () => {
                    }}
                    className="px-3 py-1.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors flex items-center gap-2 text-sm"
                  >
-                   <Plus className="w-3 h-3" />
-                   NUEVO REGISTRO
+                   <Plus className="w-4 h-4" />
+                   Nuevo Registro
+                 </button>
+                 <button 
+                   onClick={() => {
+                     console.log('🔄 Botón de recarga presionado');
+                     reloadMedicalCoursesFromSupabase();
+                   }}
+                   className="px-3 py-1.5 bg-orange-600 text-white rounded-xl hover:bg-orange-700 transition-colors flex items-center gap-2 text-sm"
+                   title="Recargar registros médicos desde Supabase"
+                 >
+                   <RefreshCw className="w-4 h-4" />
+                   Recargar
                  </button>
                </div>
              </div>
