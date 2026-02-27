@@ -185,6 +185,9 @@ export function useSupabaseData(): UseSupabaseDataReturn {
     loadAll();
   }, []);
 
+  // ─── Estado para evitar conflictos con el polling ───────────────────────
+  const [recentlyModified, setRecentlyModified] = useState<Set<string>>(new Set());
+
   // ─── Polling inteligente con timestamps ─────────────────────────────────────
   useEffect(() => {
     const interval = setInterval(async () => {
@@ -199,7 +202,7 @@ export function useSupabaseData(): UseSupabaseDataReturn {
           });
           
           // Solo descargar registros modificados en los últimos 10 segundos
-          const [workersRes, clientsRes, jobsRes] = await Promise.all([
+          const [workersRes, clientsRes, jobsRes, medicalCoursesRes] = await Promise.all([
             supabase.from('workers')
               .select('id, data, updated_at')
               .gt('updated_at', tenSecondsAgo),
@@ -209,38 +212,59 @@ export function useSupabaseData(): UseSupabaseDataReturn {
             supabase.from('jobs')
               .select('id, data, updated_at')
               .gt('updated_at', tenSecondsAgo),
+            supabase.from('medical_courses')
+              .select('id, data, updated_at')
+              .gt('updated_at', tenSecondsAgo),
           ]);
 
-          if (!workersRes.error && !clientsRes.error && !jobsRes.error) {
+          if (!workersRes.error && !clientsRes.error && !jobsRes.error && !medicalCoursesRes.error) {
             const workersChanges = extractRows<Worker>(workersRes.data);
             const clientsChanges = extractRows<Client>(clientsRes.data);
             const jobsChanges = extractRows<Job>(jobsRes.data);
+            const medicalCoursesChanges = extractMedicalCourses(medicalCoursesRes.data);  // ← CORREGIDO
             
-            const hasChanges = workersChanges.length > 0 || clientsChanges.length > 0 || jobsChanges.length > 0;
+            const hasChanges = workersChanges.length > 0 || clientsChanges.length > 0 || jobsChanges.length > 0 || medicalCoursesChanges.length > 0;
             
             if (hasChanges) {
+              // Filtrar cambios para ignorar registros modificados recientemente
+              const filteredWorkersChanges = workersChanges.filter(change => !recentlyModified.has(`workers-${change.id}`));
+              const filteredClientsChanges = clientsChanges.filter(change => !recentlyModified.has(`clients-${change.id}`));
+              const filteredJobsChanges = jobsChanges.filter(change => !recentlyModified.has(`jobs-${change.id}`));
+              const filteredMedicalCoursesChanges = medicalCoursesChanges.filter(change => !recentlyModified.has(`medical_courses-${change.id}`));
+              
+              console.log('🔄 Polling: Cambios filtrados:', {
+                workers: { total: workersChanges.length, filtered: filteredWorkersChanges.length },
+                clients: { total: clientsChanges.length, filtered: filteredClientsChanges.length },
+                jobs: { total: jobsChanges.length, filtered: filteredJobsChanges.length },
+                medicalCourses: { total: medicalCoursesChanges.length, filtered: filteredMedicalCoursesChanges.length }
+              });
+              
               setPlanning(prev => {
                 const newPlanning = { ...prev };
                 
-                // Fusionar cambios solo para los registros que se modificaron
-                if (workersChanges.length > 0) {
-                  newPlanning.workers = mergeChanges(prev.workers, workersChanges);
+                // Fusionar cambios solo con los registros filtrados
+                if (filteredWorkersChanges.length > 0) {
+                  newPlanning.workers = mergeChanges(prev.workers, filteredWorkersChanges);
                 }
-                if (clientsChanges.length > 0) {
-                  newPlanning.clients = mergeChanges(prev.clients, clientsChanges);
+                if (filteredClientsChanges.length > 0) {
+                  newPlanning.clients = mergeChanges(prev.clients, filteredClientsChanges);
                 }
-                if (jobsChanges.length > 0) {
-                  newPlanning.jobs = mergeChanges(prev.jobs, jobsChanges);
+                if (filteredJobsChanges.length > 0) {
+                  newPlanning.jobs = mergeChanges(prev.jobs, filteredJobsChanges);
+                }
+                if (filteredMedicalCoursesChanges.length > 0) {
+                  newPlanning.medicalCourses = mergeChanges(prev.medicalCourses, filteredMedicalCoursesChanges);
                 }
                 
                 return newPlanning;
               });
               
               console.log('🔄 Polling: Cambios detectados y aplicados:', {
-                workers: workersChanges.length,
-                clients: clientsChanges.length,
-                jobs: jobsChanges.length,
-                totalKB: estimateDataSize(workersChanges, clientsChanges, jobsChanges)
+                workers: filteredWorkersChanges.length,
+                clients: filteredClientsChanges.length,
+                jobs: filteredJobsChanges.length,
+                medicalCourses: filteredMedicalCoursesChanges.length,
+                totalKB: estimateDataSize(filteredWorkersChanges, filteredClientsChanges, filteredJobsChanges)
               });
             } else {
               console.log('🔄 Polling: Sin cambios (0 KB descargados)');
@@ -253,7 +277,7 @@ export function useSupabaseData(): UseSupabaseDataReturn {
     }, 5000); // 5 segundos
 
     return () => clearInterval(interval);
-  }, [dbStatus]);
+  }, [dbStatus, recentlyModified]);
 
   // ─── Realtime: suscripción por tabla ──────────────────────────────────
   useEffect(() => {
@@ -350,18 +374,42 @@ export function useSupabaseData(): UseSupabaseDataReturn {
   // ─── Helper genérico de upsert ────────────────────────────────────────
   const upsert = useCallback(async (table: string, id: string, data: any, extraFields?: Record<string, any>) => {
     setIsSaving(true);
-    const row: any = { id, data, ...extraFields };
-    console.log(`💾 Saving to ${table}:`, { id, data, extraFields });
+    
+    // Para medical_courses, guardar directamente los datos sin anidar
+    let row: any;
+    if (table === 'medical_courses') {
+      // TEMPORAL: Revertir a estructura anidada para diagnosticar
+      row = { id, data, ...extraFields };
+      console.log(`💾 Saving to ${table} (anidado - diagnóstico):`, { id, data, extraFields });
+    } else {
+      row = { id, data, ...extraFields }; // Estructura normal para otras tablas
+      console.log(`💾 Saving to ${table} (normal):`, { id, data, extraFields });
+    }
+    
+    console.log(`💾 Row completo para ${table}:`, row);
+    console.log(`💾 ID del curso médico:`, data?.id);
+    console.log(`💾 Provider del curso médico:`, data?.provider);
+    
+    // Marcar como modificado recientemente para evitar conflictos con polling
+    setRecentlyModified(prev => new Set(prev).add(`${table}-${id}`));
+    
     const { error } = await supabase.from(table).upsert(row);
     setIsSaving(false);
     if (error) {
       console.error(`Error guardando en ${table}:`, error);
+      console.error(`Error details:`, error.details, error.hint, error.code);
       showNotification(`Error al guardar: ${error.message}`, 'error');
       throw error;
     } else {
       console.log(`✅ Successfully saved to ${table}`);
-      // Eliminado el refresco forzado para evitar delays
-      // Ahora confiamos en Realtime para la sincronización
+      // Limpiar el registro de modificados recientes después de 10 segundos
+      setTimeout(() => {
+        setRecentlyModified(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(`${table}-${id}`);
+          return newSet;
+        });
+      }, 10000);
     }
   }, [showNotification]);
 
@@ -526,18 +574,36 @@ export function useSupabaseData(): UseSupabaseDataReturn {
 
   // ─── Medical Courses ──────────────────────────────────────────────────
   const saveMedicalCourse = useCallback(async (course: MedicalCourse) => {
-    setPlanning((prev) => ({
-      ...prev,
-      medicalCourses: prev.medicalCourses.some((c) => c.id === course.id)
+    console.log('💾 saveMedicalCourse llamado con:', course);
+    console.log('💾 medicalCourses ANTES:', planning.medicalCourses.map(c => ({ id: c.id, provider: c.provider, workerIds: c.assignedWorkerIds })));
+    
+    setPlanning((prev) => {
+      const exists = prev.medicalCourses.some((c) => c.id === course.id);
+      console.log('💾 ¿Existe el curso?', exists, 'ID:', course.id);
+      
+      const newMedicalCourses = exists
         ? prev.medicalCourses.map((c) => (c.id === course.id ? course : c))
-        : [...prev.medicalCourses, course],
-    }));
+        : [...prev.medicalCourses, course];
+      
+      console.log('💾 medicalCourses DESPUÉS:', newMedicalCourses.map(c => ({ id: c.id, provider: c.provider, workerIds: c.assignedWorkerIds })));
+      
+      return {
+        ...prev,
+        medicalCourses: newMedicalCourses,
+      };
+    });
+    
+    console.log('💾 Llamando a upsert con ID:', course.id);
     await upsert('medical_courses', course.id, course);
-  }, [upsert]);
+    console.log('💾 upsert completado');
+  }, [upsert, planning.medicalCourses]);
 
   const deleteMedicalCourse = useCallback(async (id: string) => {
+    console.log('🗑️ Eliminando registro médico:', id);
     setPlanning((prev) => ({ ...prev, medicalCourses: prev.medicalCourses.filter((c) => c.id !== id) }));
+    console.log('🗑️ Llamando a remove para eliminar de BD:', id);
     await remove('medical_courses', id);
+    console.log('✅ Registro eliminado exitosamente de BD:', id);
   }, [remove]);
 
   // ─── Courses (general) ────────────────────────────────────────────────

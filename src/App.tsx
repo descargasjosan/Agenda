@@ -215,8 +215,16 @@ const App: React.FC = () => {
     'Curso de Prevención de Riesgos Laborales', 'Curso de Primeros Auxilios',
     'Curso de Altura', 'Curso de Electricidad Básica', 'Curso de Soldadura', 'Curso de Montaje de Andamios'
   ]);
-  const [availableProviders, setAvailableProviders] = useState<string[]>([
-  ]);
+  const [availableProviders, setAvailableProviders] = useState<string[]>(() => {
+    const saved = localStorage.getItem('availableProviders');
+    return saved ? JSON.parse(saved) : [
+      'Mutua',
+      'Servicio Médico',
+      'Recursos Laborales',
+      'Prevención de Riesgos',
+      'Centro Médico'
+    ];
+  });
   const [medicalCourseName, setMedicalCourseName] = useState('');
   const [medicalProviderName, setMedicalProviderName] = useState('');
   const [showAddMedicalCourse, setShowAddMedicalCourse] = useState(false);
@@ -402,10 +410,21 @@ const App: React.FC = () => {
   }, [persistMedicalCourse, planning.medicalCourses, planning.workers, calculateMedicalAlerts, showNotification, setPlanning]);
 
   const deleteMedicalCourseHandler = useCallback(async (id: string) => {
+    console.log('🔍 deleteMedicalCourseHandler llamado con ID:', id);
+    console.log('🔍 medicalCourses ANTES de eliminar:', planning.medicalCourses.map(c => ({ id: c.id, workerIds: c.assignedWorkerIds })));
+    
     await persistDeleteMedicalCourse(id);
+    
+    console.log('🔍 medicalCourses DESPUÉS de persistDeleteMedicalCourse:', planning.medicalCourses.map(c => ({ id: c.id, workerIds: c.assignedWorkerIds })));
+    
     const remaining = planning.medicalCourses.filter(c => c.id !== id);
+    console.log('🔍 remaining DESPUÉS de filter:', remaining.map(c => ({ id: c.id, workerIds: c.assignedWorkerIds })));
+    
     const updatedAlerts = calculateMedicalAlerts(remaining, planning.workers);
     setPlanning(prev => ({ ...prev, medicalCourses: remaining, medicalAlerts: updatedAlerts }));
+    
+    console.log('🔍 medicalCourses DESPUÉS de setPlanning:', remaining.map(c => ({ id: c.id, workerIds: c.assignedWorkerIds })));
+    
     showNotification('Registro médico eliminado', 'success');
   }, [persistDeleteMedicalCourse, planning.medicalCourses, planning.workers, calculateMedicalAlerts, showNotification, setPlanning]);
 
@@ -418,8 +437,11 @@ const App: React.FC = () => {
 
   const addNewMedicalProvider = useCallback(() => {
     if (medicalProviderName.trim() && !availableProviders.includes(medicalProviderName.trim())) {
-      setAvailableProviders(prev => [...prev, medicalProviderName.trim()]);
-      setMedicalProviderName(''); setShowAddMedicalProvider(false);
+      const newProviders = [...availableProviders, medicalProviderName.trim()];
+      setAvailableProviders(newProviders);
+      localStorage.setItem('availableProviders', JSON.stringify(newProviders));
+      setMedicalProviderName(''); 
+      setShowAddMedicalProvider(false);
     }
   }, [medicalProviderName, availableProviders]);
 
@@ -4338,7 +4360,9 @@ const App: React.FC = () => {
                       onClick={() => {
                         if (confirm(`¿Eliminar el proveedor "${planning.editingMedicalCourse.provider}"?`)) {
                           // Eliminar el proveedor de la lista de disponibles
-                          setAvailableProviders(prev => prev.filter(p => p !== planning.editingMedicalCourse.provider));
+                          const newProviders = availableProviders.filter(p => p !== planning.editingMedicalCourse.provider);
+                          setAvailableProviders(newProviders);
+                          localStorage.setItem('availableProviders', JSON.stringify(newProviders));
                           // Limpiar el campo del formulario
                           setPlanning(prev => ({ 
                             ...prev, 
@@ -4488,8 +4512,13 @@ const App: React.FC = () => {
               onClick={() => {
                 if (!planning.editingMedicalCourse) return;
                 
-                // Verificar si es un registro nuevo (no existe en la lista)
+                // Verificar si es un registro nuevo (No existe en la lista)
+                console.log('🔍 editingMedicalCourse completo:', planning.editingMedicalCourse);
+                console.log('🔍 editingMedicalCourse.id:', planning.editingMedicalCourse?.id);
+                console.log('🔍 medicalCourses existentes:', planning.medicalCourses.map(c => c.id));
+                
                 const isNewRecord = !planning.medicalCourses.some(c => c.id === planning.editingMedicalCourse!.id);
+                console.log('🔍 ¿Es nuevo registro?', isNewRecord);
                 
                 if (isNewRecord) {
                   // Es un nuevo registro
