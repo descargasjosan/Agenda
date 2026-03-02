@@ -4499,15 +4499,48 @@ const App: React.FC = () => {
                 <input
                   type="date"
                   value={planning.editingMedicalCourse.issueDate || ''}
-                  onChange={(e) => setPlanning(prev => ({ 
-                    ...prev, 
-                    editingMedicalCourse: prev.editingMedicalCourse ? { ...prev.editingMedicalCourse, issueDate: e.target.value } : null 
-                  }))}
+                  onChange={(e) => {
+                    console.log('🔍 Estado actual editingMedicalCourse:', planning.editingMedicalCourse);
+                    const issueDate = e.target.value;
+                    const currentExpiryDate = planning.editingMedicalCourse?.expiryDate || '';
+                    
+                    console.log('🔍 Auto-cálculo fecha caducidad:', {
+                      issueDate,
+                      currentExpiryDate,
+                      hasExpiryDate: !!currentExpiryDate,
+                      shouldCalculate: !currentExpiryDate && issueDate
+                    });
+                    
+                    // Auto-calcular fecha de caducidad (1 año después) siempre que haya fecha de realización
+                    let expiryDate = currentExpiryDate;
+                    if (issueDate) {
+                      const issue = new Date(issueDate);
+                      issue.setFullYear(issue.getFullYear() + 1);
+                      expiryDate = issue.toISOString().split('T')[0];
+                      console.log('🔍 Fecha calculada:', expiryDate);
+                    }
+                    
+                    console.log('🔍 Actualizando estado:', { issueDate, expiryDate });
+                    
+                    setPlanning(prev => ({ 
+                      ...prev, 
+                      editingMedicalCourse: prev.editingMedicalCourse ? { 
+                        ...prev.editingMedicalCourse, 
+                        issueDate,
+                        expiryDate
+                      } : null 
+                    }));
+                  }}
                   className="w-full p-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div>
-                <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-2">Fecha de Caducidad</label>
+                <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-2">
+                  Fecha de Caducidad
+                  {planning.editingMedicalCourse.issueDate && (
+                    <span className="ml-2 text-xs text-blue-600 font-normal">(auto: +1 año)</span>
+                  )}
+                </label>
                 <input
                   type="date"
                   value={planning.editingMedicalCourse.expiryDate || ''}
