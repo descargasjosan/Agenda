@@ -47,7 +47,28 @@ function extractRows<T>(rows: any[] | null): T[] {
 function extractMedicalCourses(rows: any[] | null): (MedicalCourse & { id: string })[] {
   if (!rows) return [];
   console.log('🔍 extractMedicalCourses llamado con:', rows);
-  const result = rows.map((r) => ({ ...r.data, id: r.id }));
+  console.log('🔍 Estructura de rows:', rows.map(r => ({ 
+    hasId: !!r.id, 
+    hasData: !!r.data, 
+    id: r.id, 
+    dataKeys: r.data ? Object.keys(r.data) : [],
+    dataId: r.data?.id 
+  })));
+  
+  const result = rows.map((r) => {
+    // CORRECCIÓN: Usar r.data.id si r.id es undefined
+    const courseId = r.id || r.data?.id;
+    const extracted = { ...r.data, id: courseId };
+    console.log('🔍 Extrayendo course:', { 
+      originalId: r.id, 
+      originalDataId: r.data?.id, 
+      finalId: courseId,
+      extractedId: extracted.id,
+      provider: extracted.provider 
+    });
+    return extracted;
+  });
+  
   console.log('🔍 extractMedicalCourses resultado:', result.map(c => ({ id: c.id, provider: c.provider })));
   return result;
 }

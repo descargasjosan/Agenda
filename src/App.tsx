@@ -402,34 +402,68 @@ const App: React.FC = () => {
     showNotification(`${newCourses.length} registro(s) médico(s) añadido(s)`, 'success');
   }, [persistMedicalCourse, planning.medicalCourses, planning.workers, calculateMedicalAlerts, showNotification, setPlanning]);
 
-  const updateMedicalCourse = useCallback(async (id: string, course: Partial<MedicalCourse>) => {
-    const existing = planning.medicalCourses.find(c => c.id === id);
-    if (!existing) return;
+  const updateMedicalCourseHandler = useCallback(async (course: MedicalCourse) => {
+    console.log('🔍 updateMedicalCourseHandler llamado con:', course);
+    console.log('🔍 course.id:', course.id);
+    console.log('🔍 course.assignedWorkerIds:', course.assignedWorkerIds);
+    
+    if (!course.id) {
+      console.error('❌ course.id es undefined - cancelando operación');
+      showNotification('Error: ID del registro no válido', 'error');
+      return;
+    }
+    
+    const existing = planning.medicalCourses.find((c) => c.id === course.id);
+    console.log('🔍 existing encontrado:', existing ? { id: existing.id, provider: existing.provider } : null);
+    
+    if (!existing) {
+      console.error('❌ No se encontró el registro con ID:', course.id);
+      showNotification('Error: Registro no encontrado', 'error');
+      return;
+    }
+    
     const updated = { ...existing, ...course, updatedAt: new Date().toISOString() };
+    console.log('🔍 updated course:', { id: updated.id, provider: updated.provider });
+    
     await persistMedicalCourse(updated);
-    const updatedAlerts = calculateMedicalAlerts(planning.medicalCourses.map(c => c.id === id ? updated : c), planning.workers);
+    const updatedAlerts = calculateMedicalAlerts(planning.medicalCourses.map(c => c.id === course.id ? updated : c), planning.workers);
     setPlanning(prev => ({ ...prev, medicalAlerts: updatedAlerts }));
     showNotification('Registro médico actualizado', 'success');
   }, [persistMedicalCourse, planning.medicalCourses, planning.workers, calculateMedicalAlerts, showNotification, setPlanning]);
 
   const deleteMedicalCourseHandler = useCallback(async (id: string) => {
     console.log('🔍 deleteMedicalCourseHandler llamado con ID:', id);
-    console.log('🔍 medicalCourses ANTES de eliminar:', planning.medicalCourses.map(c => ({ id: c.id, workerIds: c.assignedWorkerIds })));
     
-    await persistDeleteMedicalCourse(id);
+    // Si el ID es undefined, no hacer nada para evitar eliminar todos los registros
+    if (!id) {
+      console.error('❌ Intentando eliminar con ID undefined - operación cancelada');
+      showNotification('Error: ID del registro no válido', 'error');
+      return;
+    }
     
-    console.log('🔍 medicalCourses DESPUÉS de persistDeleteMedicalCourse:', planning.medicalCourses.map(c => ({ id: c.id, workerIds: c.assignedWorkerIds })));
+    console.log('🔍 medicalCourses ANTES de eliminar:', planning.medicalCourses.map(c => ({ id: c.id, provider: c.provider })));
     
-    const remaining = planning.medicalCourses.filter(c => c.id !== id);
-    console.log('🔍 remaining DESPUÉS de filter:', remaining.map(c => ({ id: c.id, workerIds: c.assignedWorkerIds })));
+    const existing = planning.medicalCourses.find((c) => c.id === id);
+    console.log('🔍 existing a eliminar:', existing ? { id: existing.id, provider: existing.provider } : null);
     
-    const updatedAlerts = calculateMedicalAlerts(remaining, planning.workers);
-    setPlanning(prev => ({ ...prev, medicalCourses: remaining, medicalAlerts: updatedAlerts }));
+    if (!existing) {
+      console.error('❌ No se encontró el registro con ID:', id);
+      showNotification('Error: Registro no encontrado', 'error');
+      return;
+    }
     
+    // Eliminar del estado local primero
+    const remaining = planning.medicalCourses.filter((c) => c.id !== id);
+    console.log('🔍 remaining DESPUÉS de filter:', remaining.map(c => ({ id: c.id, provider: c.provider })));
+    
+    setPlanning(prev => ({ ...prev, medicalCourses: remaining }));
     console.log('🔍 medicalCourses DESPUÉS de setPlanning:', remaining.map(c => ({ id: c.id, workerIds: c.assignedWorkerIds })));
     
+    // Eliminar de la base de datos
+    await persistDeleteMedicalCourse(id);
+    
     showNotification('Registro médico eliminado', 'success');
-  }, [persistDeleteMedicalCourse, planning.medicalCourses, planning.workers, calculateMedicalAlerts, showNotification, setPlanning]);
+  }, [planning.medicalCourses, persistDeleteMedicalCourse, showNotification]);
 
   const addNewMedicalCourse = useCallback(() => {
     if (medicalCourseName.trim() && !availableCourses.includes(medicalCourseName.trim())) {
@@ -2039,8 +2073,20 @@ const App: React.FC = () => {
                  </button>
                  <button 
                    onClick={() => {
-                     console.log('🔄 Botón de recarga presionado');
-                     reloadMedicalCoursesFromSupabase();
+                     console.log('🔄 Botón de recarga presionado - INICIO');
+                     console.log('🔄 reloadMedicalCoursesFromSupabase existe:', typeof reloadMedicalCoursesFromSupabase);
+                     console.log('🔄 reloadMedicalCoursesFromSupabase es función:', typeof reloadMedicalCoursesFromSupabase === 'function');
+                     
+                     if (typeof reloadMedicalCoursesFromSupabase === 'function') {
+                       console.log('🔄 Llamando a reloadMedicalCoursesFromSupabase...');
+                       reloadMedicalCoursesFromSupabase().then(() => {
+                         console.log('🔄 reloadMedicalCoursesFromSupabase completado');
+                       }).catch(error => {
+                         console.error('🔄 Error en reloadMedicalCoursesFromSupabase:', error);
+                       });
+                     } else {
+                       console.error('🔄 reloadMedicalCoursesFromSupabase no es una función');
+                     }
                    }}
                    className="px-3 py-1.5 bg-orange-600 text-white rounded-xl hover:bg-orange-700 transition-colors flex items-center gap-2 text-sm"
                    title="Recargar registros médicos desde Supabase"
@@ -2128,8 +2174,15 @@ const App: React.FC = () => {
                       const worker = planning.workers.find(w => w.id === assignedWorker);
                       const workerName = worker ? worker.name : '';
                       
+                      console.log('🔍 Renderizando course:', { 
+                        id: course.id, 
+                        provider: course.provider, 
+                        hasId: !!course.id,
+                        idType: typeof course.id 
+                      });
+                      
                       return (
-                        <div key={course.id} className="grid grid-cols-6 gap-2 p-3 border-b border-slate-100 hover:bg-slate-50 items-center">
+                        <div key={course.id || `course-${Math.random()}`} className="grid grid-cols-6 gap-2 p-3 border-b border-slate-100 hover:bg-slate-50 items-center">
                           <div className="text-sm font-medium text-slate-900 truncate">
                             {course.type === 'recognition' ? '🏥 Reconocimiento médico' : (course.name || '📚 Curso')}
                           </div>
@@ -2147,7 +2200,10 @@ const App: React.FC = () => {
                           </div>
                           <div className="flex gap-1">
                             <button 
-                              onClick={() => setPlanning(prev => ({ ...prev, editingMedicalCourse: course }))}
+                              onClick={() => {
+                                console.log('🔍 Botón editar presionado, course.id:', course.id);
+                                setPlanning(prev => ({ ...prev, editingMedicalCourse: course }));
+                              }}
                               className="p-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
                               title="Editar"
                             >
@@ -2155,6 +2211,7 @@ const App: React.FC = () => {
                             </button>
                             <button 
                               onClick={() => {
+                                console.log('🔍 Botón eliminar presionado, course.id:', course.id);
                                 if (confirm('¿Eliminar este registro médico?')) {
                                   deleteMedicalCourseHandler(course.id);
                                 }
@@ -4539,7 +4596,7 @@ const App: React.FC = () => {
                   addMedicalCourse(planning.editingMedicalCourse);
                 } else {
                   // Es un registro existente
-                  updateMedicalCourse(planning.editingMedicalCourse.id, planning.editingMedicalCourse);
+                  updateMedicalCourseHandler(planning.editingMedicalCourse);
                 }
                 setPlanning(prev => ({ ...prev, editingMedicalCourse: null }));
               }}
