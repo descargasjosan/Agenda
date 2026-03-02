@@ -714,6 +714,14 @@ const App: React.FC = () => {
   const handleDuplicateJob = useCallback(async () => {
     if (!duplicatingJob || !duplicationDate) return;
     
+    console.log('🔍 Iniciando duplicación de tarea:', {
+      originalJob: duplicatingJob.id,
+      originalDate: duplicatingJob.date,
+      newDate: duplicationDate,
+      keepWorkers: keepWorkersOnDuplicate,
+      keepDeliveryNote: keepDeliveryNoteOnDuplicate
+    });
+    
     // Extraer todas las propiedades excepto las que vamos a controlar explícitamente
     const { id, date, assignedWorkerIds, ref, deliveryNote, ...jobData } = duplicatingJob;
     
@@ -726,10 +734,21 @@ const App: React.FC = () => {
       deliveryNote: keepDeliveryNoteOnDuplicate ? (duplicatingJob.deliveryNote || '') : '' // Control explícito del deliveryNote
     };
     
-    await persistJob(newJob);
-    setDuplicatingJob(null);
-    setKeepDeliveryNoteOnDuplicate(false); // Resetear estado
-    showNotification("Tarea duplicada", "success");
+    console.log('🔍 Nueva tarea creada:', newJob);
+    
+    try {
+      await persistJob(newJob);
+      console.log('🔍 Tarea duplicada y guardada correctamente');
+      
+      setDuplicatingJob(null);
+      setKeepDeliveryNoteOnDuplicate(false); // Resetear estado
+      showNotification("Tarea duplicada", "success");
+      
+      console.log('🔍 Estados reseteados después de duplicar');
+    } catch (error) {
+      console.error('❌ Error al duplicar tarea:', error);
+      showNotification("Error al duplicar tarea", "error");
+    }
   }, [duplicatingJob, duplicationDate, keepWorkersOnDuplicate, keepDeliveryNoteOnDuplicate, persistJob, showNotification]);
 
   const handleOpenNote = (workerId: string) => {

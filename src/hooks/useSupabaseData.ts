@@ -546,7 +546,19 @@ export function useSupabaseData(): UseSupabaseDataReturn {
     console.log('🔄 saveJob - reinforcementGroups:', job.reinforcementGroups);
     console.log('🔄 saveJob - assignedWorkerIds:', job.assignedWorkerIds);
     console.log('🔄 saveJob - workerTimes:', job.workerTimes);
+    console.log('🔄 saveJob - planning antes de actualizar:', {
+      jobsCount: planning.jobs.length,
+      hasPlanning: !!planning,
+      planningKeys: Object.keys(planning)
+    });
+    
     setPlanning((prev) => {
+      console.log('🔄 setPlanning callback - prev:', {
+        jobsCount: prev.jobs.length,
+        hasPrev: !!prev,
+        prevKeys: Object.keys(prev)
+      });
+      
       const newJob = JSON.parse(JSON.stringify(job)); // Forzar nueva referencia
       const updatedPlanning = {
         ...prev,
@@ -554,12 +566,18 @@ export function useSupabaseData(): UseSupabaseDataReturn {
           ? prev.jobs.map((j) => (j.id === job.id ? newJob : j))
           : [...prev.jobs, newJob],
       };
+      
       console.log('🔄 saveJob updated planning, jobs count:', updatedPlanning.jobs.length);
       console.log('🔄 saveJob - updated job in planning:', updatedPlanning.jobs.find(j => j.id === job.id)?.reinforcementGroups);
+      console.log('🔄 saveJob - updatedPlanning keys:', Object.keys(updatedPlanning));
+      
       return updatedPlanning;
     });
+    
     await upsert('jobs', job.id, job, { date: job.date });
-  }, [upsert]);
+    
+    console.log('🔄 saveJob - upsert completado');
+  }, [upsert, planning]);
 
   const deleteJob = useCallback(async (id: string) => {
     setPlanning((prev) => ({ ...prev, jobs: prev.jobs.filter((j) => j.id !== id) }));
@@ -743,6 +761,27 @@ export function useSupabaseData(): UseSupabaseDataReturn {
     showNotification,
     notification,
   };
+}
+
+// ─── Helper para aplicar cambios de Realtime ─────────────────────────────
+function applyChange<T extends { id: string }>(arr: T[], payload: any): T[] {
+  const { eventType, new: newRow, old: oldRow } = payload;
+  
+  if (eventType === 'DELETE') {
+    return arr.filter((item) => item.id !== oldRow.id);
+  }
+  
+  const updated = newRow.data as T;
+  
+  if (eventType === 'INSERT') {
+    // Evitar duplicados si ya lo añadimos optimísticamente
+    return arr.some((item) => item.id === updated.id)
+      ? arr.map((item) => (item.id === updated.id ? updated : item))
+      : [...arr, updated];
+  }
+  
+  // UPDATE
+  return arr.map((item) => (item.id === updated.id ? updated : item));
 }
 
 // ─── Helper para fusionar cambios del polling inteligente ─────────────────────
