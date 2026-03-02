@@ -377,6 +377,12 @@ const App: React.FC = () => {
     return alerts.sort((a, b) => a.daysUntilExpiry - b.daysUntilExpiry);
   }, []);
 
+  // ── Efecto para calcular alertas automáticamente ─────────────────────────────
+  useEffect(() => {
+    const updatedAlerts = calculateMedicalAlerts(planning.medicalCourses, planning.workers);
+    setPlanning(prev => ({ ...prev, medicalAlerts: updatedAlerts }));
+  }, [planning.medicalCourses, planning.workers, calculateMedicalAlerts]);
+
   // ── CRUD: Medical courses ──────────────────────────────────────────────────
   const addMedicalCourse = useCallback(async (course: Omit<MedicalCourse, 'id' | 'createdAt' | 'updatedAt'>) => {
     // Crear un registro por cada operario seleccionado
@@ -392,15 +398,8 @@ const App: React.FC = () => {
     for (const newCourse of newCourses) {
       await persistMedicalCourse(newCourse);
     }
-
-    // Calcular alertas y actualizar solo esa parte del estado
-    const updatedAlerts = calculateMedicalAlerts([...planning.medicalCourses, ...newCourses], planning.workers);
-    setPlanning(prev => ({ 
-      ...prev, 
-      medicalAlerts: updatedAlerts 
-    }));
     showNotification(`${newCourses.length} registro(s) médico(s) añadido(s)`, 'success');
-  }, [persistMedicalCourse, planning.medicalCourses, planning.workers, calculateMedicalAlerts, showNotification, setPlanning]);
+  }, [persistMedicalCourse, showNotification]);
 
   const updateMedicalCourseHandler = useCallback(async (course: MedicalCourse) => {
     console.log('🔍 updateMedicalCourseHandler llamado con:', course);
@@ -426,10 +425,8 @@ const App: React.FC = () => {
     console.log('🔍 updated course:', { id: updated.id, provider: updated.provider });
     
     await persistMedicalCourse(updated);
-    const updatedAlerts = calculateMedicalAlerts(planning.medicalCourses.map(c => c.id === course.id ? updated : c), planning.workers);
-    setPlanning(prev => ({ ...prev, medicalAlerts: updatedAlerts }));
     showNotification('Registro médico actualizado', 'success');
-  }, [persistMedicalCourse, planning.medicalCourses, planning.workers, calculateMedicalAlerts, showNotification, setPlanning]);
+  }, [persistMedicalCourse, showNotification]);
 
   const deleteMedicalCourseHandler = useCallback(async (id: string) => {
     console.log('🔍 deleteMedicalCourseHandler llamado con ID:', id);

@@ -14,7 +14,8 @@ import { supabase } from '../../supabaseClient';
 import {
   PlanningState, Worker, Client, Job, StandardTask,
   Vehicle, VehicleAssignment, FuelRecord, DailyNote,
-  MedicalCourse, Holiday, Course, ReinforcementGroup
+  MedicalCourse, Holiday, Course, ReinforcementGroup,
+  MedicalAlert
 } from '../lib/types';
 
 // ─── Estado inicial vacío ──────────────────────────────────────────────────
@@ -27,14 +28,14 @@ const EMPTY_STATE: PlanningState = {
   notifications: {},
   courses: [],
   medicalCourses: [],
-  medicalAlerts: [],
+  medicalAlerts: [], // ✅ AÑADIR: Alertas médicas
   selectedMedicalTab: 'dashboard',
   editingMedicalCourse: null,
   standardTasks: [],
-  dailyNotes: [],
-  fuelRecords: [],
   vehicles: [],
   vehicleAssignments: [],
+  fuelRecords: [],
+  dailyNotes: [],
 };
 
 // ─── Helper: extraer array de registros Supabase ───────────────────────────
