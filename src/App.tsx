@@ -194,7 +194,9 @@ const [selectedMonth, setSelectedMonth] = useState('2026-01');
 const [workerControlData, setWorkerControlData] = useState<{[month: string]: {[workerId: string]: {[day: string]: string}}}>({});
 const [selectedCell, setSelectedCell] = useState<{workerId: string, day: number} | null>(null);
 const [workerFilter, setWorkerFilter] = useState('');
-const [isSyncingFromGrid, setIsSyncingFromGrid] = useState(false); // Bandera para evitar bucle
+const [isSyncingFromGrid, setIsSyncingFromGrid] = useState(false);
+const [vacationModal, setVacationModal] = useState<{workerId: string} | null>(null);
+const [vacationModalData, setVacationModalData] = useState<{totalDays: number, carryOver: number}>({totalDays: 34, carryOver: 0});
 
 // Función para actualizar el mes seleccionado
 const handleMonthChange = (newMonth: string) => {
@@ -619,6 +621,104 @@ const calculateWorkerTotals = (workerId: string) => {
    });
    
    return { totalHours, totalFaltas, totalBajaMedica, totalReposo, totalVacaciones };
+};
+
+// ── Liquidación de horas ──────────────────────────────────────────────────
+const isHoursSettled = (workerId: string): boolean => {
+   const settledId = `${workerId}-${selectedMonth}-settled`;
+   return planning.workerControls.some(c => c.id === settledId && c.value === 'L');
+};
+
+const toggleHoursSettled = async (workerId: string) => {
+   const settledId = `${workerId}-${selectedMonth}-settled`;
+   if (isHoursSettled(workerId)) {
+      await deleteWorkerControl(settledId);
+   } else {
+      await saveWorkerControl({
+         id: settledId,
+         worker_id: workerId,
+         date: `${selectedMonth}-01`,
+         value: 'L',
+         month: selectedMonth
+      });
+   }
+};
+
+// Suma las horas de meses anteriores no liquidados para acumular el saldo
+const calculateAccumulatedHours = (workerId: string): number => {
+   // Buscar el último mes liquidado anterior al mes actual
+   const settledMonths = planning.workerControls
+      .filter(c => c.worker_id === workerId && c.id === `${workerId}-${c.month}-settled` && c.value === 'L' && c.month < selectedMonth)
+      .map(c => c.month)
+      .sort();
+   const lastSettledMonth = settledMonths.length > 0 ? settledMonths[settledMonths.length - 1] : null;
+
+   // Sumar horas numéricas de todos los meses no liquidados anteriores al actual
+   let accumulated = 0;
+   planning.workerControls
+      .filter(c => {
+         if (c.worker_id !== workerId) return false;
+         if (c.id === `${workerId}-${c.month}-settled`) return false; // ignorar registros de liquidación
+         if (c.month >= selectedMonth) return false;               // solo meses anteriores
+         if (lastSettledMonth && c.month <= lastSettledMonth) return false; // excluir hasta el último cierre
+         const num = parseFloat(c.value);
+         return !isNaN(num);
+      })
+      .forEach(c => { accumulated += parseFloat(c.value); });
+
+   return accumulated;
+};
+
+// ── Balance de vacaciones ──────────────────────────────────────────────────
+const calculateVacationBalance = (workerId: string) => {
+   const year = selectedMonth.split('-')[0];
+   const worker = planning.workers.find(w => w.id === workerId);
+   const config = worker?.vacationConfig?.[year] || { totalDays: 34, carryOver: 0 };
+
+   // Contar días V del año desde statusRecords (fuente de verdad)
+   let usedDays = 0;
+   if (worker?.statusRecords) {
+      const yearStart = `${year}-01-01`;
+      const yearEnd = `${year}-12-31`;
+      worker.statusRecords
+         .filter(r => r.status === WorkerStatus.VACACIONES || (r.status as string) === 'Vacaciones' || (r.status as string) === 'VACACIONES')
+         .forEach(r => {
+            const start = new Date(Math.max(new Date(r.startDate + 'T00:00:00').getTime(), new Date(yearStart + 'T00:00:00').getTime()));
+            const end = new Date(Math.min(new Date((r.endDate || r.startDate) + 'T00:00:00').getTime(), new Date(yearEnd + 'T00:00:00').getTime()));
+            if (end >= start) {
+               usedDays += Math.floor((end.getTime() - start.getTime()) / 86400000) + 1;
+            }
+         });
+   }
+
+   const entitled = config.totalDays + config.carryOver;
+   const remaining = entitled - usedDays;
+   return { totalDays: config.totalDays, carryOver: config.carryOver, entitled, usedDays, remaining };
+};
+
+const openVacationModal = (workerId: string) => {
+   const year = selectedMonth.split('-')[0];
+   const worker = planning.workers.find(w => w.id === workerId);
+   const config = worker?.vacationConfig?.[year] || { totalDays: 34, carryOver: 0 };
+   setVacationModalData({ totalDays: config.totalDays, carryOver: config.carryOver });
+   setVacationModal({ workerId });
+};
+
+const saveVacationConfig = async () => {
+   if (!vacationModal) return;
+   const year = selectedMonth.split('-')[0];
+   const worker = planning.workers.find(w => w.id === vacationModal.workerId);
+   if (!worker) return;
+   const updatedWorker = {
+      ...worker,
+      vacationConfig: {
+         ...(worker.vacationConfig || {}),
+         [year]: { totalDays: vacationModalData.totalDays, carryOver: vacationModalData.carryOver }
+      }
+   };
+   await saveWorker(updatedWorker);
+   setVacationModal(null);
+   showNotification('Configuración de vacaciones guardada', 'success');
 };
   const [showSSReport, setShowSSReport] = useState(false);
   const [showNotificationsModal, setShowNotificationsModal] = useState(false);
@@ -3112,10 +3212,11 @@ const calculateWorkerTotals = (workerId: string) => {
                            })()}
                            {/* Columnas de totales */}
                            <th className="p-1 text-xs font-black text-slate-700 uppercase text-center border-l border-slate-200 min-w-[40px]">Faltas</th>
-                           <th className="p-1 text-xs font-black text-slate-700 uppercase text-center border-r border-slate-200 min-w-[40px]">Horas</th>
+                           <th className="p-1 text-xs font-black text-slate-700 uppercase text-center border-r border-slate-200 min-w-[48px]">Horas</th>
                            <th className="p-1 text-xs font-black text-slate-700 uppercase text-center border-r border-slate-200 min-w-[40px]">Baja</th>
                            <th className="p-1 text-xs font-black text-slate-700 uppercase text-center border-r border-slate-200 min-w-[40px]">Reposo</th>
-                           <th className="p-1 text-xs font-black text-slate-700 uppercase text-center border-r border-slate-200 min-w-[40px]">Vacaciones</th>
+                           <th className="p-1 text-xs font-black text-slate-700 uppercase text-center border-r border-slate-200 min-w-[40px]">Vac. Mes</th>
+                           <th className="p-1 text-xs font-black text-slate-700 uppercase text-center border-r border-slate-200 min-w-[52px]">Saldo Vac.</th>
                         </tr>
                      </thead>
                      
@@ -3180,10 +3281,32 @@ const calculateWorkerTotals = (workerId: string) => {
                                           {totals.totalFaltas}
                                        </div>
                                     </td>
+                                    {/* Horas con acumulado y liquidación */}
                                     <td className="p-1 text-center border-r border-slate-200 bg-white">
-                                       <div className="text-xs font-black text-blue-600">
-                                          {totals.totalHours}
-                                       </div>
+                                       {(() => {
+                                          const settled = isHoursSettled(worker.id);
+                                          const accumulated = calculateAccumulatedHours(worker.id);
+                                          const displayTotal = totals.totalHours + accumulated;
+                                          const hasAccumulated = accumulated !== 0;
+                                          const tooltipText = settled
+                                             ? `Liquidadas ✓ | Mes: ${totals.totalHours >= 0 ? '+' : ''}${totals.totalHours}h`
+                                             : hasAccumulated
+                                                ? `Mes: ${totals.totalHours >= 0 ? '+' : ''}${totals.totalHours}h | Acumulado anterior: ${accumulated >= 0 ? '+' : ''}${accumulated}h | Total: ${displayTotal >= 0 ? '+' : ''}${displayTotal}h`
+                                                : `Mes: ${totals.totalHours >= 0 ? '+' : ''}${totals.totalHours}h | Pulsar para liquidar`;
+                                          return (
+                                             <button
+                                                onClick={() => toggleHoursSettled(worker.id)}
+                                                title={tooltipText}
+                                                className={`w-full flex items-center justify-center gap-0.5 px-1 py-0.5 rounded-lg transition-colors ${settled ? 'bg-green-100 text-green-700' : displayTotal < 0 ? 'text-red-600 hover:bg-red-50' : 'text-blue-600 hover:bg-blue-50'}`}
+                                             >
+                                                <span className="text-xs font-black">
+                                                   {displayTotal >= 0 ? '+' : ''}{displayTotal}
+                                                </span>
+                                                {settled && <CheckCircle className="w-3 h-3 flex-shrink-0" />}
+                                                {!settled && hasAccumulated && <span className="text-[9px] opacity-60">↑</span>}
+                                             </button>
+                                          );
+                                       })()}
                                     </td>
                                     <td className="p-1 text-center border-r border-slate-200 bg-white">
                                        <div className="text-xs font-black text-red-600">
@@ -3200,6 +3323,22 @@ const calculateWorkerTotals = (workerId: string) => {
                                           {totals.totalVacaciones}
                                        </div>
                                     </td>
+                                    {/* Saldo vacaciones anual */}
+                                    <td className="p-1 text-center border-r border-slate-200 bg-white">
+                                       {(() => {
+                                          const vac = calculateVacationBalance(worker.id);
+                                          const color = vac.remaining > 0 ? 'text-emerald-600' : vac.remaining < 0 ? 'text-red-600' : 'text-slate-400';
+                                          return (
+                                             <button
+                                                onClick={() => openVacationModal(worker.id)}
+                                                title={`Derecho: ${vac.totalDays} días${vac.carryOver !== 0 ? ` + ${vac.carryOver} arrastre` : ''} | Disfrutados: ${vac.usedDays} | Pendientes: ${vac.remaining}`}
+                                                className="w-full flex items-center justify-center px-1 py-0.5 rounded-lg hover:bg-emerald-50 transition-colors"
+                                             >
+                                                <span className={`text-xs font-black ${color}`}>{vac.remaining}</span>
+                                             </button>
+                                          );
+                                       })()}
+                                    </td>
                                  </tr>
                               );
                            });
@@ -3210,6 +3349,76 @@ const calculateWorkerTotals = (workerId: string) => {
             </div>
          )}
          
+         {/* Modal de vacaciones */}
+         {vacationModal && (() => {
+            const worker = planning.workers.find(w => w.id === vacationModal.workerId);
+            const year = selectedMonth.split('-')[0];
+            const vac = calculateVacationBalance(vacationModal.workerId);
+            return (
+               <div className="fixed inset-0 z-[400] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4" onClick={() => setVacationModal(null)}>
+                  <div className="bg-white w-full max-w-sm rounded-[28px] p-6 shadow-2xl animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
+                     <div className="flex justify-between items-center mb-5">
+                        <div>
+                           <h3 className="text-base font-black text-slate-900 uppercase italic">Vacaciones {year}</h3>
+                           <p className="text-xs text-slate-500 font-bold">{worker?.name}</p>
+                        </div>
+                        <button onClick={() => setVacationModal(null)} className="p-2 rounded-xl hover:bg-slate-100 transition-colors">
+                           <X className="w-4 h-4 text-slate-500" />
+                        </button>
+                     </div>
+
+                     {/* Resumen actual */}
+                     <div className="grid grid-cols-3 gap-2 mb-5">
+                        <div className="bg-blue-50 rounded-xl p-3 text-center">
+                           <div className="text-xl font-black text-blue-700">{vac.entitled}</div>
+                           <div className="text-[10px] font-bold text-blue-500 uppercase">Derecho</div>
+                           <div className="text-[9px] text-blue-400">{vac.totalDays} + {vac.carryOver} arr.</div>
+                        </div>
+                        <div className="bg-amber-50 rounded-xl p-3 text-center">
+                           <div className="text-xl font-black text-amber-700">{vac.usedDays}</div>
+                           <div className="text-[10px] font-bold text-amber-500 uppercase">Disfrutados</div>
+                        </div>
+                        <div className={`rounded-xl p-3 text-center ${vac.remaining >= 0 ? 'bg-emerald-50' : 'bg-red-50'}`}>
+                           <div className={`text-xl font-black ${vac.remaining >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>{vac.remaining}</div>
+                           <div className={`text-[10px] font-bold uppercase ${vac.remaining >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>Pendientes</div>
+                        </div>
+                     </div>
+
+                     <div className="border-t border-slate-100 pt-4 space-y-3">
+                        <p className="text-xs font-bold text-slate-500 uppercase">Configurar para {year}</p>
+                        <div className="flex items-center gap-3">
+                           <label className="text-xs font-black text-slate-700 w-36 flex-shrink-0">Días anuales</label>
+                           <input
+                              type="number"
+                              min={0}
+                              max={365}
+                              value={vacationModalData.totalDays}
+                              onChange={e => setVacationModalData(prev => ({ ...prev, totalDays: Math.max(0, parseInt(e.target.value) || 0) }))}
+                              className="flex-1 border border-slate-200 rounded-xl px-3 py-1.5 text-sm font-black text-center focus:ring-2 focus:ring-blue-100 outline-none"
+                           />
+                        </div>
+                        <div className="flex items-center gap-3">
+                           <label className="text-xs font-black text-slate-700 w-36 flex-shrink-0">Arrastre año anterior</label>
+                           <input
+                              type="number"
+                              min={-99}
+                              max={99}
+                              value={vacationModalData.carryOver}
+                              onChange={e => setVacationModalData(prev => ({ ...prev, carryOver: parseInt(e.target.value) || 0 }))}
+                              className="flex-1 border border-slate-200 rounded-xl px-3 py-1.5 text-sm font-black text-center focus:ring-2 focus:ring-blue-100 outline-none"
+                           />
+                        </div>
+                     </div>
+
+                     <div className="flex gap-2 mt-5">
+                        <button onClick={() => setVacationModal(null)} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-xs font-black text-slate-600 hover:bg-slate-50 transition-colors">Cancelar</button>
+                        <button onClick={saveVacationConfig} className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white text-xs font-black hover:bg-emerald-700 transition-colors">Guardar</button>
+                     </div>
+                  </div>
+               </div>
+            );
+         })()}
+
          {/* Modal de selección de código */}
          {selectedCell && (
             <div className="fixed inset-0 z-[300] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4" onClick={() => setSelectedCell(null)}>

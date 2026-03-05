@@ -152,6 +152,12 @@ export interface Worker {
   isArchived?: boolean; 
   notes?: string;
   statusRecords?: WorkerStatusRecord[]; // Nuevos registros de estados
+  vacationConfig?: {
+    [year: string]: {
+      totalDays: number;   // Días de vacaciones anuales (por defecto 34)
+      carryOver: number;   // Días arrastrados del año anterior
+    };
+  };
 }
 
 export interface WorkCenter {
