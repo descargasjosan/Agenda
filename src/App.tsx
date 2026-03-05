@@ -382,51 +382,57 @@ const syncToStatusRecords = useCallback(async (workerId: string, day: number, va
       }
       
       if (statusType) {
-         // LUEGO analizar todos los días del mes con el mismo status para crear rangos contiguos
-         const updatedMonthData = workerControlData[selectedMonth] || {};
-         const updatedWorkerData = updatedMonthData[workerId] || {};
+         // Paso 1: eliminar el día actual de cualquier registro que lo cubra (con división si está en el medio)
+         let updatedWorker = removeStatusRecordForDate(worker, dateStr);
+
+         // Paso 2: recopilar todos los días del mes con el mismo statusType leyendo
+         // directamente de statusRecords (no del grid desactualizado)
+         const sameStatusDays: number[] = [day];
          const monthDays = getMonthDays(selectedMonth);
-         
-         // Asegurarse de que el día actual esté incluido
-         const finalWorkerData = { ...updatedWorkerData, [day]: value };
-         
-         // Encontrar todos los días con el mismo status
-         const sameStatusDays: number[] = [];
          monthDays.forEach(d => {
-            const dayValue = finalWorkerData[d] || '';
-            const dayStatusType = dayValue === 'V' ? WorkerStatus.VACACIONES : 
-                               dayValue === 'B' ? WorkerStatus.BAJA_MEDICA : 
-                               dayValue === 'P' ? WorkerStatus.BAJA_PATERNIDAD : null;
-            
-            if (dayStatusType === statusType) {
-               sameStatusDays.push(d);
-            }
+            if (d === day) return;
+            const dStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+            const s = getCurrentWorkerStatusForDate(updatedWorker, dStr);
+            const sCode = s.status === WorkerStatus.VACACIONES ? 'V' :
+                          s.status === WorkerStatus.BAJA_MEDICA ? 'B' :
+                          s.status === WorkerStatus.BAJA_PATERNIDAD ? 'P' : '';
+            if (sCode === value) sameStatusDays.push(d);
          });
-         
-         // Crear rangos contiguos
-         const ranges = createContiguousRanges(sameStatusDays, year, month);
-         
-         // Eliminar todos los registros existentes de este tipo de status
-         let updatedWorker = { ...worker };
-         if (updatedWorker.statusRecords) {
-            updatedWorker.statusRecords = updatedWorker.statusRecords.filter(record => record.status !== statusType);
-         }
-         
-         // Añadir los nuevos rangos
-         ranges.forEach(range => {
-            updatedWorker = addOrUpdateStatusRecord(updatedWorker, statusType, range.start, range.end);
-         });
-         
-         const currentStatus = getCurrentWorkerStatus(updatedWorker);
-         const finalWorker = { 
-            ...updatedWorker, 
-            status: currentStatus.status, 
-            statusStartDate: currentStatus.startDate, 
-            statusEndDate: currentStatus.endDate 
+
+         // Paso 3: eliminar los registros del statusType que pertenecen exclusivamente a este mes
+         // (los que cruzan meses ya quedaron divididos en el Paso 1)
+         const lastDayOfMonth = new Date(year, month, 0).getDate();
+         const monthStart = `${selectedMonth}-01`;
+         const monthEnd = `${selectedMonth}-${String(lastDayOfMonth).padStart(2, '0')}`;
+         updatedWorker = {
+            ...updatedWorker,
+            statusRecords: (updatedWorker.statusRecords || []).filter(record => {
+               if (record.status !== statusType) return true;
+               // Mantener si empieza antes de este mes (es un registro cross-month ya recortado)
+               if (record.startDate < monthStart) return true;
+               // Mantener si termina después de este mes
+               if ((record.endDate || record.startDate) > monthEnd) return true;
+               // Eliminar si está completamente dentro de este mes
+               return false;
+            })
          };
-         
+
+         // Paso 4: crear rangos contiguos y añadirlos
+         const ranges = createContiguousRanges(sameStatusDays, year, month);
+         ranges.forEach(range => {
+            updatedWorker = addOrUpdateStatusRecord(updatedWorker, statusType!, range.start, range.end);
+         });
+
+         const currentStatus = getCurrentWorkerStatus(updatedWorker);
+         const finalWorker = {
+            ...updatedWorker,
+            status: currentStatus.status,
+            statusStartDate: currentStatus.startDate,
+            statusEndDate: currentStatus.endDate
+         };
+
          await persistWorker(finalWorker);
-         
+
          if (ranges.length === 1) {
             showNotification(`Estado "${statusType}" registrado del ${formatDateDMY(ranges[0].start)} al ${formatDateDMY(ranges[0].end)} para ${worker.name}`, 'success');
          } else {
@@ -467,7 +473,7 @@ const syncToStatusRecords = useCallback(async (workerId: string, day: number, va
    }
    
    setIsSyncingFromGrid(false); // Desactivar bandera
-}, [selectedMonth, planning.workers, workerControlData, persistWorker, showNotification, saveWorkerControl, deleteWorkerControl]);
+}, [selectedMonth, planning.workers, persistWorker, showNotification, saveWorkerControl, deleteWorkerControl]);
 
 // Función para crear rangos contiguos desde una lista de días
 const createContiguousRanges = (days: number[], year: number, month: number): Array<{start: string, end: string}> => {
@@ -508,25 +514,45 @@ const createContiguousRanges = (days: number[], year: number, month: number): Ar
 };
 
 // Función auxiliar para eliminar registros de estado para una fecha específica
+// Divide el rango en dos si la fecha está en el medio
 const removeStatusRecordForDate = (worker: Worker, dateStr: string): Worker => {
    if (!worker.statusRecords || worker.statusRecords.length === 0) {
       return worker;
    }
-   
-   // Filtrar registros que NO cubren la fecha especificada
-   const filteredRecords = worker.statusRecords.filter(record => {
-      const startDate = new Date(record.startDate);
-      const endDate = record.endDate ? new Date(record.endDate) : new Date('9999-12-31');
-      const targetDate = new Date(dateStr);
-      
-      // Mantener solo los registros que NO cubren la fecha objetivo
-      return !(targetDate >= startDate && targetDate <= endDate);
-   });
-   
-   return {
-      ...worker,
-      statusRecords: filteredRecords
+
+   const targetDate = new Date(dateStr + 'T00:00:00');
+
+   const shiftDate = (date: Date, days: number): string => {
+      const d = new Date(date);
+      d.setDate(d.getDate() + days);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
    };
+
+   const newRecords: WorkerStatusRecord[] = [];
+
+   worker.statusRecords.forEach(record => {
+      const recStart = new Date((record.startDate || dateStr) + 'T00:00:00');
+      const recEnd = record.endDate ? new Date(record.endDate + 'T00:00:00') : recStart;
+
+      if (targetDate < recStart || targetDate > recEnd) {
+         // No cubre esta fecha, mantener intacto
+         newRecords.push(record);
+      } else if (record.startDate === dateStr && record.endDate === dateStr) {
+         // Registro de un solo día, eliminar completamente
+      } else if (record.startDate === dateStr) {
+         // La fecha es el inicio del rango, acortar por la derecha
+         newRecords.push({ ...record, startDate: shiftDate(targetDate, 1) });
+      } else if (record.endDate === dateStr) {
+         // La fecha es el fin del rango, acortar por la izquierda
+         newRecords.push({ ...record, endDate: shiftDate(targetDate, -1) });
+      } else {
+         // La fecha está en el medio: dividir en dos registros
+         newRecords.push({ ...record, endDate: shiftDate(targetDate, -1) });
+         newRecords.push({ ...record, id: `${record.id}-${Date.now()}`, startDate: shiftDate(targetDate, 1) });
+      }
+   });
+
+   return { ...worker, statusRecords: newRecords };
 };
 
 // Efecto para sincronizar automáticamente al cambiar de mes o vista
@@ -1190,31 +1216,41 @@ const calculateWorkerTotals = (workerId: string) => {
       job.date.startsWith(yearMonth)
     );
     
-    // Obtener días trabajados
+    // Obtener días trabajados del mes actual
     const workedDays = new Set<string>();
     workerJobs.forEach(job => {
       workedDays.add(job.date);
     });
+
+    // Ampliar con días frontera de meses adyacentes (hasta 3 días antes/después)
+    // para detectar fines de semana que cruzan el límite de mes
+    const extendedWorkedDays = new Set<string>(workedDays);
+    planning.jobs
+      .filter(job => job.assignedWorkerIds.includes(workerId) && !job.date.startsWith(yearMonth))
+      .forEach(job => {
+        const jobDate = new Date(job.date + 'T00:00:00');
+        const diffFromStart = (firstDay.getTime() - jobDate.getTime()) / 86400000;
+        const diffFromEnd = (jobDate.getTime() - lastDay.getTime()) / 86400000;
+        if (diffFromStart >= 0 && diffFromStart <= 3) extendedWorkedDays.add(job.date);
+        if (diffFromEnd >= 0 && diffFromEnd <= 3) extendedWorkedDays.add(job.date);
+      });
     
-    // Detectar fines de semana (viernes+lunes trabajados)
+    // Detectar fines de semana (viernes+lunes trabajados, incluyendo cruces de mes)
     const weekendDays = new Set<string>();
-    const workedDates = Array.from(workedDays).map(dateStr => new Date(dateStr + 'T00:00:00')); // Añadir hora para evitar desfase
+    const extendedDates = Array.from(extendedWorkedDays).map(dateStr => new Date(dateStr + 'T00:00:00'));
     
-    workedDates.forEach(date => {
+    extendedDates.forEach(date => {
       const dayOfWeek = date.getDay(); // 0=domingo, 1=lunes, ..., 5=viernes, 6=sábado
       
       if (dayOfWeek === 5) { // Viernes
-        // Buscar si hay lunes trabajado en los próximos 3 días
         const monday = new Date(date);
         monday.setDate(date.getDate() + 3); // viernes -> lunes
         
-        if (monday.getMonth() === month - 1 && workedDays.has(formatDateLocal(monday))) {
-          // Añadir sábado y domingo (usando las fechas correctas)
+        if (extendedWorkedDays.has(formatDateLocal(monday))) {
           const saturday = new Date(date);
-          saturday.setDate(date.getDate() + 1); // sábado
+          saturday.setDate(date.getDate() + 1);
           const sunday = new Date(date);
-          sunday.setDate(date.getDate() + 2); // domingo
-          
+          sunday.setDate(date.getDate() + 2);
           weekendDays.add(formatDateLocal(saturday));
           weekendDays.add(formatDateLocal(sunday));
         }
