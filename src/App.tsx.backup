@@ -1,5 +1,7 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { CalendarIcon, Users, Building2, Car, HeartPulse, Settings, Download, Upload, Cloud, CloudOff, AlertCircle, CheckCircle2, X, ChevronLeft, ChevronRight, CalendarDays, Search, Plus, Trash2, Edit2, Copy, FileText, Loader2, LayoutGrid, Table, ListTodo, Bell, MessageSquare, Send, Filter, ArrowRight, Clock, User, Mail, Phone, MapPin, Briefcase, Star, TrendingUp, Activity, DownloadCloud, Database, RotateCcw, BarChart3, MessageCircle, Calendar, CheckCircle, GraduationCap, FileSpreadsheet, ChevronDown, Sparkles, ClipboardList, Hash, Save, StickyNote, Fuel, AlertTriangle } from 'lucide-react';
+import { 
+  CalendarIcon, Users, Building2, Car, HeartPulse, Settings, Download, Upload, Cloud, CloudOff, AlertCircle, CheckCircle2, X, ChevronLeft, ChevronRight, CalendarDays, Search, Plus, Trash2, Edit2, Copy, FileText, Loader2, LayoutGrid, Table, ListTodo, Bell, MessageSquare, Send, Filter, ArrowRight, Clock, User, Mail, Phone, MapPin, Briefcase, Star, TrendingUp, Activity, DownloadCloud, Database, RotateCcw, BarChart3, MessageCircle, Calendar, CheckCircle, GraduationCap, FileSpreadsheet, ChevronDown, Sparkles, ClipboardList, Hash, Save, StickyNote, Fuel, AlertTriangle, RefreshCw 
+} from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { useSupabaseData } from './hooks/useSupabaseData';
 import LoginScreen from './components/LoginScreen';
@@ -8,12 +10,9 @@ import PlanningBoard from './components/PlanningBoard';
 import StatisticsPanel from './components/StatisticsPanel';
 import CompactPlanningView from './components/CompactPlanningView';
 import FleetManager from './components/FleetManager';
-import { PlanningState, Worker, Client, Job, Holiday, Vehicle, FuelRecord, DailyNote, MedicalCourse, Course, StandardTask, VehicleAssignment, ContractType, WorkerStatus, WorkerStatusRecord, ViewType, JobType, NoteType, WorkerControlData, WorkerControl } from './lib/types';
-import { formatDateDMY, isHoliday, getWorkerDisplayName, getCurrentWorkerStatus, getCurrentWorkerStatusForDate, getNextStatusChange, addOrUpdateStatusRecord, removeStatusRecord, validateAssignment, getWorkerSSFormat } from './lib/utils';
+import { PlanningState, Worker, Client, Job, Holiday, Vehicle, FuelRecord, DailyNote, MedicalCourse, Course, StandardTask, VehicleAssignment, ContractType, WorkerStatus, WorkerStatusRecord, ViewType, JobType, NoteType } from './lib/types';
+import { formatDateDMY, isHoliday, getWorkerDisplayName, getCurrentWorkerStatus, getNextStatusChange, addOrUpdateStatusRecord, removeStatusRecord, validateAssignment, getWorkerSSFormat } from './lib/utils';
 import { WORKER_ROLES } from './lib/constants';
-
-// Funciones para Supabase (Opción B - JSONB) - ELIMINADAS
-// Ahora usamos el hook useSupabaseData
 
 // Función para formatear fechas en formato DD/MM/YYYY
 const formatDateEuropean = (dateStr: string) => {
@@ -159,11 +158,11 @@ const App: React.FC = () => {
     deleteDailyNote: persistDeleteDailyNote,
     saveMedicalCourse: persistMedicalCourse,
     deleteMedicalCourse: persistDeleteMedicalCourse,
+    reloadMedicalCoursesFromSupabase,
     saveCourse: persistCourse,
     deleteCourse: persistDeleteCourse,
     saveHoliday: persistHoliday,
     deleteHoliday: persistDeleteHoliday,
-    saveWorkerControl, deleteWorkerControl,
     showNotification, notification,
   } = useSupabaseData();
 
@@ -187,410 +186,6 @@ const App: React.FC = () => {
   const [confirmDeleteCourse, setConfirmDeleteCourse] = useState<string | null>(null);
   const [editingJob, setEditingJob] = useState<Job | null>(null);
   const [showBackupModal, setShowBackupModal] = useState(false);
-const [selectedMonth, setSelectedMonth] = useState('2026-01');
-const [workerControlData, setWorkerControlData] = useState<{[month: string]: {[workerId: string]: {[day: string]: string}}}>({});
-const [selectedCell, setSelectedCell] = useState<{workerId: string, day: number} | null>(null);
-const [workerFilter, setWorkerFilter] = useState('');
-const [isSyncingFromGrid, setIsSyncingFromGrid] = useState(false); // Bandera para evitar bucle
-
-// Función para actualizar el mes seleccionado
-const handleMonthChange = (newMonth: string) => {
-   setSelectedMonth(newMonth);
-   // No limpiar datos, solo cambiar el mes
-};
-
-// Función para obtener días del mes según el mes seleccionado
-const getMonthDays = (monthString: string) => {
-   const [year, month] = monthString.split('-').map(Number);
-   const daysInMonth = new Date(year, month, 0).getDate(); // Último día del mes
-   return Array.from({ length: daysInMonth }, (_, i) => i + 1);
-};
-
-// Función para obtener día de la semana para una fecha
-const getDayOfWeek = (year: number, month: number, day: number) => {
-   return new Date(Date.UTC(year, month - 1, day)).getUTCDay();
-};
-
-// Función para obtener valor de celda
-const getCellValue = (workerId: string, day: number) => {
-   const monthData = workerControlData[selectedMonth] || {};
-   const workerData = monthData[workerId] || {};
-   return workerData[day] || '';
-};
-
-// Función para actualizar valor de celda
-const updateCellValue = async (workerId: string, day: number, value: string) => {
-   // Si es un número (horas), no cerrar modal inmediatamente
-   const isNumeric = value && !isNaN(Number(value));
-   
-   if (!isNumeric) {
-      // Para letras (V, B, P, etc.), cerrar modal inmediatamente para respuesta rápida
-      setSelectedCell(null);
-   }
-   
-   // Sincronizar con statusRecords
-   await syncToStatusRecords(workerId, day, value);
-   
-   // Cerrar modal después de procesar si era un número
-   if (isNumeric) {
-      setSelectedCell(null);
-   }
-};
-
-// Función para manejar clic en celda
-const handleCellClick = (workerId: string, day: number) => {
-   setSelectedCell({ workerId, day });
-};
-
-// Función para sincronizar celdas desde registros de estados
-const syncFromStatusRecords = useCallback(async (showSummary: boolean = false) => {
-   const [year, month] = selectedMonth.split('-').map(Number);
-   const monthDays = getMonthDays(selectedMonth);
-
-   // Cargar datos manuales (F, D, R, horas) desde Supabase
-   const manualData: {[workerId: string]: {[day: number]: string}} = {};
-   planning.workerControls
-      .filter(control => control.month === selectedMonth)
-      .forEach(control => {
-         if (!manualData[control.worker_id]) {
-            manualData[control.worker_id] = {};
-         }
-         const day = parseInt(control.date.split('-')[2], 10);
-         manualData[control.worker_id][day] = control.value;
-      });
-
-   // Construir datos de todos los operarios en un único objeto
-   const newMonthData: {[workerId: string]: {[day: string]: string}} = {};
-
-   planning.workers.forEach(worker => {
-      const newWorkerData: {[day: string]: string} = {};
-
-      monthDays.forEach(day => {
-         const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-         const manualValue = manualData[worker.id]?.[day] || '';
-
-         if (manualValue) {
-            newWorkerData[day] = manualValue;
-         } else {
-            const currentStatus = getCurrentWorkerStatusForDate(worker, dateStr);
-            let statusCode = '';
-            switch(currentStatus.status) {
-               case 'VACACIONES':
-               case 'Vacaciones': statusCode = 'V'; break;
-               case 'BAJA_MEDICA':
-               case 'Baja Médica': statusCode = 'B'; break;
-               case 'BAJA_PATERNIDAD':
-               case 'Baja Paternidad': statusCode = 'P'; break;
-               default: statusCode = ''; break;
-            }
-            newWorkerData[day] = statusCode;
-         }
-      });
-
-      newMonthData[worker.id] = newWorkerData;
-   });
-
-   // Una sola actualización de estado con todos los datos
-   setWorkerControlData(prev => ({
-      ...prev,
-      [selectedMonth]: newMonthData
-   }));
-
-   if (showSummary) {
-      showNotification('Sincronización completada', 'success');
-   }
-}, [selectedMonth, planning.workers, planning.workerControls, showNotification]);
-
-// Función para sincronizar cambios manuales del grid a statusRecords
-const syncToStatusRecords = useCallback(async (workerId: string, day: number, value: string) => {
-   console.log('🔄 Sincronizando cambio manual a statusRecords...');
-   
-   setIsSyncingFromGrid(true); // Activar bandera
-   
-   const worker = planning.workers.find(w => w.id === workerId);
-   if (!worker) {
-      console.error('❌ Worker no encontrado:', workerId);
-      setIsSyncingFromGrid(false);
-      return;
-   }
-   
-   const [year, month] = selectedMonth.split('-').map(Number);
-   const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-   
-   // Verificar si es un número (horas)
-   const isNumeric = value && !isNaN(Number(value));
-   
-   if (isNumeric) {
-      // Es un número (horas) - actualizar directamente en el grid y guardar en Supabase
-      setWorkerControlData(prev => {
-         const monthData = prev[selectedMonth] || {};
-         const workerData = monthData[workerId] || {};
-         
-         return {
-            ...prev,
-            [selectedMonth]: {
-               ...monthData,
-               [workerId]: {
-                  ...workerData,
-                  [day]: value
-               }
-            }
-         };
-      });
-      
-      // Guardar en Supabase usando el hook
-      await saveWorkerControl({
-         id: `${workerId}-${dateStr}`,
-         worker_id: workerId,
-         date: dateStr,
-         value: value,
-         month: selectedMonth
-      });
-      
-      showNotification(`Horas "${value}" registradas para ${worker.name} el día ${day}`, 'success');
-   } else {
-      // Es una letra o vacío - procesar directamente en el grid
-      // F, D, R son códigos manuales que se guardan en Supabase
-      
-      // Actualizar el grid con el nuevo valor
-      setWorkerControlData(prev => {
-         const monthData = prev[selectedMonth] || {};
-         const workerData = monthData[workerId] || {};
-         
-         return {
-            ...prev,
-            [selectedMonth]: {
-               ...monthData,
-               [workerId]: {
-                  ...workerData,
-                  [day]: value
-               }
-            }
-         };
-      });
-      
-      // Solo procesar como estado si es V, B, P
-      let statusType: WorkerStatus | null = null;
-      switch(value) {
-         case 'V': statusType = WorkerStatus.VACACIONES; break;
-         case 'B': statusType = WorkerStatus.BAJA_MEDICA; break;
-         case 'P': statusType = WorkerStatus.BAJA_PATERNIDAD; break;
-         default: statusType = null; break;
-      }
-      
-      if (statusType) {
-         // LUEGO analizar todos los días del mes con el mismo status para crear rangos contiguos
-         const updatedMonthData = workerControlData[selectedMonth] || {};
-         const updatedWorkerData = updatedMonthData[workerId] || {};
-         const monthDays = getMonthDays(selectedMonth);
-         
-         // Asegurarse de que el día actual esté incluido
-         const finalWorkerData = { ...updatedWorkerData, [day]: value };
-         
-         // Encontrar todos los días con el mismo status
-         const sameStatusDays: number[] = [];
-         monthDays.forEach(d => {
-            const dayValue = finalWorkerData[d] || '';
-            const dayStatusType = dayValue === 'V' ? WorkerStatus.VACACIONES : 
-                               dayValue === 'B' ? WorkerStatus.BAJA_MEDICA : 
-                               dayValue === 'P' ? WorkerStatus.BAJA_PATERNIDAD : null;
-            
-            if (dayStatusType === statusType) {
-               sameStatusDays.push(d);
-            }
-         });
-         
-         // Crear rangos contiguos
-         const ranges = createContiguousRanges(sameStatusDays, year, month);
-         
-         // Eliminar todos los registros existentes de este tipo de status
-         let updatedWorker = { ...worker };
-         if (updatedWorker.statusRecords) {
-            updatedWorker.statusRecords = updatedWorker.statusRecords.filter(record => record.status !== statusType);
-         }
-         
-         // Añadir los nuevos rangos
-         ranges.forEach(range => {
-            updatedWorker = addOrUpdateStatusRecord(updatedWorker, statusType, range.start, range.end);
-         });
-         
-         const currentStatus = getCurrentWorkerStatus(updatedWorker);
-         const finalWorker = { 
-            ...updatedWorker, 
-            status: currentStatus.status, 
-            statusStartDate: currentStatus.startDate, 
-            statusEndDate: currentStatus.endDate 
-         };
-         
-         await persistWorker(finalWorker);
-         
-         if (ranges.length === 1) {
-            showNotification(`Estado "${statusType}" registrado del ${formatDateDMY(ranges[0].start)} al ${formatDateDMY(ranges[0].end)} para ${worker.name}`, 'success');
-         } else {
-            showNotification(`Estado "${statusType}" registrado en ${ranges.length} periodos para ${worker.name}`, 'success');
-         }
-      } else if (value === '') {
-         // Si se borra el código o está vacío, eliminar registros para ese día
-         const updatedWorker = removeStatusRecordForDate(worker, dateStr);
-         const currentStatus = getCurrentWorkerStatus(updatedWorker);
-         const finalWorker = { 
-            ...updatedWorker, 
-            status: currentStatus.status, 
-            statusStartDate: currentStatus.startDate, 
-            statusEndDate: currentStatus.endDate 
-         };
-         
-         await persistWorker(finalWorker);
-         
-         // Eliminar de Supabase también
-         await deleteWorkerControl(`${workerId}-${dateStr}`);
-         
-         showNotification(`Estado eliminado para ${worker.name} el ${formatDateDMY(dateStr)}`, 'info');
-      } else {
-         // F, D, R - guardar en Supabase
-         await saveWorkerControl({
-            id: `${workerId}-${dateStr}`,
-            worker_id: workerId,
-            date: dateStr,
-            value: value,
-            month: selectedMonth
-         });
-         
-         const label = value === 'F' ? 'Falta' : 
-                      value === 'D' ? 'Permiso Retribuido' : 
-                      value === 'R' ? 'Reposo Domiciliario' : value;
-         showNotification(`${label} "${value}" registrado para ${worker.name} el día ${day}`, 'success');
-      }
-   }
-   
-   setIsSyncingFromGrid(false); // Desactivar bandera
-}, [selectedMonth, planning.workers, workerControlData, persistWorker, showNotification, saveWorkerControl, deleteWorkerControl]);
-
-// Función para crear rangos contiguos desde una lista de días
-const createContiguousRanges = (days: number[], year: number, month: number): Array<{start: string, end: string}> => {
-   if (days.length === 0) return [];
-   
-   // Ordenar días
-   days.sort((a, b) => a - b);
-   
-   const ranges: Array<{start: string, end: string}> = [];
-   let rangeStart = days[0];
-   let rangeEnd = days[0];
-   
-   for (let i = 1; i < days.length; i++) {
-      if (days[i] === rangeEnd + 1) {
-         // Día contiguo, extender rango
-         rangeEnd = days[i];
-      } else {
-         // Día no contiguo, cerrar rango actual y empezar nuevo
-         const range = {
-            start: `${year}-${String(month).padStart(2, '0')}-${String(rangeStart).padStart(2, '0')}`,
-            end: `${year}-${String(month).padStart(2, '0')}-${String(rangeEnd).padStart(2, '0')}`
-         };
-         ranges.push(range);
-         
-         rangeStart = days[i];
-         rangeEnd = days[i];
-      }
-   }
-   
-   // Añadir el último rango
-   const finalRange = {
-      start: `${year}-${String(month).padStart(2, '0')}-${String(rangeStart).padStart(2, '0')}`,
-      end: `${year}-${String(month).padStart(2, '0')}-${String(rangeEnd).padStart(2, '0')}`
-   };
-   ranges.push(finalRange);
-   
-   return ranges;
-};
-
-// Función auxiliar para eliminar registros de estado para una fecha específica
-const removeStatusRecordForDate = (worker: Worker, dateStr: string): Worker => {
-   if (!worker.statusRecords || worker.statusRecords.length === 0) {
-      return worker;
-   }
-   
-   // Filtrar registros que NO cubren la fecha especificada
-   const filteredRecords = worker.statusRecords.filter(record => {
-      const startDate = new Date(record.startDate);
-      const endDate = record.endDate ? new Date(record.endDate) : new Date('9999-12-31');
-      const targetDate = new Date(dateStr);
-      
-      // Mantener solo los registros que NO cubren la fecha objetivo
-      return !(targetDate >= startDate && targetDate <= endDate);
-   });
-   
-   return {
-      ...worker,
-      statusRecords: filteredRecords
-   };
-};
-
-// Efecto para sincronizar automáticamente al cambiar de mes o vista
-useEffect(() => {
-   if (view === 'workerControl' && selectedMonth) {
-      syncFromStatusRecords();
-   }
-// eslint-disable-next-line react-hooks/exhaustive-deps
-}, [view, selectedMonth]);
-
-// Efecto para sincronizar cuando cambian workers o workerControls (tiempo real entre usuarios)
-useEffect(() => {
-   if (view === 'workerControl' && selectedMonth && planning.workers.length > 0 && !isSyncingFromGrid) {
-      syncFromStatusRecords();
-   }
-// eslint-disable-next-line react-hooks/exhaustive-deps
-}, [planning.workers, planning.workerControls, isSyncingFromGrid]);
-
-// Función para obtener color de celda según valor
-const getCellColor = (value: string) => {
-   if (value === '') return 'bg-white border border-slate-200';
-   
-   // Si es un número (horas)
-   if (!isNaN(Number(value))) {
-      return 'bg-blue-50 text-blue-700 border border-blue-200';
-   }
-   
-   const colors: {[key: string]: string} = {
-      'B': 'bg-red-100 text-red-700',      // Baja médica
-      'P': 'bg-orange-100 text-orange-700', // Baja paternidad
-      'F': 'bg-yellow-100 text-yellow-700', // Falta asistencia (cambiado a amarillo)
-      'D': 'bg-gray-100 text-gray-700',     // Permiso retribuido (cambiado a gris)
-      'R': 'bg-sky-100 text-sky-700',      // Reposo domiciliario (cambiado a azul claro)
-      'V': 'bg-green-100 text-green-700'    // Vacaciones (cambiado a verde)
-   };
-   return colors[value] || 'bg-slate-100 text-slate-700';
-};
-
-// Función para calcular totales por operario
-const calculateWorkerTotals = (workerId: string) => {
-   const monthData = workerControlData[selectedMonth] || {};
-   const workerData = monthData[workerId] || {};
-   const days = getMonthDays(selectedMonth);
-   
-   let totalHours = 0;
-   let totalFaltas = 0;
-   let totalBajaMedica = 0;
-   let totalReposo = 0;
-   let totalVacaciones = 0;
-   
-   days.forEach(day => {
-      const value = workerData[day] || '';
-      
-      if (!isNaN(Number(value))) {
-         totalHours += Number(value);
-      } else {
-         switch(value) {
-            case 'F': totalFaltas++; break;
-            case 'B': totalBajaMedica++; break;
-            case 'R': totalReposo++; break;
-            case 'V': totalVacaciones++; break;
-         }
-      }
-   });
-   
-   return { totalHours, totalFaltas, totalBajaMedica, totalReposo, totalVacaciones };
-};
   const [showSSReport, setShowSSReport] = useState(false);
   const [showNotificationsModal, setShowNotificationsModal] = useState(false);
   const [selectedNotificationWorkerId, setSelectedNotificationWorkerId] = useState<string | null>(null);
@@ -623,8 +218,16 @@ const calculateWorkerTotals = (workerId: string) => {
     'Curso de Prevención de Riesgos Laborales', 'Curso de Primeros Auxilios',
     'Curso de Altura', 'Curso de Electricidad Básica', 'Curso de Soldadura', 'Curso de Montaje de Andamios'
   ]);
-  const [availableProviders, setAvailableProviders] = useState<string[]>([
-  ]);
+  const [availableProviders, setAvailableProviders] = useState<string[]>(() => {
+    const saved = localStorage.getItem('availableProviders');
+    return saved ? JSON.parse(saved) : [
+      'Mutua',
+      'Servicio Médico',
+      'Recursos Laborales',
+      'Prevención de Riesgos',
+      'Centro Médico'
+    ];
+  });
   const [medicalCourseName, setMedicalCourseName] = useState('');
   const [medicalProviderName, setMedicalProviderName] = useState('');
   const [showAddMedicalCourse, setShowAddMedicalCourse] = useState(false);
@@ -774,32 +377,90 @@ const calculateWorkerTotals = (workerId: string) => {
     return alerts.sort((a, b) => a.daysUntilExpiry - b.daysUntilExpiry);
   }, []);
 
+  // ── Efecto para calcular alertas automáticamente ─────────────────────────────
+  useEffect(() => {
+    const updatedAlerts = calculateMedicalAlerts(planning.medicalCourses, planning.workers);
+    setPlanning(prev => ({ ...prev, medicalAlerts: updatedAlerts }));
+  }, [planning.medicalCourses, planning.workers, calculateMedicalAlerts]);
+
   // ── CRUD: Medical courses ──────────────────────────────────────────────────
   const addMedicalCourse = useCallback(async (course: Omit<MedicalCourse, 'id' | 'createdAt' | 'updatedAt'>) => {
-    const newCourse: MedicalCourse = { ...course, id: Date.now().toString(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-    await persistMedicalCourse(newCourse);
-    const updatedAlerts = calculateMedicalAlerts([...planning.medicalCourses, newCourse], planning.workers);
-    setPlanning(prev => ({ ...prev, medicalAlerts: updatedAlerts }));
-    showNotification('Registro médico añadido', 'success');
-  }, [persistMedicalCourse, planning.medicalCourses, planning.workers, calculateMedicalAlerts, showNotification, setPlanning]);
+    // Crear un registro por cada operario seleccionado
+    const newCourses: MedicalCourse[] = course.assignedWorkerIds.map(workerId => ({
+      ...course,
+      id: `${Date.now()}-${workerId}`, // ID único por operario
+      assignedWorkerIds: [workerId], // Un solo operario por registro
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }));
 
-  const updateMedicalCourse = useCallback(async (id: string, course: Partial<MedicalCourse>) => {
-    const existing = planning.medicalCourses.find(c => c.id === id);
-    if (!existing) return;
+    // Guardar todos los registros (saveMedicalCourse ya actualiza el estado)
+    for (const newCourse of newCourses) {
+      await persistMedicalCourse(newCourse);
+    }
+    showNotification(`${newCourses.length} registro(s) médico(s) añadido(s)`, 'success');
+  }, [persistMedicalCourse, showNotification]);
+
+  const updateMedicalCourseHandler = useCallback(async (course: MedicalCourse) => {
+    console.log('🔍 updateMedicalCourseHandler llamado con:', course);
+    console.log('🔍 course.id:', course.id);
+    console.log('🔍 course.assignedWorkerIds:', course.assignedWorkerIds);
+    
+    if (!course.id) {
+      console.error('❌ course.id es undefined - cancelando operación');
+      showNotification('Error: ID del registro no válido', 'error');
+      return;
+    }
+    
+    const existing = planning.medicalCourses.find((c) => c.id === course.id);
+    console.log('🔍 existing encontrado:', existing ? { id: existing.id, provider: existing.provider } : null);
+    
+    if (!existing) {
+      console.error('❌ No se encontró el registro con ID:', course.id);
+      showNotification('Error: Registro no encontrado', 'error');
+      return;
+    }
+    
     const updated = { ...existing, ...course, updatedAt: new Date().toISOString() };
+    console.log('🔍 updated course:', { id: updated.id, provider: updated.provider });
+    
     await persistMedicalCourse(updated);
-    const updatedAlerts = calculateMedicalAlerts(planning.medicalCourses.map(c => c.id === id ? updated : c), planning.workers);
-    setPlanning(prev => ({ ...prev, medicalAlerts: updatedAlerts }));
     showNotification('Registro médico actualizado', 'success');
-  }, [persistMedicalCourse, planning.medicalCourses, planning.workers, calculateMedicalAlerts, showNotification, setPlanning]);
+  }, [persistMedicalCourse, showNotification]);
 
   const deleteMedicalCourseHandler = useCallback(async (id: string) => {
+    console.log('🔍 deleteMedicalCourseHandler llamado con ID:', id);
+    
+    // Si el ID es undefined, no hacer nada para evitar eliminar todos los registros
+    if (!id) {
+      console.error('❌ Intentando eliminar con ID undefined - operación cancelada');
+      showNotification('Error: ID del registro no válido', 'error');
+      return;
+    }
+    
+    console.log('🔍 medicalCourses ANTES de eliminar:', planning.medicalCourses.map(c => ({ id: c.id, provider: c.provider })));
+    
+    const existing = planning.medicalCourses.find((c) => c.id === id);
+    console.log('🔍 existing a eliminar:', existing ? { id: existing.id, provider: existing.provider } : null);
+    
+    if (!existing) {
+      console.error('❌ No se encontró el registro con ID:', id);
+      showNotification('Error: Registro no encontrado', 'error');
+      return;
+    }
+    
+    // Eliminar del estado local primero
+    const remaining = planning.medicalCourses.filter((c) => c.id !== id);
+    console.log('🔍 remaining DESPUÉS de filter:', remaining.map(c => ({ id: c.id, provider: c.provider })));
+    
+    setPlanning(prev => ({ ...prev, medicalCourses: remaining }));
+    console.log('🔍 medicalCourses DESPUÉS de setPlanning:', remaining.map(c => ({ id: c.id, workerIds: c.assignedWorkerIds })));
+    
+    // Eliminar de la base de datos
     await persistDeleteMedicalCourse(id);
-    const remaining = planning.medicalCourses.filter(c => c.id !== id);
-    const updatedAlerts = calculateMedicalAlerts(remaining, planning.workers);
-    setPlanning(prev => ({ ...prev, medicalAlerts: updatedAlerts }));
+    
     showNotification('Registro médico eliminado', 'success');
-  }, [persistDeleteMedicalCourse, planning.medicalCourses, planning.workers, calculateMedicalAlerts, showNotification, setPlanning]);
+  }, [planning.medicalCourses, persistDeleteMedicalCourse, showNotification]);
 
   const addNewMedicalCourse = useCallback(() => {
     if (medicalCourseName.trim() && !availableCourses.includes(medicalCourseName.trim())) {
@@ -810,8 +471,11 @@ const calculateWorkerTotals = (workerId: string) => {
 
   const addNewMedicalProvider = useCallback(() => {
     if (medicalProviderName.trim() && !availableProviders.includes(medicalProviderName.trim())) {
-      setAvailableProviders(prev => [...prev, medicalProviderName.trim()]);
-      setMedicalProviderName(''); setShowAddMedicalProvider(false);
+      const newProviders = [...availableProviders, medicalProviderName.trim()];
+      setAvailableProviders(newProviders);
+      localStorage.setItem('availableProviders', JSON.stringify(newProviders));
+      setMedicalProviderName(''); 
+      setShowAddMedicalProvider(false);
     }
   }, [medicalProviderName, availableProviders]);
 
@@ -1032,7 +696,7 @@ const calculateWorkerTotals = (workerId: string) => {
 
   const handleOpenNewJob = (clientId: string = '', date?: string) => {
     const firstClient = clientId ? planning.clients.find(c => c.id === clientId) : planning.clients[0];
-    const newJob: Job = { id: `j-${Date.now()}`, date: date || planning.currentDate, clientId: firstClient?.id || '', centerId: firstClient?.centers?.[0]?.id || '', type: JobType.DESCARGA, startTime: '09:00', endTime: '13:00', requiredWorkers: 3, assignedWorkerIds: [], ref: '', deliveryNote: '', locationDetails: '', isCancelled: false };
+    const newJob: Job = { id: `j-${Date.now()}`, date: date || planning.currentDate, clientId: firstClient?.id || '', centerId: firstClient?.centers?.[0]?.id || '', type: JobType.DESCARGA, startTime: '09:00', endTime: '13:00', requiredWorkers: 3, assignedWorkerIds: [], ref: '', deliveryNote: '', notes: '', isCancelled: false };
     setEditingJob(newJob);
   };
 
@@ -1050,6 +714,14 @@ const calculateWorkerTotals = (workerId: string) => {
   const handleDuplicateJob = useCallback(async () => {
     if (!duplicatingJob || !duplicationDate) return;
     
+    console.log('🔍 Iniciando duplicación de tarea:', {
+      originalJob: duplicatingJob.id,
+      originalDate: duplicatingJob.date,
+      newDate: duplicationDate,
+      keepWorkers: keepWorkersOnDuplicate,
+      keepDeliveryNote: keepDeliveryNoteOnDuplicate
+    });
+    
     // Extraer todas las propiedades excepto las que vamos a controlar explícitamente
     const { id, date, assignedWorkerIds, ref, deliveryNote, ...jobData } = duplicatingJob;
     
@@ -1062,10 +734,21 @@ const calculateWorkerTotals = (workerId: string) => {
       deliveryNote: keepDeliveryNoteOnDuplicate ? (duplicatingJob.deliveryNote || '') : '' // Control explícito del deliveryNote
     };
     
-    await persistJob(newJob);
-    setDuplicatingJob(null);
-    setKeepDeliveryNoteOnDuplicate(false); // Resetear estado
-    showNotification("Tarea duplicada", "success");
+    console.log('🔍 Nueva tarea creada:', newJob);
+    
+    try {
+      await persistJob(newJob);
+      console.log('🔍 Tarea duplicada y guardada correctamente');
+      
+      setDuplicatingJob(null);
+      setKeepDeliveryNoteOnDuplicate(false); // Resetear estado
+      showNotification("Tarea duplicada", "success");
+      
+      console.log('🔍 Estados reseteados después de duplicar');
+    } catch (error) {
+      console.error('❌ Error al duplicar tarea:', error);
+      showNotification("Error al duplicar tarea", "error");
+    }
   }, [duplicatingJob, duplicationDate, keepWorkersOnDuplicate, keepDeliveryNoteOnDuplicate, persistJob, showNotification]);
 
   const handleOpenNote = (workerId: string) => {
@@ -1785,7 +1468,8 @@ const calculateWorkerTotals = (workerId: string) => {
   }
 
   return (
-    <div className="flex h-screen bg-white overflow-hidden text-slate-900">
+    <>
+      <div className="flex h-screen bg-white overflow-hidden text-slate-900">
       <input type="file" ref={backupInputRef} className="hidden" accept=".json,.xlsx,.xls" onChange={importData} />
       
       {notification && (
@@ -1918,7 +1602,7 @@ const calculateWorkerTotals = (workerId: string) => {
             <button onClick={() => setView('workers')} className={`p-3 rounded-xl transition-all flex justify-center ${view === 'workers' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`} title="Gestión Operarios"><Users className="w-6 h-6" /></button>
             <button onClick={() => { setView('medical'); setPlanning(prev => ({ ...prev, selectedMedicalTab: 'courses' })); }} className={`p-3 rounded-xl transition-all flex justify-center ${view === 'medical' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`} title="Salud Laboral"><HeartPulse className="w-6 h-6" /></button>
             <button onClick={() => setView('clients')} className={`p-3 rounded-xl transition-all flex justify-center ${view === 'clients' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`} title="Gestión Clientes"><Building2 className="w-6 h-6" /></button>
-            <button onClick={() => setView('workerControl')} className={`p-3 rounded-xl transition-all flex justify-center ${view === 'workerControl' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`} title="Control Operarios"><CalendarDays className="w-6 h-6" /></button>
+            <button onClick={() => setView('databases')} className={`p-3 rounded-xl transition-all flex justify-center ${view === 'databases' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`} title="Bases de Datos"><Database className="w-6 h-6" /></button>
             <button onClick={() => setView('fleet')} className={`p-3 rounded-xl transition-all flex justify-center ${view === 'fleet' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`} title="Gestión de Flota"><Car className="w-6 h-6" /></button>
             <button onClick={() => setView('stats')} className={`p-3 rounded-xl transition-all flex justify-center ${view === 'stats' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`} title="Estadísticas"><BarChart3 className="w-6 h-6" /></button>
             <button onClick={() => setShowBackupModal(true)} className={`p-3 rounded-xl transition-all flex justify-center ${view === 'backup' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`} title="Copias de Seguridad"><DownloadCloud className="w-4 h-4" /></button>
@@ -2371,75 +2055,104 @@ const calculateWorkerTotals = (workerId: string) => {
            </div>
          )}
          {view === 'medical' && (
-           <div className="flex-1 bg-slate-50 overflow-y-auto p-8 custom-scrollbar">
-             <div className="flex items-center justify-between mb-8">
-               <div>
-                 <h2 className="text-2xl font-black text-slate-900 italic uppercase">🏥 Salud Laboral</h2>
-                 <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Gestión Médica y Formación</p>
+           <div className="flex-1 bg-slate-50 flex flex-col h-full">
+             {/* Header fijo */}
+             <div className="bg-slate-50 p-8 pb-0">
+               <div className="flex items-center justify-between mb-8">
+                 <div>
+                   <h2 className="text-2xl font-black text-slate-900 italic uppercase">🏥 Salud Laboral</h2>
+                   <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Gestión Médica y Formación</p>
+                 </div>
+                 <div className="flex items-center gap-2">
+                   {planning.medicalAlerts.length > 0 && (
+                     <div className="bg-red-100 text-red-700 px-3 py-1 rounded-lg text-xs font-bold">
+                       🔴 {planning.medicalAlerts.length} alertas
+                     </div>
+                   )}
+                   <button 
+                     onClick={() => {
+                       const newCourse: MedicalCourse = {
+                         id: Date.now().toString(),
+                         name: '', // Vacío para reconocimientos, se llenará para cursos
+                         type: 'recognition',
+                         provider: 'Mutua',
+                         issueDate: new Date().toISOString().split('T')[0],
+                         expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                         status: 'active',
+                         assignedWorkerIds: [],
+                         createdAt: new Date().toISOString(),
+                         updatedAt: new Date().toISOString()
+                       };
+                       setPlanning(prev => ({ ...prev, editingMedicalCourse: newCourse }));
+                     }}
+                     className="px-3 py-1.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors flex items-center gap-2 text-sm"
+                   >
+                     <Plus className="w-4 h-4" />
+                     Nuevo Registro
+                   </button>
+                   <button 
+                     onClick={() => {
+                       console.log('🔄 Botón de recarga presionado - INICIO');
+                       console.log('🔄 reloadMedicalCoursesFromSupabase existe:', typeof reloadMedicalCoursesFromSupabase);
+                       console.log('🔄 reloadMedicalCoursesFromSupabase es función:', typeof reloadMedicalCoursesFromSupabase === 'function');
+                       
+                       if (typeof reloadMedicalCoursesFromSupabase === 'function') {
+                         console.log('🔄 Llamando a reloadMedicalCoursesFromSupabase...');
+                         reloadMedicalCoursesFromSupabase().then(() => {
+                           console.log('🔄 reloadMedicalCoursesFromSupabase completado');
+                         }).catch(error => {
+                           console.error('🔄 Error en reloadMedicalCoursesFromSupabase:', error);
+                         });
+                       } else {
+                         console.error('🔄 reloadMedicalCoursesFromSupabase no es una función');
+                       }
+                     }}
+                     className="px-3 py-1.5 bg-orange-600 text-white rounded-xl hover:bg-orange-700 transition-colors flex items-center gap-2 text-sm"
+                     title="Recargar registros médicos desde Supabase"
+                   >
+                     <RefreshCw className="w-4 h-4" />
+                     Recargar
+                   </button>
+                 </div>
                </div>
-               <div className="flex items-center gap-2">
-                 {planning.medicalAlerts.length > 0 && (
-                   <div className="bg-red-100 text-red-700 px-3 py-1 rounded-lg text-xs font-bold">
-                     🔴 {planning.medicalAlerts.length} alertas
-                   </div>
-                 )}
+
+               {/* Tabs de navegación */}
+               <div className="flex gap-4 mb-6 border-b border-slate-200">
                  <button 
-                   onClick={() => {
-                     const newCourse: MedicalCourse = {
-                       id: Date.now().toString(),
-                       name: '', // Vacío para reconocimientos, se llenará para cursos
-                       type: 'recognition',
-                       provider: 'Mutua',
-                       issueDate: new Date().toISOString().split('T')[0],
-                       expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-                       status: 'active',
-                       assignedWorkerIds: [],
-                       createdAt: new Date().toISOString(),
-                       updatedAt: new Date().toISOString()
-                     };
-                     setPlanning(prev => ({ ...prev, editingMedicalCourse: newCourse }));
-                   }}
-                   className="px-3 py-1.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors flex items-center gap-2 text-sm"
+                   onClick={() => setPlanning(prev => ({ ...prev, selectedMedicalTab: 'courses' }))}
+                   className={`pb-3 px-1 text-xs font-black uppercase tracking-wider border-b-2 transition-colors ${
+                     planning.selectedMedicalTab === 'courses' 
+                       ? 'text-blue-600 border-blue-600' 
+                       : 'text-slate-400 border-transparent hover:text-slate-600'
+                   }`}
                  >
-                   <Plus className="w-3 h-3" />
-                   NUEVO REGISTRO
+                   📚 Registros Médicos
+                 </button>
+                 <button 
+                   onClick={() => setPlanning(prev => ({ ...prev, selectedMedicalTab: 'alerts' }))}
+                   className={`pb-3 px-1 text-xs font-black uppercase tracking-wider border-b-2 transition-colors ${
+                     planning.selectedMedicalTab === 'alerts' 
+                       ? 'text-blue-600 border-blue-600' 
+                       : 'text-slate-400 border-transparent hover:text-slate-600'
+                   }`}
+                 >
+                   ⚠️ Alertas ({planning.medicalAlerts.length})
+                 </button>
+                 <button 
+                   onClick={() => setPlanning(prev => ({ ...prev, selectedMedicalTab: 'workers' }))}
+                   className={`pb-3 px-1 text-xs font-black uppercase tracking-wider border-b-2 transition-colors ${
+                     planning.selectedMedicalTab === 'workers' 
+                       ? 'text-blue-600 border-blue-600' 
+                       : 'text-slate-400 border-transparent hover:text-slate-600'
+                   } text-xs`}
+                 >
+                   👥 Operarios
                  </button>
                </div>
              </div>
 
-             {/* Tabs de navegación */}
-             <div className="flex gap-4 mb-6 border-b border-slate-200">
-               <button 
-                 onClick={() => setPlanning(prev => ({ ...prev, selectedMedicalTab: 'courses' }))}
-                 className={`pb-3 px-1 text-xs font-black uppercase tracking-wider border-b-2 transition-colors ${
-                   planning.selectedMedicalTab === 'courses' 
-                     ? 'text-blue-600 border-blue-600' 
-                     : 'text-slate-400 border-transparent hover:text-slate-600'
-                 }`}
-               >
-                 📚 Registros Médicos
-               </button>
-               <button 
-                 onClick={() => setPlanning(prev => ({ ...prev, selectedMedicalTab: 'alerts' }))}
-                 className={`pb-3 px-1 text-xs font-black uppercase tracking-wider border-b-2 transition-colors ${
-                   planning.selectedMedicalTab === 'alerts' 
-                     ? 'text-blue-600 border-blue-600' 
-                     : 'text-slate-400 border-transparent hover:text-slate-600'
-                 }`}
-               >
-                 ⚠️ Alertas ({planning.medicalAlerts.length})
-               </button>
-               <button 
-                 onClick={() => setPlanning(prev => ({ ...prev, selectedMedicalTab: 'workers' }))}
-                 className={`pb-3 px-1 text-xs font-black uppercase tracking-wider border-b-2 transition-colors ${
-                   planning.selectedMedicalTab === 'workers' 
-                     ? 'text-blue-600 border-blue-600' 
-                     : 'text-slate-400 border-transparent hover:text-slate-600'
-                 } text-xs`}
-               >
-                 👥 Operarios
-               </button>
-             </div>
+             {/* Contenido con scroll */}
+             <div className="flex-1 overflow-y-auto p-8 pt-0 custom-scrollbar">
 
              {/* Registros Médicos */}
             {planning.selectedMedicalTab === 'courses' && (
@@ -2480,13 +2193,19 @@ const calculateWorkerTotals = (workerId: string) => {
                     );
                     
                     return filteredCourses.map(course => {
-                      const assignedWorkers = course.assignedWorkerIds.slice(0, 2).map(workerId => {
-                        const worker = planning.workers.find(w => w.id === workerId);
-                        return worker ? worker.name : '';
-                      }).filter(name => name);
+                      const assignedWorker = course.assignedWorkerIds[0]; // Solo hay un operario por registro
+                      const worker = planning.workers.find(w => w.id === assignedWorker);
+                      const workerName = worker ? worker.name : '';
+                      
+                      console.log('🔍 Renderizando course:', { 
+                        id: course.id, 
+                        provider: course.provider, 
+                        hasId: !!course.id,
+                        idType: typeof course.id 
+                      });
                       
                       return (
-                        <div key={course.id} className="grid grid-cols-6 gap-2 p-3 border-b border-slate-100 hover:bg-slate-50 items-center">
+                        <div key={course.id || `course-${Math.random()}`} className="grid grid-cols-6 gap-2 p-3 border-b border-slate-100 hover:bg-slate-50 items-center">
                           <div className="text-sm font-medium text-slate-900 truncate">
                             {course.type === 'recognition' ? '🏥 Reconocimiento médico' : (course.name || '📚 Curso')}
                           </div>
@@ -2494,17 +2213,7 @@ const calculateWorkerTotals = (workerId: string) => {
                             {course.provider}
                           </div>
                           <div className="text-sm text-slate-600">
-                            {assignedWorkers.length > 0 ? (
-                              <div className="flex gap-1 flex-wrap">
-                                {assignedWorkers.map((name, index) => (
-                                  <span key={index}>
-                                    {name}
-                                  </span>
-                                ))}
-                              </div>
-                            ) : (
-                              <span className="text-slate-400">-</span>
-                            )}
+                            {workerName || '-'}
                           </div>
                           <div className="text-sm text-slate-600">
                             {formatDateEuropean(course.issueDate) || '-'}
@@ -2514,7 +2223,10 @@ const calculateWorkerTotals = (workerId: string) => {
                           </div>
                           <div className="flex gap-1">
                             <button 
-                              onClick={() => setPlanning(prev => ({ ...prev, editingMedicalCourse: course }))}
+                              onClick={() => {
+                                console.log('🔍 Botón editar presionado, course.id:', course.id);
+                                setPlanning(prev => ({ ...prev, editingMedicalCourse: course }));
+                              }}
                               className="p-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
                               title="Editar"
                             >
@@ -2522,8 +2234,7 @@ const calculateWorkerTotals = (workerId: string) => {
                             </button>
                             <button 
                               onClick={() => {
-                                console.log('🔍 ID del registro a eliminar:', course.id);
-                                console.log('🔍 Registro completo:', course);
+                                console.log('🔍 Botón eliminar presionado, course.id:', course.id);
                                 if (confirm('¿Eliminar este registro médico?')) {
                                   deleteMedicalCourseHandler(course.id);
                                 }
@@ -2622,7 +2333,7 @@ const calculateWorkerTotals = (workerId: string) => {
              )}
 
              {/* Operarios */}
-             {planning.selectedMedicalTab === 'workers' && (
+            {planning.selectedMedicalTab === 'workers' && (
                <div className="space-y-4">
                  {planning.workers.filter(worker => !worker.isArchived).sort((a, b) => {
                     // Extraer números del código (ej: X001 -> 001, 002, etc.)
@@ -2848,288 +2559,10 @@ const calculateWorkerTotals = (workerId: string) => {
                )}
             </div>
          )}
-         {view === 'workerControl' && (
-            <div className="flex-1 bg-slate-50 overflow-y-auto p-8 custom-scrollbar">
-               <div className="flex items-center justify-between mb-6">
-                  <div>
-                     <h2 className="text-2xl font-black text-slate-900 italic uppercase">📅 Control de Operarios</h2>
-                     <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Control Diario de Asistencia y Horas</p>
-                  </div>
-                  <div className="flex items-center gap-4">
-                     <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-xl border border-slate-200">
-                        <CalendarDays className="w-4 h-4 text-slate-600" />
-                        <select 
-                           className="font-black text-sm text-slate-700 outline-none bg-transparent"
-                           value={selectedMonth}
-                           onChange={(e) => handleMonthChange(e.target.value)}
-                        >
-                           <option value="2026-01">Enero 2026</option>
-                           <option value="2026-02">Febrero 2026</option>
-                           <option value="2026-03">Marzo 2026</option>
-                           <option value="2026-04">Abril 2026</option>
-                           <option value="2026-05">Mayo 2026</option>
-                           <option value="2026-06">Junio 2026</option>
-                           <option value="2026-07">Julio 2026</option>
-                           <option value="2026-08">Agosto 2026</option>
-                           <option value="2026-09">Septiembre 2026</option>
-                           <option value="2026-10">Octubre 2026</option>
-                           <option value="2026-11">Noviembre 2026</option>
-                           <option value="2026-12">Diciembre 2026</option>
-                        </select>
-                     </div>
-                     <button className="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors flex items-center gap-2 text-sm font-black">
-                        <Download className="w-4 h-4" />
-                        Exportar
-                     </button>
-                     <button 
-                        onClick={() => syncFromStatusRecords(true)}
-                        className="px-4 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors flex items-center gap-2 text-sm font-black"
-                     >
-                        <RotateCcw className="w-4 h-4" />
-                        Sincronizar Estados
-                     </button>
-                  </div>
-               </div>
-
-               {/* Leyenda de códigos - movida arriba */}
-               <div className="mb-4 bg-white rounded-xl border border-slate-200 p-3">
-                  <h4 className="font-black text-xs text-slate-900 mb-2">Leyenda de Códigos</h4>
-                  <div className="flex flex-wrap gap-2">
-                     <div className="flex items-center gap-1">
-                        <div className="w-4 h-4 bg-blue-50 text-blue-700 rounded flex items-center justify-center text-[8px] font-bold">#</div>
-                        <span className="text-[10px] text-slate-600">Horas</span>
-                     </div>
-                     <div className="flex items-center gap-1">
-                        <div className="w-4 h-4 bg-yellow-100 text-yellow-700 rounded flex items-center justify-center text-[8px] font-bold">F</div>
-                        <span className="text-[10px] text-slate-600">Falta</span>
-                     </div>
-                     <div className="flex items-center gap-1">
-                        <div className="w-4 h-4 bg-red-100 text-red-700 rounded flex items-center justify-center text-[8px] font-bold">B</div>
-                        <span className="text-[10px] text-slate-600">Baja médica</span>
-                     </div>
-                     <div className="flex items-center gap-1">
-                        <div className="w-4 h-4 bg-orange-100 text-orange-700 rounded flex items-center justify-center text-[8px] font-bold">P</div>
-                        <span className="text-[10px] text-slate-600">Baja paternidad</span>
-                     </div>
-                     <div className="flex items-center gap-1">
-                        <div className="w-4 h-4 bg-gray-100 text-gray-700 rounded flex items-center justify-center text-[8px] font-bold">D</div>
-                        <span className="text-[10px] text-slate-600">Permiso retribuido</span>
-                     </div>
-                     <div className="flex items-center gap-1">
-                        <div className="w-4 h-4 bg-sky-100 text-sky-700 rounded flex items-center justify-center text-[8px] font-bold">R</div>
-                        <span className="text-[10px] text-slate-600">Reposo domiciliario</span>
-                     </div>
-                     <div className="flex items-center gap-1">
-                        <div className="w-4 h-4 bg-green-100 text-green-700 rounded flex items-center justify-center text-[8px] font-bold">V</div>
-                        <span className="text-[10px] text-slate-600">Vacaciones</span>
-                     </div>
-                  </div>
-               </div>
-
-               {/* Grid de Control de Operarios - 30% más pequeño */}
-               <div className="bg-white rounded-xl border border-slate-200 overflow-x-auto">
-                  <table className="w-full min-w-[800px] text-xs">
-                     {/* Header con días del mes */}
-                     <thead className="bg-slate-50 border-b border-slate-200">
-                        <tr>
-                           <th className="p-1 text-xs font-black text-slate-700 uppercase text-center border-r border-slate-200 min-w-[80px]">
-                              <div className="flex items-center gap-1">
-                                 <span>Operario</span>
-                                 <input 
-                                    type="text"
-                                    placeholder=""
-                                    value={workerFilter}
-                                    onChange={(e) => setWorkerFilter(e.target.value)}
-                                    className="w-16 px-1 py-0.5 text-[8px] border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                 />
-                              </div>
-                           </th>
-                           {/* Días del mes - dinámico según el mes seleccionado */}
-                           {(() => {
-                              const [year, month] = selectedMonth.split('-').map(Number);
-                              const days = getMonthDays(selectedMonth);
-                              return days.map(day => {
-                                 const dayOfWeek = getDayOfWeek(year, month, day);
-                                 return (
-                                    <th key={day} className="p-1 text-center border-r border-slate-200 min-w-[25px]">
-                                       <div className="text-xs font-black text-slate-700">
-                                          {day}
-                                       </div>
-                                       <div className="text-[7px] text-slate-500">
-                                          {['D', 'L', 'M', 'X', 'J', 'V', 'S'][dayOfWeek]}
-                                       </div>
-                                    </th>
-                                 );
-                              });
-                           })()}
-                           {/* Columnas de totales */}
-                           <th className="p-1 text-xs font-black text-slate-700 uppercase text-center border-l border-slate-200 min-w-[40px]">Faltas</th>
-                           <th className="p-1 text-xs font-black text-slate-700 uppercase text-center border-r border-slate-200 min-w-[40px]">Horas</th>
-                           <th className="p-1 text-xs font-black text-slate-700 uppercase text-center border-r border-slate-200 min-w-[40px]">Baja</th>
-                           <th className="p-1 text-xs font-black text-slate-700 uppercase text-center border-r border-slate-200 min-w-[40px]">Reposo</th>
-                           <th className="p-1 text-xs font-black text-slate-700 uppercase text-center border-r border-slate-200 min-w-[40px]">Vacaciones</th>
-                        </tr>
-                     </thead>
-                     
-                     {/* Filas de operarios */}
-                     <tbody>
-                        {(() => {
-                           const activeWorkers = planning.workers
-                              .filter(w => !w.isArchived) // Usar el mismo filtro que Gestión de Operarios
-                              .sort((a, b) => {
-                                 const numA = parseInt(a.code.replace(/\D/g, ''), 10);
-                                 const numB = parseInt(b.code.replace(/\D/g, ''), 10);
-                                 return numA - numB;
-                              })
-                              .filter(worker => {
-                                 const matchesSearch = !workerFilter || 
-                                    worker.name.toLowerCase().includes(workerFilter.toLowerCase()) || 
-                                    worker.code.toLowerCase().includes(workerFilter.toLowerCase());
-                                 if (!matchesSearch && workerFilter) {
-                                    console.log(`🔍 Worker filtrado por búsqueda: ${worker.name} (${worker.code}) - Filtro: ${workerFilter}`);
-                                 }
-                                 return matchesSearch;
-                              });
-                           
-                           return activeWorkers.map(worker => {
-                              const totals = calculateWorkerTotals(worker.id);
-                              return (
-                                 <tr key={worker.id} className="hover:bg-slate-50 transition-colors border-b border-slate-100">
-                                    {/* Nombre del operario */}
-                                    <td className="p-1 border-r border-slate-200 bg-white">
-                                       <div className="flex items-center gap-2">
-                                          <div className="font-black text-xs text-slate-900 min-w-[35px] text-right">
-                                             {worker.code}
-                                          </div>
-                                          <div className="font-black text-xs text-slate-900 flex-1">
-                                             {worker.name}
-                                          </div>
-                                       </div>
-                                    </td>
-                                    
-                                    {/* Celdas de días - dinámicas según el mes seleccionado */}
-                                    {(() => {
-                                       const days = getMonthDays(selectedMonth);
-                                       return days.map(day => {
-                                          const cellValue = getCellValue(worker.id, day);
-                                          return (
-                                             <td 
-                                                key={day} 
-                                                className="p-1 text-center cursor-pointer hover:bg-blue-50 transition-colors border-r border-slate-200 bg-white"
-                                                onClick={() => handleCellClick(worker.id, day)}
-                                             >
-                                                <div className={`w-5 h-5 mx-auto flex items-center justify-center text-[10px] font-black rounded ${getCellColor(cellValue)} hover:opacity-80`}>
-                                                   {cellValue}
-                                                </div>
-                                             </td>
-                                          );
-                                       });
-                                    })()}
-                                    
-                                    {/* Columnas de totales */}
-                                    <td className="p-1 text-center border-l border-slate-200 bg-white">
-                                       <div className="text-xs font-black text-yellow-600">
-                                          {totals.totalFaltas}
-                                       </div>
-                                    </td>
-                                    <td className="p-1 text-center border-r border-slate-200 bg-white">
-                                       <div className="text-xs font-black text-blue-600">
-                                          {totals.totalHours}
-                                       </div>
-                                    </td>
-                                    <td className="p-1 text-center border-r border-slate-200 bg-white">
-                                       <div className="text-xs font-black text-red-600">
-                                          {totals.totalBajaMedica}
-                                       </div>
-                                    </td>
-                                    <td className="p-1 text-center border-r border-slate-200 bg-white">
-                                       <div className="text-xs font-black text-sky-600">
-                                          {totals.totalReposo}
-                                       </div>
-                                    </td>
-                                    <td className="p-1 text-center border-r border-slate-200 bg-white">
-                                       <div className="text-xs font-black text-green-600">
-                                          {totals.totalVacaciones}
-                                       </div>
-                                    </td>
-                                 </tr>
-                              );
-                           });
-                        })()}
-                     </tbody>
-                  </table>
-               </div>
-            </div>
-         )}
-         
-         {/* Modal de selección de código */}
-         {selectedCell && (
-            <div className="fixed inset-0 z-[300] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4" onClick={() => setSelectedCell(null)}>
-               <div className="bg-white w-full max-w-sm rounded-[32px] p-6 shadow-2xl animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
-                  <div className="flex justify-between items-center mb-4">
-                     <h3 className="text-lg font-black text-slate-900 italic uppercase">Seleccionar Código</h3>
-                     <button onClick={() => setSelectedCell(null)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
-                        <X className="w-5 h-5 text-slate-400" />
-                     </button>
-                  </div>
-                  
-                  <div className="mb-4">
-                     <p className="text-sm text-slate-600">
-                        Operario: <span className="font-black text-slate-900">
-                           {planning.workers.find(w => w.id === selectedCell.workerId)?.name}
-                        </span>
-                     </p>
-                     <p className="text-sm text-slate-600">
-                        Día: <span className="font-black text-slate-900">{selectedCell.day}</span>
-                     </p>
-                  </div>
-                  
-                  {/* Input para horas */}
-                  <div className="mb-4">
-                     <label className="block text-xs font-black text-slate-700 mb-2">Horas (número decimal)</label>
-                     <input 
-                        type="number" 
-                        step="0.5"
-                        placeholder="Ej: 8, 4.5, -2"
-                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        onKeyDown={(e) => {
-                           if (e.key === 'Enter') {
-                              const value = (e.target as HTMLInputElement).value;
-                              if (value && !isNaN(Number(value))) {
-                                 updateCellValue(selectedCell.workerId, selectedCell.day, value);
-                              }
-                           }
-                        }}
-                     />
-                  </div>
-                  
-                  {/* Códigos de estado */}
-                  <div className="grid grid-cols-3 gap-2">
-                     {[
-                        { code: 'B', label: 'Baja Médica', color: 'bg-red-100 text-red-700' },
-                        { code: 'P', label: 'Baja Paternidad', color: 'bg-orange-100 text-orange-700' },
-                        { code: 'F', label: 'Falta', color: 'bg-yellow-100 text-yellow-700' },
-                        { code: 'D', label: 'Permiso Retribuido', color: 'bg-gray-100 text-gray-700' },
-                        { code: 'R', label: 'Reposo Domiciliario', color: 'bg-sky-100 text-sky-700' },
-                        { code: 'V', label: 'Vacaciones', color: 'bg-green-100 text-green-700' },
-                        { code: '', label: 'Limpiar', color: 'bg-white border border-slate-300 text-slate-600' }
-                     ].map(({ code, label, color }) => (
-                        <button
-                           key={code || 'clear'}
-                           onClick={() => updateCellValue(selectedCell.workerId, selectedCell.day, code)}
-                           className={`p-3 rounded-xl font-black text-xs transition-all hover:scale-105 ${color} hover:opacity-80`}
-                        >
-                           {code || '✕'}
-                           <div className="text-[8px] mt-1">{label}</div>
-                        </button>
-                     ))}
-                  </div>
-               </div>
-            </div>
-         )}
          {view === 'stats' && <StatisticsPanel planning={cleanedPlanning} />}
       </div>
 
+      {/* MODAL DE COPIAS DE SEGURIDAD */}
       {showBackupModal && (
          <div className="fixed inset-0 z-[300] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowBackupModal(false)}>
             <div className="bg-white w-full max-w-sm rounded-[32px] p-8 shadow-2xl animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
@@ -3441,6 +2874,17 @@ const calculateWorkerTotals = (workerId: string) => {
                        )}
                     </div>
                     
+                    <div className="relative">
+                       <Edit2 className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
+                       <input 
+                          type="text"
+                          placeholder="Nombre personalizado de la tarea (Opcional)" 
+                          className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2.5 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-blue-100 outline-none"
+                          value={editingJob.customName || ''}
+                          onChange={e => setEditingJob({...editingJob, customName: e.target.value})}
+                       />
+                    </div>
+                    
                     <div className="grid grid-cols-2 gap-4">
                        <div className="relative">
                           <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
@@ -3463,23 +2907,13 @@ const calculateWorkerTotals = (workerId: string) => {
                     </div>
                     
                     <div className="relative">
-                       <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
-                       <input 
-                          placeholder="Ubicación exacta (Muelle, Puerta, Nave...)" 
-                          className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2.5 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-blue-100 outline-none"
-                          value={editingJob.locationDetails || ''}
-                          onChange={e => setEditingJob({...editingJob, locationDetails: e.target.value})}
-                       />
-                    </div>
-
-                    <div className="relative">
-                       <Edit2 className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
-                       <input 
-                          type="text"
-                          placeholder="Nombre personalizado de la tarea (Opcional)" 
-                          className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2.5 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-blue-100 outline-none"
-                          value={editingJob.customName || ''}
-                          onChange={e => setEditingJob({...editingJob, customName: e.target.value})}
+                       <StickyNote className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
+                       <textarea 
+                          placeholder="Notas de la tarea..." 
+                          className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2.5 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-blue-100 outline-none resize-none"
+                          rows={3}
+                          value={editingJob.notes || ''}
+                          onChange={e => setEditingJob({...editingJob, notes: e.target.value})}
                        />
                     </div>
                  </div>
@@ -4396,7 +3830,9 @@ const calculateWorkerTotals = (workerId: string) => {
               </div>
 
               {/* AREA PREVISUALIZACIÓN (DERECHA) */}
-              <div className="flex-1 flex flex-col bg-slate-50 relative">
+         return (
+    <>
+      <div className="h-screen flex flex-col bg-slate-50 relative">
                  <div className="absolute top-4 right-4 z-20">
                     <button onClick={() => setShowNotificationsModal(false)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400 transition-colors"><X className="w-6 h-6" /></button>
                  </div>
@@ -5021,7 +4457,9 @@ const calculateWorkerTotals = (workerId: string) => {
                       onClick={() => {
                         if (confirm(`¿Eliminar el proveedor "${planning.editingMedicalCourse.provider}"?`)) {
                           // Eliminar el proveedor de la lista de disponibles
-                          setAvailableProviders(prev => prev.filter(p => p !== planning.editingMedicalCourse.provider));
+                          const newProviders = availableProviders.filter(p => p !== planning.editingMedicalCourse.provider);
+                          setAvailableProviders(newProviders);
+                          localStorage.setItem('availableProviders', JSON.stringify(newProviders));
                           // Limpiar el campo del formulario
                           setPlanning(prev => ({ 
                             ...prev, 
@@ -5090,15 +4528,48 @@ const calculateWorkerTotals = (workerId: string) => {
                 <input
                   type="date"
                   value={planning.editingMedicalCourse.issueDate || ''}
-                  onChange={(e) => setPlanning(prev => ({ 
-                    ...prev, 
-                    editingMedicalCourse: prev.editingMedicalCourse ? { ...prev.editingMedicalCourse, issueDate: e.target.value } : null 
-                  }))}
+                  onChange={(e) => {
+                    console.log('🔍 Estado actual editingMedicalCourse:', planning.editingMedicalCourse);
+                    const issueDate = e.target.value;
+                    const currentExpiryDate = planning.editingMedicalCourse?.expiryDate || '';
+                    
+                    console.log('🔍 Auto-cálculo fecha caducidad:', {
+                      issueDate,
+                      currentExpiryDate,
+                      hasExpiryDate: !!currentExpiryDate,
+                      shouldCalculate: !currentExpiryDate && issueDate
+                    });
+                    
+                    // Auto-calcular fecha de caducidad (1 año después) siempre que haya fecha de realización
+                    let expiryDate = currentExpiryDate;
+                    if (issueDate) {
+                      const issue = new Date(issueDate);
+                      issue.setFullYear(issue.getFullYear() + 1);
+                      expiryDate = issue.toISOString().split('T')[0];
+                      console.log('🔍 Fecha calculada:', expiryDate);
+                    }
+                    
+                    console.log('🔍 Actualizando estado:', { issueDate, expiryDate });
+                    
+                    setPlanning(prev => ({ 
+                      ...prev, 
+                      editingMedicalCourse: prev.editingMedicalCourse ? { 
+                        ...prev.editingMedicalCourse, 
+                        issueDate,
+                        expiryDate
+                      } : null 
+                    }));
+                  }}
                   className="w-full p-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div>
-                <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-2">Fecha de Caducidad</label>
+                <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-2">
+                  Fecha de Caducidad
+                  {planning.editingMedicalCourse.issueDate && (
+                    <span className="ml-2 text-xs text-blue-600 font-normal">(auto: +1 año)</span>
+                  )}
+                </label>
                 <input
                   type="date"
                   value={planning.editingMedicalCourse.expiryDate || ''}
@@ -5171,15 +4642,20 @@ const calculateWorkerTotals = (workerId: string) => {
               onClick={() => {
                 if (!planning.editingMedicalCourse) return;
                 
-                // Verificar si es un registro nuevo (no existe en la lista)
+                // Verificar si es un registro nuevo (No existe en la lista)
+                console.log('🔍 editingMedicalCourse completo:', planning.editingMedicalCourse);
+                console.log('🔍 editingMedicalCourse.id:', planning.editingMedicalCourse?.id);
+                console.log('🔍 medicalCourses existentes:', planning.medicalCourses.map(c => c.id));
+                
                 const isNewRecord = !planning.medicalCourses.some(c => c.id === planning.editingMedicalCourse!.id);
+                console.log('🔍 ¿Es nuevo registro?', isNewRecord);
                 
                 if (isNewRecord) {
                   // Es un nuevo registro
                   addMedicalCourse(planning.editingMedicalCourse);
                 } else {
                   // Es un registro existente
-                  updateMedicalCourse(planning.editingMedicalCourse.id, planning.editingMedicalCourse);
+                  updateMedicalCourseHandler(planning.editingMedicalCourse);
                 }
                 setPlanning(prev => ({ ...prev, editingMedicalCourse: null }));
               }}
@@ -5224,13 +4700,14 @@ const calculateWorkerTotals = (workerId: string) => {
         </div>
       </div>
     )}
+      </div>
 
     {/* INDICADOR DE VERSIÓN */}
     <div className="fixed bottom-2 right-2 text-[8px] text-slate-400 font-mono z-[999]">
       v2.0.0
     </div>
-  </div>
-);
+    </>
+  );
 };
 
 export default App;

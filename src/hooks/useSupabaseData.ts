@@ -14,7 +14,7 @@ import { supabase } from '../../supabaseClient';
 import {
   PlanningState, Worker, Client, Job, StandardTask,
   Vehicle, VehicleAssignment, FuelRecord, DailyNote,
-  MedicalCourse, Holiday, Course, ReinforcementGroup
+  MedicalCourse, Holiday, Course, ReinforcementGroup, WorkerControl
 } from '../lib/types';
 
 // ─── Estado inicial vacío ──────────────────────────────────────────────────
@@ -35,6 +35,7 @@ const EMPTY_STATE: PlanningState = {
   fuelRecords: [],
   vehicles: [],
   vehicleAssignments: [],
+  workerControls: [],
 };
 
 // ─── Helper: extraer array de registros Supabase ───────────────────────────
@@ -103,6 +104,10 @@ interface UseSupabaseDataReturn {
   // App settings (notifications, etc.)
   saveAppSettings: (key: string, value: any) => Promise<void>;
 
+  // Worker Control
+  saveWorkerControl: (control: WorkerControl) => Promise<void>;
+  deleteWorkerControl: (id: string) => Promise<void>;
+
   showNotification: (message: string, type: 'error' | 'success' | 'warning' | 'info') => void;
   notification: { message: string; type: 'error' | 'success' | 'warning' | 'info' } | null;
 }
@@ -129,7 +134,8 @@ export function useSupabaseData(): UseSupabaseDataReturn {
         const [
           workersRes, clientsRes, jobsRes, tasksRes,
           vehiclesRes, assignmentsRes, fuelRes, notesRes,
-          medicalRes, holidaysRes, coursesRes, settingsRes
+          medicalRes, holidaysRes, coursesRes, settingsRes,
+          workerControlsRes
         ] = await Promise.all([
           supabase.from('workers').select('data'),
           supabase.from('clients').select('data'),
@@ -143,6 +149,7 @@ export function useSupabaseData(): UseSupabaseDataReturn {
           supabase.from('custom_holidays').select('data'),
           supabase.from('courses').select('data'),
           supabase.from('app_settings').select('key, value'),
+          supabase.from('worker_control_data').select('data')
         ]);
 
         // Comprobar errores críticos
@@ -169,6 +176,7 @@ export function useSupabaseData(): UseSupabaseDataReturn {
           medicalCourses:     extractMedicalCourses(medicalRes.data),
           customHolidays:     extractRows<Holiday>(holidaysRes.data),
           courses:            extractRows<Course>(coursesRes.data),
+          workerControls:     extractRows<WorkerControl>(workerControlsRes.data),
           notifications,
           currentDate: new Date().toISOString().split('T')[0],
         });
@@ -335,6 +343,12 @@ export function useSupabaseData(): UseSupabaseDataReturn {
         setPlanning((prev) => ({
           ...prev,
           customHolidays: applyHolidayChange(prev.customHolidays, payload),
+        }));
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'worker_control_data' }, (payload) => {
+        setPlanning((prev) => ({
+          ...prev,
+          workerControls: applyChange<WorkerControl>(prev.workerControls, payload),
         }));
       })
       .subscribe((status) => {
@@ -582,6 +596,25 @@ export function useSupabaseData(): UseSupabaseDataReturn {
     }
   }, [showNotification]);
 
+  // ─── Worker Control ───────────────────────────────────────────────────
+  const saveWorkerControl = useCallback(async (control: WorkerControl) => {
+    setPlanning((prev) => ({
+      ...prev,
+      workerControls: prev.workerControls.some((c) => c.id === control.id)
+        ? prev.workerControls.map((c) => (c.id === control.id ? control : c))
+        : [...prev.workerControls, control],
+    }));
+    await upsert('worker_control_data', control.id, control);
+  }, [upsert]);
+
+  const deleteWorkerControl = useCallback(async (id: string) => {
+    setPlanning((prev) => ({ 
+      ...prev, 
+      workerControls: prev.workerControls.filter((c) => c.id !== id) 
+    }));
+    await remove('worker_control_data', id);
+  }, [remove]);
+
   return {
     planning,
     setPlanning,
@@ -599,6 +632,7 @@ export function useSupabaseData(): UseSupabaseDataReturn {
     saveCourse, deleteCourse,
     saveHoliday, deleteHoliday,
     saveAppSettings,
+    saveWorkerControl, deleteWorkerControl,
     showNotification,
     notification,
   };

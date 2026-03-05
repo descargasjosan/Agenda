@@ -246,6 +246,30 @@ export const getCurrentWorkerStatus = (worker: Worker): { status: WorkerStatus, 
   return { status: WorkerStatus.DISPONIBLE };
 };
 
+// Función para obtener el estado de un operario en una fecha específica
+export const getCurrentWorkerStatusForDate = (worker: Worker, dateStr: string): { status: WorkerStatus, startDate?: string, endDate?: string } => {
+  if (!worker.statusRecords || worker.statusRecords.length === 0) {
+    return { status: WorkerStatus.DISPONIBLE };
+  }
+
+  const activeRecord = worker.statusRecords.find(record => {
+    const startDate = new Date(record.startDate);
+    const endDate = record.endDate ? new Date(record.endDate) : new Date('9999-12-31'); // INDEFINIDO
+    const currentDate = new Date(dateStr);
+    return currentDate >= startDate && currentDate <= endDate;
+  });
+
+  if (activeRecord) {
+    return {
+      status: activeRecord.status,
+      startDate: activeRecord.startDate,
+      endDate: activeRecord.endDate || undefined // Convertir null a undefined
+    };
+  }
+
+  return { status: WorkerStatus.DISPONIBLE };
+};
+
 // Función para calcular el próximo cambio de estado de un operario
 export const getNextStatusChange = (worker: Worker): { date: string, status: WorkerStatus } | null => {
   if (!worker.statusRecords || worker.statusRecords.length === 0) {

@@ -48,6 +48,25 @@ export interface Holiday {
   isLocal: boolean;
 }
 
+export interface WorkerControlData {
+  id: string;
+  worker_id: string;
+  date: string; // YYYY-MM-DD
+  value: string; // 'F', 'D', 'R', '8', '4.5', etc.
+  month: string; // '2026-01'
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorkerControl {
+  id: string;
+  worker_id: string;
+  date: string;      // 'YYYY-MM-DD'
+  value: string;     // 'F' | 'D' | 'R' | '8' | '4.5' | etc.
+  month: string;     // 'YYYY-MM' para indexación
+  notes?: string;    // Opcional
+}
+
 export interface Course {
   id: string;
   name: string;
@@ -232,6 +251,7 @@ export interface PlanningState {
   fuelRecords: FuelRecord[];
   vehicles: Vehicle[]; // Nuevo campo
   vehicleAssignments: VehicleAssignment[]; // Nuevo campo
+  workerControls: WorkerControl[]; // Control de operarios
 }
 
 export type ViewType = 'planning' | 'clients' | 'workers' | 'stats' | 'databases' | 'compact' | 'fleet' | 'medical';
