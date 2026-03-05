@@ -3611,16 +3611,6 @@ const calculateWorkerTotals = (workerId: string) => {
                     </div>
                     
                     <div className="relative">
-                       <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
-                       <input 
-                          placeholder="Ubicación exacta (Muelle, Puerta, Nave...)" 
-                          className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2.5 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-blue-100 outline-none"
-                          value={editingJob.locationDetails || ''}
-                          onChange={e => setEditingJob({...editingJob, locationDetails: e.target.value})}
-                       />
-                    </div>
-
-                    <div className="relative">
                        <Edit2 className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
                        <input 
                           type="text"
@@ -3628,6 +3618,17 @@ const calculateWorkerTotals = (workerId: string) => {
                           className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2.5 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-blue-100 outline-none"
                           value={editingJob.customName || ''}
                           onChange={e => setEditingJob({...editingJob, customName: e.target.value})}
+                       />
+                    </div>
+
+                    <div className="relative">
+                       <StickyNote className="absolute left-3 top-3 w-3 h-3 text-orange-400" />
+                       <textarea
+                          placeholder="Notas (comentarios visibles en la tarea)"
+                          rows={3}
+                          className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2.5 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-orange-100 outline-none resize-none"
+                          value={editingJob.notes || ''}
+                          onChange={e => setEditingJob({...editingJob, notes: e.target.value})}
                        />
                     </div>
                  </div>
