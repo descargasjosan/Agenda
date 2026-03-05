@@ -1,5 +1,7 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { CalendarIcon, Users, Building2, Car, HeartPulse, Settings, Download, Upload, Cloud, CloudOff, AlertCircle, CheckCircle2, X, ChevronLeft, ChevronRight, CalendarDays, Search, Plus, Trash2, Edit2, Copy, FileText, Loader2, LayoutGrid, Table, ListTodo, Bell, MessageSquare, Send, Filter, ArrowRight, Clock, User, Mail, Phone, MapPin, Briefcase, Star, TrendingUp, Activity, DownloadCloud, Database, RotateCcw, BarChart3, MessageCircle, Calendar, CheckCircle, GraduationCap, FileSpreadsheet, ChevronDown, Sparkles, ClipboardList, Hash, Save, StickyNote, Fuel, AlertTriangle } from 'lucide-react';
+import { 
+  CalendarIcon, Users, Building2, Car, HeartPulse, Settings, Download, Upload, Cloud, CloudOff, AlertCircle, CheckCircle2, X, ChevronLeft, ChevronRight, CalendarDays, Search, Plus, Trash2, Edit2, Copy, FileText, Loader2, LayoutGrid, Table, ListTodo, Bell, MessageSquare, Send, Filter, ArrowRight, Clock, User, Mail, Phone, MapPin, Briefcase, Star, TrendingUp, Activity, DownloadCloud, Database, RotateCcw, BarChart3, MessageCircle, Calendar, CheckCircle, GraduationCap, FileSpreadsheet, ChevronDown, Sparkles, ClipboardList, Hash, Save, StickyNote, Fuel, AlertTriangle, RefreshCw 
+} from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { useSupabaseData } from './hooks/useSupabaseData';
 import LoginScreen from './components/LoginScreen';
@@ -159,6 +161,7 @@ const App: React.FC = () => {
     deleteDailyNote: persistDeleteDailyNote,
     saveMedicalCourse: persistMedicalCourse,
     deleteMedicalCourse: persistDeleteMedicalCourse,
+    reloadMedicalCoursesFromSupabase,
     saveCourse: persistCourse,
     deleteCourse: persistDeleteCourse,
     saveHoliday: persistHoliday,
@@ -623,8 +626,16 @@ const calculateWorkerTotals = (workerId: string) => {
     'Curso de Prevención de Riesgos Laborales', 'Curso de Primeros Auxilios',
     'Curso de Altura', 'Curso de Electricidad Básica', 'Curso de Soldadura', 'Curso de Montaje de Andamios'
   ]);
-  const [availableProviders, setAvailableProviders] = useState<string[]>([
-  ]);
+  const [availableProviders, setAvailableProviders] = useState<string[]>(() => {
+    const saved = localStorage.getItem('availableProviders');
+    return saved ? JSON.parse(saved) : [
+      'Mutua',
+      'Servicio Médico',
+      'Recursos Laborales',
+      'Prevención de Riesgos',
+      'Centro Médico'
+    ];
+  });
   const [medicalCourseName, setMedicalCourseName] = useState('');
   const [medicalProviderName, setMedicalProviderName] = useState('');
   const [showAddMedicalCourse, setShowAddMedicalCourse] = useState(false);
@@ -774,32 +785,90 @@ const calculateWorkerTotals = (workerId: string) => {
     return alerts.sort((a, b) => a.daysUntilExpiry - b.daysUntilExpiry);
   }, []);
 
+  // ── Efecto para calcular alertas automáticamente ─────────────────────────────
+  useEffect(() => {
+    const updatedAlerts = calculateMedicalAlerts(planning.medicalCourses, planning.workers);
+    setPlanning(prev => ({ ...prev, medicalAlerts: updatedAlerts }));
+  }, [planning.medicalCourses, planning.workers, calculateMedicalAlerts]);
+
   // ── CRUD: Medical courses ──────────────────────────────────────────────────
   const addMedicalCourse = useCallback(async (course: Omit<MedicalCourse, 'id' | 'createdAt' | 'updatedAt'>) => {
-    const newCourse: MedicalCourse = { ...course, id: Date.now().toString(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-    await persistMedicalCourse(newCourse);
-    const updatedAlerts = calculateMedicalAlerts([...planning.medicalCourses, newCourse], planning.workers);
-    setPlanning(prev => ({ ...prev, medicalAlerts: updatedAlerts }));
-    showNotification('Registro médico añadido', 'success');
-  }, [persistMedicalCourse, planning.medicalCourses, planning.workers, calculateMedicalAlerts, showNotification, setPlanning]);
+    // Crear un registro por cada operario seleccionado
+    const newCourses: MedicalCourse[] = course.assignedWorkerIds.map(workerId => ({
+      ...course,
+      id: `${Date.now()}-${workerId}`, // ID único por operario
+      assignedWorkerIds: [workerId], // Un solo operario por registro
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }));
 
-  const updateMedicalCourse = useCallback(async (id: string, course: Partial<MedicalCourse>) => {
-    const existing = planning.medicalCourses.find(c => c.id === id);
-    if (!existing) return;
+    // Guardar todos los registros (saveMedicalCourse ya actualiza el estado)
+    for (const newCourse of newCourses) {
+      await persistMedicalCourse(newCourse);
+    }
+    showNotification(`${newCourses.length} registro(s) médico(s) añadido(s)`, 'success');
+  }, [persistMedicalCourse, showNotification]);
+
+  const updateMedicalCourseHandler = useCallback(async (course: MedicalCourse) => {
+    console.log('🔍 updateMedicalCourseHandler llamado con:', course);
+    console.log('🔍 course.id:', course.id);
+    console.log('🔍 course.assignedWorkerIds:', course.assignedWorkerIds);
+    
+    if (!course.id) {
+      console.error('❌ course.id es undefined - cancelando operación');
+      showNotification('Error: ID del registro no válido', 'error');
+      return;
+    }
+    
+    const existing = planning.medicalCourses.find((c) => c.id === course.id);
+    console.log('🔍 existing encontrado:', existing ? { id: existing.id, provider: existing.provider } : null);
+    
+    if (!existing) {
+      console.error('❌ No se encontró el registro con ID:', course.id);
+      showNotification('Error: Registro no encontrado', 'error');
+      return;
+    }
+    
     const updated = { ...existing, ...course, updatedAt: new Date().toISOString() };
+    console.log('🔍 updated course:', { id: updated.id, provider: updated.provider });
+    
     await persistMedicalCourse(updated);
-    const updatedAlerts = calculateMedicalAlerts(planning.medicalCourses.map(c => c.id === id ? updated : c), planning.workers);
-    setPlanning(prev => ({ ...prev, medicalAlerts: updatedAlerts }));
     showNotification('Registro médico actualizado', 'success');
-  }, [persistMedicalCourse, planning.medicalCourses, planning.workers, calculateMedicalAlerts, showNotification, setPlanning]);
+  }, [persistMedicalCourse, showNotification]);
 
   const deleteMedicalCourseHandler = useCallback(async (id: string) => {
+    console.log('🔍 deleteMedicalCourseHandler llamado con ID:', id);
+    
+    // Si el ID es undefined, no hacer nada para evitar eliminar todos los registros
+    if (!id) {
+      console.error('❌ Intentando eliminar con ID undefined - operación cancelada');
+      showNotification('Error: ID del registro no válido', 'error');
+      return;
+    }
+    
+    console.log('🔍 medicalCourses ANTES de eliminar:', planning.medicalCourses.map(c => ({ id: c.id, provider: c.provider })));
+    
+    const existing = planning.medicalCourses.find((c) => c.id === id);
+    console.log('🔍 existing a eliminar:', existing ? { id: existing.id, provider: existing.provider } : null);
+    
+    if (!existing) {
+      console.error('❌ No se encontró el registro con ID:', id);
+      showNotification('Error: Registro no encontrado', 'error');
+      return;
+    }
+    
+    // Eliminar del estado local primero
+    const remaining = planning.medicalCourses.filter((c) => c.id !== id);
+    console.log('🔍 remaining DESPUÉS de filter:', remaining.map(c => ({ id: c.id, provider: c.provider })));
+    
+    setPlanning(prev => ({ ...prev, medicalCourses: remaining }));
+    console.log('🔍 medicalCourses DESPUÉS de setPlanning:', remaining.map(c => ({ id: c.id, workerIds: c.assignedWorkerIds })));
+    
+    // Eliminar de la base de datos
     await persistDeleteMedicalCourse(id);
-    const remaining = planning.medicalCourses.filter(c => c.id !== id);
-    const updatedAlerts = calculateMedicalAlerts(remaining, planning.workers);
-    setPlanning(prev => ({ ...prev, medicalAlerts: updatedAlerts }));
+    
     showNotification('Registro médico eliminado', 'success');
-  }, [persistDeleteMedicalCourse, planning.medicalCourses, planning.workers, calculateMedicalAlerts, showNotification, setPlanning]);
+  }, [planning.medicalCourses, persistDeleteMedicalCourse, showNotification]);
 
   const addNewMedicalCourse = useCallback(() => {
     if (medicalCourseName.trim() && !availableCourses.includes(medicalCourseName.trim())) {
@@ -810,8 +879,11 @@ const calculateWorkerTotals = (workerId: string) => {
 
   const addNewMedicalProvider = useCallback(() => {
     if (medicalProviderName.trim() && !availableProviders.includes(medicalProviderName.trim())) {
-      setAvailableProviders(prev => [...prev, medicalProviderName.trim()]);
-      setMedicalProviderName(''); setShowAddMedicalProvider(false);
+      const newProviders = [...availableProviders, medicalProviderName.trim()];
+      setAvailableProviders(newProviders);
+      localStorage.setItem('availableProviders', JSON.stringify(newProviders));
+      setMedicalProviderName(''); 
+      setShowAddMedicalProvider(false);
     }
   }, [medicalProviderName, availableProviders]);
 
@@ -1050,6 +1122,14 @@ const calculateWorkerTotals = (workerId: string) => {
   const handleDuplicateJob = useCallback(async () => {
     if (!duplicatingJob || !duplicationDate) return;
     
+    console.log('🔍 Iniciando duplicación de tarea:', {
+      originalJob: duplicatingJob.id,
+      originalDate: duplicatingJob.date,
+      newDate: duplicationDate,
+      keepWorkers: keepWorkersOnDuplicate,
+      keepDeliveryNote: keepDeliveryNoteOnDuplicate
+    });
+    
     // Extraer todas las propiedades excepto las que vamos a controlar explícitamente
     const { id, date, assignedWorkerIds, ref, deliveryNote, ...jobData } = duplicatingJob;
     
@@ -1062,10 +1142,21 @@ const calculateWorkerTotals = (workerId: string) => {
       deliveryNote: keepDeliveryNoteOnDuplicate ? (duplicatingJob.deliveryNote || '') : '' // Control explícito del deliveryNote
     };
     
-    await persistJob(newJob);
-    setDuplicatingJob(null);
-    setKeepDeliveryNoteOnDuplicate(false); // Resetear estado
-    showNotification("Tarea duplicada", "success");
+    console.log('🔍 Nueva tarea creada:', newJob);
+    
+    try {
+      await persistJob(newJob);
+      console.log('🔍 Tarea duplicada y guardada correctamente');
+      
+      setDuplicatingJob(null);
+      setKeepDeliveryNoteOnDuplicate(false); // Resetear estado
+      showNotification("Tarea duplicada", "success");
+      
+      console.log('🔍 Estados reseteados después de duplicar');
+    } catch (error) {
+      console.error('❌ Error al duplicar tarea:', error);
+      showNotification("Error al duplicar tarea", "error");
+    }
   }, [duplicatingJob, duplicationDate, keepWorkersOnDuplicate, keepDeliveryNoteOnDuplicate, persistJob, showNotification]);
 
   const handleOpenNote = (workerId: string) => {
@@ -2401,8 +2492,31 @@ const calculateWorkerTotals = (workerId: string) => {
                    }}
                    className="px-3 py-1.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors flex items-center gap-2 text-sm"
                  >
-                   <Plus className="w-3 h-3" />
-                   NUEVO REGISTRO
+                   <Plus className="w-4 h-4" />
+                   Nuevo Registro
+                 </button>
+                 <button 
+                   onClick={() => {
+                     console.log('🔄 Botón de recarga presionado - INICIO');
+                     console.log('🔄 reloadMedicalCoursesFromSupabase existe:', typeof reloadMedicalCoursesFromSupabase);
+                     console.log('🔄 reloadMedicalCoursesFromSupabase es función:', typeof reloadMedicalCoursesFromSupabase === 'function');
+                     
+                     if (typeof reloadMedicalCoursesFromSupabase === 'function') {
+                       console.log('🔄 Llamando a reloadMedicalCoursesFromSupabase...');
+                       reloadMedicalCoursesFromSupabase().then(() => {
+                         console.log('🔄 reloadMedicalCoursesFromSupabase completado');
+                       }).catch(error => {
+                         console.error('🔄 Error en reloadMedicalCoursesFromSupabase:', error);
+                       });
+                     } else {
+                       console.error('🔄 reloadMedicalCoursesFromSupabase no es una función');
+                     }
+                   }}
+                   className="px-3 py-1.5 bg-orange-600 text-white rounded-xl hover:bg-orange-700 transition-colors flex items-center gap-2 text-sm"
+                   title="Recargar registros médicos desde Supabase"
+                 >
+                   <RefreshCw className="w-4 h-4" />
+                   Recargar
                  </button>
                </div>
              </div>
@@ -2480,13 +2594,19 @@ const calculateWorkerTotals = (workerId: string) => {
                     );
                     
                     return filteredCourses.map(course => {
-                      const assignedWorkers = course.assignedWorkerIds.slice(0, 2).map(workerId => {
-                        const worker = planning.workers.find(w => w.id === workerId);
-                        return worker ? worker.name : '';
-                      }).filter(name => name);
+                      const assignedWorker = course.assignedWorkerIds[0]; // Solo hay un operario por registro
+                      const worker = planning.workers.find(w => w.id === assignedWorker);
+                      const workerName = worker ? worker.name : '';
+                      
+                      console.log('🔍 Renderizando course:', { 
+                        id: course.id, 
+                        provider: course.provider, 
+                        hasId: !!course.id,
+                        idType: typeof course.id 
+                      });
                       
                       return (
-                        <div key={course.id} className="grid grid-cols-6 gap-2 p-3 border-b border-slate-100 hover:bg-slate-50 items-center">
+                        <div key={course.id || `course-${Math.random()}`} className="grid grid-cols-6 gap-2 p-3 border-b border-slate-100 hover:bg-slate-50 items-center">
                           <div className="text-sm font-medium text-slate-900 truncate">
                             {course.type === 'recognition' ? '🏥 Reconocimiento médico' : (course.name || '📚 Curso')}
                           </div>
@@ -2494,17 +2614,7 @@ const calculateWorkerTotals = (workerId: string) => {
                             {course.provider}
                           </div>
                           <div className="text-sm text-slate-600">
-                            {assignedWorkers.length > 0 ? (
-                              <div className="flex gap-1 flex-wrap">
-                                {assignedWorkers.map((name, index) => (
-                                  <span key={index}>
-                                    {name}
-                                  </span>
-                                ))}
-                              </div>
-                            ) : (
-                              <span className="text-slate-400">-</span>
-                            )}
+                            {workerName || '-'}
                           </div>
                           <div className="text-sm text-slate-600">
                             {formatDateEuropean(course.issueDate) || '-'}
@@ -2514,7 +2624,10 @@ const calculateWorkerTotals = (workerId: string) => {
                           </div>
                           <div className="flex gap-1">
                             <button 
-                              onClick={() => setPlanning(prev => ({ ...prev, editingMedicalCourse: course }))}
+                              onClick={() => {
+                                console.log('🔍 Botón editar presionado, course.id:', course.id);
+                                setPlanning(prev => ({ ...prev, editingMedicalCourse: course }));
+                              }}
                               className="p-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
                               title="Editar"
                             >
@@ -2522,8 +2635,7 @@ const calculateWorkerTotals = (workerId: string) => {
                             </button>
                             <button 
                               onClick={() => {
-                                console.log('🔍 ID del registro a eliminar:', course.id);
-                                console.log('🔍 Registro completo:', course);
+                                console.log('🔍 Botón eliminar presionado, course.id:', course.id);
                                 if (confirm('¿Eliminar este registro médico?')) {
                                   deleteMedicalCourseHandler(course.id);
                                 }
@@ -2622,7 +2734,7 @@ const calculateWorkerTotals = (workerId: string) => {
              )}
 
              {/* Operarios */}
-             {planning.selectedMedicalTab === 'workers' && (
+            {planning.selectedMedicalTab === 'workers' && (
                <div className="space-y-4">
                  {planning.workers.filter(worker => !worker.isArchived).sort((a, b) => {
                     // Extraer números del código (ej: X001 -> 001, 002, etc.)
@@ -5021,7 +5133,9 @@ const calculateWorkerTotals = (workerId: string) => {
                       onClick={() => {
                         if (confirm(`¿Eliminar el proveedor "${planning.editingMedicalCourse.provider}"?`)) {
                           // Eliminar el proveedor de la lista de disponibles
-                          setAvailableProviders(prev => prev.filter(p => p !== planning.editingMedicalCourse.provider));
+                          const newProviders = availableProviders.filter(p => p !== planning.editingMedicalCourse.provider);
+                          setAvailableProviders(newProviders);
+                          localStorage.setItem('availableProviders', JSON.stringify(newProviders));
                           // Limpiar el campo del formulario
                           setPlanning(prev => ({ 
                             ...prev, 
@@ -5090,15 +5204,48 @@ const calculateWorkerTotals = (workerId: string) => {
                 <input
                   type="date"
                   value={planning.editingMedicalCourse.issueDate || ''}
-                  onChange={(e) => setPlanning(prev => ({ 
-                    ...prev, 
-                    editingMedicalCourse: prev.editingMedicalCourse ? { ...prev.editingMedicalCourse, issueDate: e.target.value } : null 
-                  }))}
+                  onChange={(e) => {
+                    console.log('🔍 Estado actual editingMedicalCourse:', planning.editingMedicalCourse);
+                    const issueDate = e.target.value;
+                    const currentExpiryDate = planning.editingMedicalCourse?.expiryDate || '';
+                    
+                    console.log('🔍 Auto-cálculo fecha caducidad:', {
+                      issueDate,
+                      currentExpiryDate,
+                      hasExpiryDate: !!currentExpiryDate,
+                      shouldCalculate: !currentExpiryDate && issueDate
+                    });
+                    
+                    // Auto-calcular fecha de caducidad (1 año después) siempre que haya fecha de realización
+                    let expiryDate = currentExpiryDate;
+                    if (issueDate) {
+                      const issue = new Date(issueDate);
+                      issue.setFullYear(issue.getFullYear() + 1);
+                      expiryDate = issue.toISOString().split('T')[0];
+                      console.log('🔍 Fecha calculada:', expiryDate);
+                    }
+                    
+                    console.log('🔍 Actualizando estado:', { issueDate, expiryDate });
+                    
+                    setPlanning(prev => ({ 
+                      ...prev, 
+                      editingMedicalCourse: prev.editingMedicalCourse ? { 
+                        ...prev.editingMedicalCourse, 
+                        issueDate,
+                        expiryDate
+                      } : null 
+                    }));
+                  }}
                   className="w-full p-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div>
-                <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-2">Fecha de Caducidad</label>
+                <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-2">
+                  Fecha de Caducidad
+                  {planning.editingMedicalCourse.issueDate && (
+                    <span className="ml-2 text-xs text-blue-600 font-normal">(auto: +1 año)</span>
+                  )}
+                </label>
                 <input
                   type="date"
                   value={planning.editingMedicalCourse.expiryDate || ''}
@@ -5171,15 +5318,20 @@ const calculateWorkerTotals = (workerId: string) => {
               onClick={() => {
                 if (!planning.editingMedicalCourse) return;
                 
-                // Verificar si es un registro nuevo (no existe en la lista)
+                // Verificar si es un registro nuevo (No existe en la lista)
+                console.log('🔍 editingMedicalCourse completo:', planning.editingMedicalCourse);
+                console.log('🔍 editingMedicalCourse.id:', planning.editingMedicalCourse?.id);
+                console.log('🔍 medicalCourses existentes:', planning.medicalCourses.map(c => c.id));
+                
                 const isNewRecord = !planning.medicalCourses.some(c => c.id === planning.editingMedicalCourse!.id);
+                console.log('🔍 ¿Es nuevo registro?', isNewRecord);
                 
                 if (isNewRecord) {
                   // Es un nuevo registro
                   addMedicalCourse(planning.editingMedicalCourse);
                 } else {
                   // Es un registro existente
-                  updateMedicalCourse(planning.editingMedicalCourse.id, planning.editingMedicalCourse);
+                  updateMedicalCourseHandler(planning.editingMedicalCourse);
                 }
                 setPlanning(prev => ({ ...prev, editingMedicalCourse: null }));
               }}

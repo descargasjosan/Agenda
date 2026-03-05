@@ -75,7 +75,7 @@ export const MOCK_WORKERS: Worker[] = [
     endTime: '17:00', 
     restrictions: [], 
     restrictedClientIds: ['c2'],
-    skills: [JobType.PICKING, JobType.MANIPULACION],
+    skills: [JobType.CARGA, JobType.TRABAJOS_ALMACEN],
     completedCourses: ["PRL Básico (60h)", "Manipulador Alimentos"]
   },
   { 
@@ -92,7 +92,7 @@ export const MOCK_WORKERS: Worker[] = [
     endTime: '16:00', 
     restrictions: ['Empresa X'], 
     restrictedClientIds: [],
-    skills: [JobType.MANIPULACION],
+    skills: [JobType.TRABAJOS_ALMACEN],
     completedCourses: []
   }
 ];
