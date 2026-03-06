@@ -190,7 +190,10 @@ const App: React.FC = () => {
   const [confirmDeleteCourse, setConfirmDeleteCourse] = useState<string | null>(null);
   const [editingJob, setEditingJob] = useState<Job | null>(null);
   const [showBackupModal, setShowBackupModal] = useState(false);
-const [selectedMonth, setSelectedMonth] = useState('2026-01');
+const [selectedMonth, setSelectedMonth] = useState(() => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+});
 const [workerControlData, setWorkerControlData] = useState<{[month: string]: {[workerId: string]: {[day: string]: string}}}>({});
 const [selectedCell, setSelectedCell] = useState<{workerId: string, day: number} | null>(null);
 const [workerFilter, setWorkerFilter] = useState('');
@@ -216,11 +219,53 @@ const getDayOfWeek = (year: number, month: number, day: number) => {
    return new Date(Date.UTC(year, month - 1, day)).getUTCDay();
 };
 
+// Función para obtener el día actual
+const getCurrentDay = () => {
+  const now = new Date();
+  return now.getDate();
+};
+
 // Función para obtener valor de celda
 const getCellValue = (workerId: string, day: number) => {
    const monthData = workerControlData[selectedMonth] || {};
    const workerData = monthData[workerId] || {};
    return workerData[day] || '';
+};
+
+// Función para obtener anticipo de un trabajador en el mes
+const getWorkerAdvance = (workerId: string) => {
+   const advanceControl = planning.workerControls.find(c => 
+      c.worker_id === workerId && 
+      c.month === selectedMonth && 
+      c.id.includes('advance')
+   );
+   return advanceControl?.advance || '';
+};
+
+// Función para guardar anticipo de un trabajador
+const saveWorkerAdvance = async (workerId: string, advance: string) => {
+   const advanceId = `${workerId}-${selectedMonth}-advance`;
+   
+   if (advance && advance.trim()) {
+      // Limitar a 4 cifras máximo
+      const numericAdvance = advance.replace(/[^0-9]/g, '');
+      const finalAdvance = numericAdvance.slice(0, 4);
+      
+      await saveWorkerControl({
+         id: advanceId,
+         worker_id: workerId,
+         date: `${selectedMonth}-99`, // Día 99 para indicar que no es un día real del mes
+         value: 'ADV', // Valor especial para identificar anticipos
+         month: selectedMonth,
+         advance: finalAdvance
+      });
+      
+      showNotification(`Anticipo de ${finalAdvance}€ guardado para ${planning.workers.find(w => w.id === workerId)?.name}`, 'success');
+   } else {
+      // Eliminar anticipo si está vacío
+      await deleteWorkerControl(advanceId);
+      showNotification('Anticipo eliminado', 'info');
+   }
 };
 
 // Función para actualizar valor de celda
@@ -255,13 +300,16 @@ const syncFromStatusRecords = useCallback(async (showSummary: boolean = false) =
    // Cargar datos manuales (F, D, R, horas) desde Supabase
    const manualData: {[workerId: string]: {[day: number]: string}} = {};
    planning.workerControls
-      .filter(control => control.month === selectedMonth)
+      .filter(control => control.month === selectedMonth && control.value !== 'ADV') // Excluir anticipos
       .forEach(control => {
          if (!manualData[control.worker_id]) {
             manualData[control.worker_id] = {};
          }
          const day = parseInt(control.date.split('-')[2], 10);
-         manualData[control.worker_id][day] = control.value;
+         // Solo procesar días válidos (1-31), excluir día 99 de anticipos
+         if (day >= 1 && day <= 31) {
+            manualData[control.worker_id][day] = control.value;
+         }
       });
 
    // Construir datos de todos los operarios en un único objeto
@@ -3198,8 +3246,9 @@ const saveVacationConfig = async () => {
                               const days = getMonthDays(selectedMonth);
                               return days.map(day => {
                                  const dayOfWeek = getDayOfWeek(year, month, day);
+                                 const isCurrentDay = day === getCurrentDay() && month === new Date().getMonth() + 1 && year === new Date().getFullYear();
                                  return (
-                                    <th key={day} className="p-1 text-center border-r border-slate-200 min-w-[25px]">
+                                    <th key={day} className={`p-1 text-center border-r border-slate-200 min-w-[25px] ${isCurrentDay ? 'bg-green-100' : ''}`}>
                                        <div className="text-xs font-black text-slate-700">
                                           {day}
                                        </div>
@@ -3211,12 +3260,13 @@ const saveVacationConfig = async () => {
                               });
                            })()}
                            {/* Columnas de totales */}
-                           <th className="p-1 text-xs font-black text-slate-700 uppercase text-center border-l border-slate-200 min-w-[40px]">Faltas</th>
-                           <th className="p-1 text-xs font-black text-slate-700 uppercase text-center border-r border-slate-200 min-w-[48px]">Horas</th>
-                           <th className="p-1 text-xs font-black text-slate-700 uppercase text-center border-r border-slate-200 min-w-[40px]">Baja</th>
-                           <th className="p-1 text-xs font-black text-slate-700 uppercase text-center border-r border-slate-200 min-w-[40px]">Reposo</th>
-                           <th className="p-1 text-xs font-black text-slate-700 uppercase text-center border-r border-slate-200 min-w-[40px]">Vac. Mes</th>
-                           <th className="p-1 text-xs font-black text-slate-700 uppercase text-center border-r border-slate-200 min-w-[52px]">Saldo Vac.</th>
+                           <th className="p-1 text-xs font-black text-slate-700 uppercase text-center border-l border-slate-200 min-w-[35px]">Faltas</th>
+                           <th className="p-1 text-xs font-black text-slate-700 uppercase text-center border-l border-slate-200 min-w-[40px]">Horas</th>
+                           <th className="p-1 text-xs font-black text-slate-700 uppercase text-center border-r border-slate-200 min-w-[35px]">Baja</th>
+                           <th className="p-1 text-xs font-black text-slate-700 uppercase text-center border-r border-slate-200 min-w-[35px]">Reposo</th>
+                           <th className="p-1 text-xs font-black text-slate-700 uppercase text-center border-r border-slate-200 min-w-[35px]">Vac. Mes</th>
+                           <th className="p-1 text-xs font-black text-slate-700 uppercase text-center border-r border-slate-200 min-w-[40px]">Saldo Vac.</th>
+                           <th className="p-1 text-xs font-black text-slate-700 uppercase text-center border-r border-slate-200 min-w-[35px]">Anticipo</th>
                         </tr>
                      </thead>
                      
@@ -3259,12 +3309,27 @@ const saveVacationConfig = async () => {
                                     {/* Celdas de días - dinámicas según el mes seleccionado */}
                                     {(() => {
                                        const days = getMonthDays(selectedMonth);
+                                       const [currentYear, currentMonth] = selectedMonth.split('-').map(Number);
+                                       const [year, month] = selectedMonth.split('-').map(Number);
+                                       const today = new Date();
+                                       const isCurrentMonth = currentYear === today.getFullYear() && currentMonth === today.getMonth() + 1;
+                                       const currentDay = today.getDate();
+                                       
                                        return days.map(day => {
                                           const cellValue = getCellValue(worker.id, day);
+                                          const isCurrentDay = isCurrentMonth && day === currentDay;
+                                          const dayOfWeek = getDayOfWeek(year, month, day);
+                                          const isWeekend = dayOfWeek === 0 || dayOfWeek === 6; // Domingo=0, Sábado=6
+                                          const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                                          const isHoliday = planning.customHolidays.some(h => h.date === dateStr);
+                                          const isNonWorkingDay = isWeekend || isHoliday;
+                                          
                                           return (
                                              <td 
                                                 key={day} 
-                                                className="p-1 text-center cursor-pointer hover:bg-blue-50 transition-colors border-r border-slate-200 bg-white"
+                                                className={`p-1 text-center cursor-pointer hover:bg-blue-50 transition-colors border-r border-slate-200 ${
+                                                   isNonWorkingDay ? 'bg-slate-100' : 'bg-white'
+                                                } ${isCurrentDay ? 'bg-green-50' : ''}`}
                                                 onClick={() => handleCellClick(worker.id, day)}
                                              >
                                                 <div className={`w-5 h-5 mx-auto flex items-center justify-center text-[10px] font-black rounded ${getCellColor(cellValue)} hover:opacity-80`}>
@@ -3282,7 +3347,7 @@ const saveVacationConfig = async () => {
                                        </div>
                                     </td>
                                     {/* Horas con acumulado y liquidación */}
-                                    <td className="p-1 text-center border-r border-slate-200 bg-white">
+                                    <td className="p-1 text-center border-l border-r border-slate-200 bg-white">
                                        {(() => {
                                           const settled = isHoursSettled(worker.id);
                                           const accumulated = calculateAccumulatedHours(worker.id);
@@ -3308,12 +3373,12 @@ const saveVacationConfig = async () => {
                                           );
                                        })()}
                                     </td>
-                                    <td className="p-1 text-center border-r border-slate-200 bg-white">
+                                    <td className="p-1 text-center border-l border-r border-slate-200 bg-white">
                                        <div className="text-xs font-black text-red-600">
                                           {totals.totalBajaMedica}
                                        </div>
                                     </td>
-                                    <td className="p-1 text-center border-r border-slate-200 bg-white">
+                                    <td className="p-1 text-center border-l border-r border-slate-200 bg-white">
                                        <div className="text-xs font-black text-sky-600">
                                           {totals.totalReposo}
                                        </div>
@@ -3338,6 +3403,21 @@ const saveVacationConfig = async () => {
                                              </button>
                                           );
                                        })()}
+                                    </td>
+                                    {/* Columna de Anticipos */}
+                                    <td className="p-1 text-center border-r border-slate-200 bg-white">
+                                       <input
+                                          type="text"
+                                          placeholder="0"
+                                          value={getWorkerAdvance(worker.id)}
+                                          onChange={(e) => {
+                                             const value = e.target.value.replace(/[^0-9]/g, '').slice(0, 4);
+                                             saveWorkerAdvance(worker.id, value);
+                                          }}
+                                          className="w-8 px-1 py-0.5 text-[10px] text-center border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                          maxLength={4}
+                                          title="Anticipo mensual (máximo 4 cifras)"
+                                       />
                                     </td>
                                  </tr>
                               );

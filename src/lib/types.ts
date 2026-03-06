@@ -64,6 +64,7 @@ export interface WorkerControl {
   value: string;     // 'F' | 'D' | 'R' | '8' | '4.5' | etc.
   month: string;     // 'YYYY-MM' para indexación
   notes?: string;    // Opcional
+  advance?: string;  // Anticipo pagado (máximo 4 cifras)
 }
 
 export interface Course {
