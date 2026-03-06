@@ -1494,7 +1494,77 @@ const saveVacationConfig = async () => {
     showNotification(`Operario "${worker.name}" guardado correctamente`, "success");
   }, [persistWorker, showNotification]);
 
-  const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorkerStatus(worker).status;
+  // Función para calcular días trabajados por fijos discontinuos
+const calculateFDDaysStats = useCallback(() => {
+  const currentMonth = selectedMonth;
+  const [year, month] = currentMonth.split('-').map(Number);
+  const today = new Date();
+  const currentDay = today.getFullYear() === year && today.getMonth() + 1 === month 
+    ? today.getDate() 
+    : getMonthDays(currentMonth); // Días del mes completo si no es el mes actual
+  
+  const fdWorkers = planning.workers.filter(w => w.contractType === ContractType.FIJO_DISCONTINUO);
+  let totalLaborableDays = 0;
+  let totalWeekendDays = 0;
+  let workersWithDays = 0;
+  
+  fdWorkers.forEach(worker => {
+    let workerLaborableDays = 0;
+    let workerWeekendDays = 0;
+    let workedFriday = false;
+    let workedMonday = false;
+    
+    // Recorrer días del mes hasta el día actual
+    for (let day = 1; day <= currentDay; day++) {
+      const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      const dayOfWeek = new Date(dateStr).getDay(); // 0=Dom, 1=Lun, ..., 6=Sáb
+      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+      
+      // Verificar si trabajó ese día
+      const workedThatDay = planning.jobs.some(job => 
+        job.date === dateStr && 
+        !job.isCancelled && 
+        job.assignedWorkerIds.includes(worker.id)
+      );
+      
+      if (workedThatDay) {
+        if (isWeekend) {
+          workerWeekendDays++; // Contar días de fin de semana trabajados directamente
+        } else {
+          workerLaborableDays++; // Contar días laborables trabajados
+        }
+        
+        // Marcar si trabajó viernes o lunes
+        if (dayOfWeek === 5) workedFriday = true; // Viernes
+        if (dayOfWeek === 1) workedMonday = true; // Lunes
+      }
+    }
+    
+    // Si trabajó viernes y lunes, añadir el fin de semana completo
+    if (workedFriday && workedMonday) {
+      workerWeekendDays += 2; // Sábado + Domingo
+    }
+    
+    // Si trabajó al menos un día, contar como operario activo
+    if (workerLaborableDays > 0 || workerWeekendDays > 0) {
+      workersWithDays++;
+    }
+    
+    totalLaborableDays += workerLaborableDays;
+    totalWeekendDays += workerWeekendDays;
+  });
+  
+  return {
+    workersWithDays,
+    laborableDays: totalLaborableDays,
+    weekendDays: totalWeekendDays,
+    totalDays: totalLaborableDays + totalWeekendDays
+  };
+}, [planning.workers, planning.jobs, selectedMonth]);
+
+const fdDaysStats = calculateFDDaysStats();
+
+const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorkerStatus(worker).status;
 
   const handleUpdateWorkerStatus = useCallback(async (workerId: string, status: WorkerStatus) => {
     const worker = planning.workers.find(w => w.id === workerId);
@@ -2507,6 +2577,26 @@ const saveVacationConfig = async () => {
                       <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${showArchivedWorkers ? 'translate-x-4' : ''}`} />
                     </button>
                   </div>
+
+                  {/* Estadísticas de días trabajados FD */}
+                  <div className="flex items-center gap-4 border-l border-slate-100 pl-6">
+                    <div className="bg-slate-50 px-3 py-2 rounded-lg">
+                      <div className="flex items-center gap-4 text-xs">
+                        <span className="text-slate-600">
+                          <strong>FD:</strong> {fdDaysStats.workersWithDays}
+                        </span>
+                        <span className="text-blue-600 font-bold">
+                          <strong>Lab:</strong> {fdDaysStats.laborableDays}
+                        </span>
+                        <span className="text-purple-600 font-bold">
+                          <strong>Fin:</strong> {fdDaysStats.weekendDays}
+                        </span>
+                        <span className="text-green-600 font-bold">
+                          <strong>Total:</strong> {fdDaysStats.totalDays}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
              <div className="bg-white rounded-[32px] border border-slate-200 overflow-hidden shadow-sm">
@@ -3414,7 +3504,14 @@ const saveVacationConfig = async () => {
                                              const value = e.target.value.replace(/[^0-9]/g, '').slice(0, 4);
                                              saveWorkerAdvance(worker.id, value);
                                           }}
-                                          className="w-8 px-1 py-0.5 text-[10px] text-center border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                          className={`w-8 px-1 py-0.5 text-[10px] text-center border rounded focus:outline-none focus:ring-1 focus:ring-blue-500 ${
+                                             (() => {
+                                                const advance = getWorkerAdvance(worker.id);
+                                                return advance && advance !== '0' 
+                                                   ? 'border-green-600 bg-green-800 text-white font-bold' 
+                                                   : 'border-slate-300';
+                                             })()
+                                          }`}
                                           maxLength={4}
                                           title="Anticipo mensual (máximo 4 cifras)"
                                        />
