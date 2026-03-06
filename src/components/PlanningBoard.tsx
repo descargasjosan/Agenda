@@ -443,7 +443,7 @@ const PlanningBoard: React.FC<PlanningBoardProps> = ({
                                     <FileText className="w-2.5 h-2.5" />
                                     <span className="text-[8px] font-black uppercase tracking-widest">ALB.</span>
                                     {job.deliveryNote ? (
-                                      <span className="text-[10px] font-black text-white bg-blue-900 px-1 py-0.5 rounded border border-blue-800 truncate">
+                                      <span className="text-[10px] font-black text-black bg-gray-200 px-1 py-0.5 rounded border border-gray-300 truncate">
                                         {job.deliveryNote}
                                       </span>
                                     ) : (
