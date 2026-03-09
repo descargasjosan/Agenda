@@ -671,6 +671,64 @@ const calculateWorkerTotals = (workerId: string) => {
    return { totalHours, totalFaltas, totalBajaMedica, totalReposo, totalVacaciones };
 };
 
+// Función para calcular totales generales de todos los operarios
+const calculateGrandTotals = (month: string) => {
+   const monthData = workerControlData[month] || {};
+   const days = getMonthDays(month);
+   
+   let grandTotalHours = 0;
+   let grandTotalFaltas = 0;
+   let grandTotalBajaMedica = 0;
+   let grandTotalReposo = 0;
+   let grandTotalVacaciones = 0;
+   
+   // Iterar sobre todos los operarios del mes
+   Object.keys(monthData).forEach(workerId => {
+      const workerData = monthData[workerId] || {};
+      
+      days.forEach(day => {
+         const value = workerData[day] || '';
+         
+         if (!isNaN(Number(value))) {
+            grandTotalHours += Number(value);
+         } else {
+            switch(value) {
+               case 'F': grandTotalFaltas++; break;
+               case 'B': grandTotalBajaMedica++; break;
+               case 'R': grandTotalReposo++; break;
+               case 'V': grandTotalVacaciones++; break;
+            }
+         }
+      });
+   });
+   
+   return { 
+      totalHours: grandTotalHours, 
+      totalFaltas: grandTotalFaltas, 
+      totalBajaMedica: grandTotalBajaMedica, 
+      totalReposo: grandTotalReposo, 
+      totalVacaciones: grandTotalVacaciones 
+   };
+};
+
+// Función para calcular totales por día de todos los operarios
+const calculateDayTotals = (day: number) => {
+   const monthData = workerControlData[selectedMonth] || {};
+   let dayTotalHours = 0;
+   
+   // Iterar sobre todos los operarios del mes
+   Object.keys(monthData).forEach(workerId => {
+      const workerData = monthData[workerId] || {};
+      const value = workerData[day] || '';
+      
+      if (!isNaN(Number(value))) {
+         dayTotalHours += Number(value);
+      }
+   });
+   
+   return { totalHours: dayTotalHours };
+};
+
 // ── Liquidación de horas ──────────────────────────────────────────────────
 const isHoursSettled = (workerId: string): boolean => {
    const settledId = `${workerId}-${selectedMonth}-settled`;
@@ -1863,6 +1921,155 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
 
   const exportDatabaseToExcel = () => showNotification("Función disponible", "info");
   const downloadExcelTemplate = () => showNotification("Plantilla descargada", "info");
+
+  // ── Exportar Control de Operarios ─────────────────────────────────────────────
+  const exportWorkerControlData = () => {
+    try {
+      // Obtener días del mes seleccionado
+      const days = getMonthDays(selectedMonth);
+      const [year, month] = selectedMonth.split('-').map(Number);
+      const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+      const monthName = monthNames[month - 1];
+      
+      // Filtrar operarios no archivados y ordenar por código
+      const activeWorkers = planning.workers
+        .filter(w => !w.isArchived)
+        .sort((a, b) => {
+          // Extraer parte numérica del código (ej: X001 -> 1, X010 -> 10)
+          const getCodeNumber = (code: string) => {
+            const match = code?.match(/\d+/);
+            return match ? parseInt(match[0]) : 0;
+          };
+          
+          const codeA = getCodeNumber(a.code || '');
+          const codeB = getCodeNumber(b.code || '');
+          
+          return codeA - codeB;
+        });
+      
+      // Preparar datos para Excel
+      const excelData: any[][] = [];
+      
+      // Cabecera principal
+      excelData.push([`CONTROL DE OPERARIOS - ${monthName} ${year}`]);
+      excelData.push([]); // Fila vacía
+      
+      // Cabeceras de columnas
+      const headers = ['Código', 'Nombre', 'DNI', 'Contrato'];
+      
+      // Añadir días del mes
+      days.forEach(day => {
+        headers.push(`${day}`);
+      });
+      
+      // Añadir columnas de totales
+      headers.push('Faltas', 'Baja Médica', 'Reposo', 'Vacaciones', 'Horas', 'Saldo Vacaciones', 'Anticipo');
+      
+      excelData.push(headers);
+      excelData.push([]); // Fila vacía después de cabeceras
+      
+      // Datos de cada operario
+      activeWorkers.forEach(worker => {
+        const row = [
+          worker.code || '',
+          worker.name || '',
+          worker.dni || '',
+          worker.contractType || ''
+        ];
+        
+        // Añadir datos de cada día
+        days.forEach(day => {
+          const cellValue = getCellValue(worker.id, day);
+          row.push(cellValue || '');
+        });
+        
+        // Calcular totales para este operario
+        const totals = calculateWorkerTotals(worker.id);
+        const vac = calculateVacationBalance(worker.id);
+        const advance = getWorkerAdvance(worker.id);
+        
+        row.push(
+          totals.totalFaltas || 0,
+          totals.totalBajaMedica || 0,
+          totals.totalReposo || 0,
+          totals.totalVacaciones || 0,
+          totals.totalHours || 0,
+          vac.remaining || 0,
+          advance || 0
+        );
+        
+        excelData.push(row);
+      });
+      
+      // Fila de totales generales
+      const grandTotals = calculateGrandTotals(selectedMonth);
+      const totalsRow = ['TOTALES', '', '', ''];
+      
+      // Totales por día
+      days.forEach(day => {
+        const dayTotal = calculateDayTotals(day);
+        totalsRow.push(dayTotal.totalHours || 0);
+      });
+      
+      // Totales generales
+      totalsRow.push(
+        grandTotals.totalFaltas || 0,
+        grandTotals.totalBajaMedica || 0,
+        grandTotals.totalReposo || 0,
+        grandTotals.totalVacaciones || 0,
+        grandTotals.totalHours || 0,
+        '',
+        ''
+      );
+      
+      excelData.push([]);
+      excelData.push(totalsRow);
+      
+      // Crear archivo Excel
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.aoa_to_sheet(excelData);
+      
+      // Configurar anchos de columna
+      const colWidths = [
+        { wch: 10 }, // Código
+        { wch: 25 }, // Nombre
+        { wch: 12 }, // DNI
+        { wch: 10 }, // Contrato
+        ...days.map(() => ({ wch: 6 })), // Días del mes
+        { wch: 8 },  // Faltas
+        { wch: 10 }, // Baja Médica
+        { wch: 8 },  // Reposo
+        { wch: 10 }, // Vacaciones
+        { wch: 8 },  // Horas
+        { wch: 12 }, // Saldo Vacaciones
+        { wch: 8 }   // Anticipo
+      ];
+      ws['!cols'] = colWidths;
+      
+      // Combinar celda de título
+      ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: headers.length - 1 } }];
+      
+      // Estilo para la cabecera principal
+      ws['A1'].s = {
+        font: { bold: true, sz: 16 },
+        alignment: { horizontal: 'center' }
+      };
+      
+      XLSX.utils.book_append_sheet(wb, ws, 'Control Operarios');
+      
+      // Generar nombre de archivo
+      const fileName = `Control Operarios ${monthName} ${year}.xlsx`;
+      
+      // Descargar archivo
+      XLSX.writeFile(wb, fileName);
+      
+      showNotification(`Control de operarios exportado: ${fileName}`, 'success');
+      
+    } catch (error) {
+      console.error('Error al exportar control de operarios:', error);
+      showNotification('Error al exportar el control de operarios', 'error');
+    }
+  };
 
   // ── Importar backup JSON ───────────────────────────────────────────────────
   const importData = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -3263,7 +3470,10 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                            <option value="2026-12">Diciembre 2026</option>
                         </select>
                      </div>
-                     <button className="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors flex items-center gap-2 text-sm font-black">
+                     <button 
+                        onClick={exportWorkerControlData}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors flex items-center gap-2 text-sm font-black"
+                     >
                         <Download className="w-4 h-4" />
                         Exportar
                      </button>
@@ -5096,7 +5306,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                   // Obtener información completa de los operarios
                   const workers = Array.from(allWorkerIds)
                     .map(workerId => planning.workers.find(w => w.id === workerId))
-                    .filter(worker => worker !== undefined)
+                    .filter(worker => worker !== undefined && !worker.archived) // Excluir operarios archivados
                     .sort((a, b) => {
                       const numA = parseInt(a.code.replace(/\D/g, ''), 10);
                       const numB = parseInt(b.code.replace(/\D/g, ''), 10);

@@ -111,6 +111,9 @@ const PlanningBoard: React.FC<PlanningBoardProps> = ({
 
   // Filtrado robusto de trabajadores para el selector
   const filteredWorkers = planning.workers.filter(w => {
+    // Excluir operarios archivados
+    if (w.archived) return false;
+    
     const matchesSearch = w.name.toLowerCase().includes(workerSearch.toLowerCase()) || w.code.includes(workerSearch);
     if (!matchesSearch) return false;
 
@@ -145,6 +148,11 @@ const PlanningBoard: React.FC<PlanningBoardProps> = ({
     }
 
     return true;
+  }).sort((a, b) => {
+    // Ordenar por código numérico
+    const numA = parseInt(a.code.replace(/\D/g, ''), 10);
+    const numB = parseInt(b.code.replace(/\D/g, ''), 10);
+    return numA - numB;
   });
 
   const getEffectiveEndTime = (job: Job) => {
