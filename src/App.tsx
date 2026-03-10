@@ -4492,7 +4492,10 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                  {planning.fuelRecords.filter(r => r.workerId === editingWorker.id).length === 0 ? (
                    <p className="text-center text-[10px] text-amber-400 font-bold italic py-4">Sin registros</p>
                  ) : (
-                   planning.fuelRecords.filter(r => r.workerId === editingWorker.id).map(record => (
+                   planning.fuelRecords
+                     .filter(r => r.workerId === editingWorker.id)
+                     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                     .map(record => (
                      <div key={record.id} className="flex items-center justify-between bg-white px-3 py-2 rounded-lg border border-amber-50 text-xs">
                         <span className="font-bold text-slate-600">{formatDateDMY(record.date)}</span>
                         <div className="flex gap-4">
