@@ -1457,8 +1457,17 @@ const saveVacationConfig = async () => {
           saturday.setDate(date.getDate() + 1);
           const sunday = new Date(date);
           sunday.setDate(date.getDate() + 2);
-          weekendDays.add(formatDateLocal(saturday));
-          weekendDays.add(formatDateLocal(sunday));
+          
+          // Solo añadir fines de semana que pertenezcan al mes actual
+          const saturdayStr = formatDateLocal(saturday);
+          const sundayStr = formatDateLocal(sunday);
+          
+          if (saturdayStr.startsWith(yearMonth)) {
+            weekendDays.add(saturdayStr);
+          }
+          if (sundayStr.startsWith(yearMonth)) {
+            weekendDays.add(sundayStr);
+          }
         }
       }
     });
