@@ -1550,6 +1550,189 @@ const saveVacationConfig = async () => {
       nominasCount
     };
   }, [planning.jobs]);
+
+  // ── Exportar Días Trabajados FIJOS DISCONTINUOS ─────────────────────────────
+  const exportFDDaysToExcel = () => {
+    try {
+      if (!workerDaysModal) return;
+      
+      const { worker, calculationResult } = workerDaysModal;
+      const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+      const [year, month] = workerDaysModal.month.split('-').map(Number);
+      const monthName = monthNames[month - 1];
+      
+      // Preparar datos para Excel
+      const excelData: any[][] = [];
+      
+      // Cabecera principal
+      excelData.push([`DÍAS TRABAJADOS FIJOS DISCONTINUOS - ${monthName} ${year}`]);
+      excelData.push([]); // Fila vacía
+      
+      // Cabeceras de columnas
+      const headers = ['Código Operario', 'Nombre Completo', 'DNI', 'Días Trabajados', 'Fines de Semana', 'Total', 'Bloques de Nóminas'];
+      excelData.push(headers);
+      excelData.push([]); // Fila vacía
+      
+      // Datos del operario
+      const row = [
+        worker.code || '',
+        worker.name || '',
+        worker.dni || '',
+        calculationResult.workedCount,
+        calculationResult.weekendCount,
+        calculationResult.totalCount,
+        calculationResult.nominasCount
+      ];
+      
+      excelData.push(row);
+      
+      // Crear archivo Excel
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.aoa_to_sheet(excelData);
+      
+      // Configurar anchos de columna
+      ws['!cols'] = [
+        { wch: 15 }, // Código Operario
+        { wch: 30 }, // Nombre Completo
+        { wch: 15 }, // DNI
+        { wch: 15 }, // Días Trabajados
+        { wch: 15 }, // Fines de Semana
+        { wch: 10 }, // Total
+        { wch: 18 }  // Bloques de Nóminas
+      ];
+      
+      // Combinar celda de título
+      ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: headers.length - 1 } }];
+      
+      // Estilo para la cabecera principal
+      ws['A1'].s = {
+        font: { bold: true, sz: 16 },
+        alignment: { horizontal: 'center' }
+      };
+      
+      XLSX.utils.book_append_sheet(wb, ws, 'Días Trabajados');
+      
+      // Generar nombre de archivo
+      const fileName = `Días Trabajados FD ${worker.code} ${monthName} ${year}.xlsx`;
+      
+      // Descargar archivo
+      XLSX.writeFile(wb, fileName);
+      
+      showNotification(`Días trabajados exportados: ${fileName}`, 'success');
+      
+    } catch (error) {
+      console.error('Error al exportar días trabajados:', error);
+      showNotification('Error al exportar días trabajados', 'error');
+    }
+  };
+
+  // ── Exportar TODOS los Días Trabajados FIJOS DISCONTINUOS ───────────────────
+  const exportAllFDDaysToExcel = () => {
+    try {
+      const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+      const [year, month] = selectedMonth.split('-').map(Number);
+      const monthName = monthNames[month - 1];
+      
+      // Filtrar solo FIJOS DISCONTINUOS
+      const fdWorkers = planning.workers.filter(w => w.contractType === ContractType.FIJO_DISCONTINUO && !w.isArchived);
+      
+      if (fdWorkers.length === 0) {
+        showNotification("No hay FIJOS DISCONTINUOS para exportar", "info");
+        return;
+      }
+      
+      // Preparar datos para Excel
+      const excelData: any[][] = [];
+      
+      // Cabecera principal
+      excelData.push([`DÍAS TRABAJADOS FIJOS DISCONTINUOS - ${monthName} ${year}`]);
+      excelData.push([]); // Fila vacía
+      
+      // Cabeceras de columnas
+      const headers = ['Código Operario', 'Nombre Completo', 'DNI', 'Días Trabajados', 'Fines de Semana', 'Total', 'Bloques de Nóminas'];
+      excelData.push(headers);
+      excelData.push([]); // Fila vacía
+      
+      // Datos de todos los operarios FD
+      fdWorkers.forEach(worker => {
+        const calculationResult = calculateWorkerDays(worker.id, selectedMonth);
+        
+        const row = [
+          worker.code || '',
+          worker.name || '',
+          worker.dni || '',
+          calculationResult.workedCount,
+          calculationResult.weekendCount,
+          calculationResult.totalCount,
+          calculationResult.nominasCount
+        ];
+        
+        excelData.push(row);
+      });
+      
+      // Fila de totales generales
+      const totalsRow = ['TOTALES', '', '', '', '', '', ''];
+      excelData.push([]);
+      excelData.push(totalsRow);
+      
+      // Calcular totales generales
+      let totalWorked = 0;
+      let totalWeekend = 0;
+      let totalDays = 0;
+      let totalNominas = 0;
+      
+      fdWorkers.forEach(worker => {
+        const result = calculateWorkerDays(worker.id, selectedMonth);
+        totalWorked += result.workedCount;
+        totalWeekend += result.weekendCount;
+        totalDays += result.totalCount;
+        totalNominas += result.nominasCount;
+      });
+      
+      // Fila con totales calculados
+      const totalsData = ['', '', 'TOTALES', totalWorked, totalWeekend, totalDays, ''];
+      excelData.push(totalsData);
+      
+      // Crear archivo Excel
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.aoa_to_sheet(excelData);
+      
+      // Configurar anchos de columna
+      ws['!cols'] = [
+        { wch: 15 }, // Código Operario
+        { wch: 30 }, // Nombre Completo
+        { wch: 15 }, // DNI
+        { wch: 15 }, // Días Trabajados
+        { wch: 15 }, // Fines de Semana
+        { wch: 10 }, // Total
+        { wch: 18 }  // Bloques de Nóminas
+      ];
+      
+      // Combinar celda de título
+      ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: headers.length - 1 } }];
+      
+      // Estilo para la cabecera principal
+      ws['A1'].s = {
+        font: { bold: true, sz: 16 },
+        alignment: { horizontal: 'center' }
+      };
+      
+      XLSX.utils.book_append_sheet(wb, ws, 'Días Trabajados FD');
+      
+      // Generar nombre de archivo
+      const fileName = `Días Trabajados FD Todos ${monthName} ${year}.xlsx`;
+      
+      // Descargar archivo
+      XLSX.writeFile(wb, fileName);
+      
+      showNotification(`Días trabajados de ${fdWorkers.length} FIJOS DISCONTINUOS exportados: ${fileName}`, 'success');
+      
+    } catch (error) {
+      console.error('Error al exportar días trabajados FD:', error);
+      showNotification('Error al exportar días trabajados FD', 'error');
+    }
+  };
+
   const handleOpenNewWorker = () => {
     setEditingWorker({ id: `w-${Date.now()}`, code: '', name: '', apodo: undefined, dni: '', phone: '', role: 'Mozo Almacén', status: WorkerStatus.DISPONIBLE, contractType: ContractType.FIJO_DISCONTINUO, hasVehicle: false, startTime: '09:00', endTime: '17:00', restrictions: [], restrictedClientIds: [], skills: [JobType.MANIPULACION], completedCourses: [] });
   };
@@ -1564,61 +1747,33 @@ const saveVacationConfig = async () => {
   // Función para calcular días trabajados por fijos discontinuos
 const calculateFDDaysStats = useCallback(() => {
   const currentMonth = selectedMonth;
-  const [year, month] = currentMonth.split('-').map(Number);
-  const today = new Date();
-  const currentDay = today.getFullYear() === year && today.getMonth() + 1 === month 
-    ? today.getDate() 
-    : getMonthDays(currentMonth); // Días del mes completo si no es el mes actual
   
-  const fdWorkers = planning.workers.filter(w => w.contractType === ContractType.FIJO_DISCONTINUO);
+  // Filtrar solo FIJOS DISCONTINUOS no archivados
+  const fdWorkers = planning.workers.filter(w => w.contractType === ContractType.FIJO_DISCONTINUO && !w.isArchived);
+  
+  if (fdWorkers.length === 0) {
+    return {
+      workersWithDays: 0,
+      laborableDays: 0,
+      weekendDays: 0,
+      totalDays: 0
+    };
+  }
+  
   let totalLaborableDays = 0;
   let totalWeekendDays = 0;
   let workersWithDays = 0;
   
+  // Usar la misma lógica que calculateWorkerDays para cada operario
   fdWorkers.forEach(worker => {
-    let workerLaborableDays = 0;
-    let workerWeekendDays = 0;
-    let workedFriday = false;
-    let workedMonday = false;
+    const result = calculateWorkerDays(worker.id, currentMonth);
     
-    // Recorrer días del mes hasta el día actual
-    for (let day = 1; day <= currentDay; day++) {
-      const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-      const dayOfWeek = new Date(dateStr).getDay(); // 0=Dom, 1=Lun, ..., 6=Sáb
-      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-      
-      // Verificar si trabajó ese día
-      const workedThatDay = planning.jobs.some(job => 
-        job.date === dateStr && 
-        !job.isCancelled && 
-        job.assignedWorkerIds.includes(worker.id)
-      );
-      
-      if (workedThatDay) {
-        if (isWeekend) {
-          workerWeekendDays++; // Contar días de fin de semana trabajados directamente
-        } else {
-          workerLaborableDays++; // Contar días laborables trabajados
-        }
-        
-        // Marcar si trabajó viernes o lunes
-        if (dayOfWeek === 5) workedFriday = true; // Viernes
-        if (dayOfWeek === 1) workedMonday = true; // Lunes
-      }
-    }
-    
-    // Si trabajó viernes y lunes, añadir el fin de semana completo
-    if (workedFriday && workedMonday) {
-      workerWeekendDays += 2; // Sábado + Domingo
-    }
-    
-    // Si trabajó al menos un día, contar como operario activo
-    if (workerLaborableDays > 0 || workerWeekendDays > 0) {
+    if (result.workedCount > 0 || result.weekendCount > 0) {
       workersWithDays++;
     }
     
-    totalLaborableDays += workerLaborableDays;
-    totalWeekendDays += workerWeekendDays;
+    totalLaborableDays += result.workedCount;
+    totalWeekendDays += result.weekendCount;
   });
   
   return {
@@ -1627,7 +1782,7 @@ const calculateFDDaysStats = useCallback(() => {
     weekendDays: totalWeekendDays,
     totalDays: totalLaborableDays + totalWeekendDays
   };
-}, [planning.workers, planning.jobs, selectedMonth]);
+}, [planning.workers, planning.jobs, selectedMonth, calculateWorkerDays]);
 
 const fdDaysStats = calculateFDDaysStats();
 
@@ -2807,8 +2962,15 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                         <span className="text-purple-600 font-bold">
                           <strong>Fin:</strong> {fdDaysStats.weekendDays}
                         </span>
-                        <span className="text-green-600 font-bold">
+                        <span className="text-green-600 font-bold flex items-center gap-2">
                           <strong>Total:</strong> {fdDaysStats.totalDays}
+                          <button 
+                            onClick={exportAllFDDaysToExcel}
+                            className="p-1 hover:bg-green-100 text-green-600 hover:text-green-700 rounded transition-colors"
+                            title="Exportar todos los FIJOS DISCONTINUOS a Excel"
+                          >
+                            <FileSpreadsheet className="w-4 h-4" />
+                          </button>
                         </span>
                       </div>
                     </div>
@@ -5023,9 +5185,18 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                              <div className="text-2xl font-black text-orange-500">{workerDaysModal.calculationResult.weekendCount}</div>
                              <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Fines de Semana</div>
                           </div>
-                          <div className="text-center">
-                             <div className="text-2xl font-black text-blue-600">{workerDaysModal.calculationResult.totalCount}</div>
-                             <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total</div>
+                          <div className="text-center flex items-center justify-between gap-2">
+                             <div>
+                                <div className="text-2xl font-black text-blue-600">{workerDaysModal.calculationResult.totalCount}</div>
+                                <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total</div>
+                             </div>
+                             <button 
+                                onClick={exportFDDaysToExcel}
+                                className="p-2 hover:bg-green-50 text-green-600 hover:text-green-700 rounded-lg transition-colors"
+                                title="Exportar a Excel"
+                             >
+                                <FileSpreadsheet className="w-5 h-5" />
+                             </button>
                           </div>
                           <div className="text-center">
                              <div className="text-2xl font-black text-purple-600">{workerDaysModal.calculationResult.nominasCount}</div>
