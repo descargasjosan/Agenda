@@ -270,6 +270,29 @@ const saveWorkerAdvance = async (workerId: string, advance: string) => {
 
 // Función para actualizar valor de celda
 const updateCellValue = async (workerId: string, day: number, value: string) => {
+   // Validar si el día es festivo o fin de semana
+   const [year, month] = selectedMonth.split('-').map(Number);
+   const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+   const dayOfWeek = getDayOfWeek(year, month, day);
+   const isWeekend = dayOfWeek === 0 || dayOfWeek === 6; // Domingo=0, Sábado=6
+   const holidayData = isHoliday(dateStr, planning.customHolidays);
+   const isHolidayDay = !!holidayData;
+   
+   // Permitir B (baja médica) y P (paternidad) en festivos/fin de semana
+   // Bloquear F (faltas), D (?), R (reposo), V (vacaciones) y horas (números)
+   const isAllowedValue = value === 'B' || value === 'P';
+   const isBlockedValue = (value && !isNaN(Number(value))) || ['F', 'D', 'R', 'V'].includes(value);
+   
+   // Impedir guardar valores bloqueados en festivos o fines de semana
+   if ((isHolidayDay || isWeekend) && isBlockedValue) {
+      showNotification(
+         `No se pueden registrar ${value === 'F' ? 'faltas' : value === 'V' ? 'vacaciones' : value === 'R' ? 'reposos' : 'horas'} en ${isHolidayDay ? 'días festivos' : 'fines de semana'}`, 
+         'warning'
+      );
+      setSelectedCell(null);
+      return;
+   }
+   
    // Si es un número (horas), no cerrar modal inmediatamente
    const isNumeric = value && !isNaN(Number(value));
    
@@ -4502,16 +4525,23 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                                           const dayOfWeek = getDayOfWeek(year, month, day);
                                           const isWeekend = dayOfWeek === 0 || dayOfWeek === 6; // Domingo=0, Sábado=6
                                           const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                                          const isHoliday = planning.customHolidays.some(h => h.date === dateStr);
-                                          const isNonWorkingDay = isWeekend || isHoliday;
+                                          const holidayData = isHoliday(dateStr, planning.customHolidays);
+                                          const isHolidayDay = !!holidayData;
+                                          const isNonWorkingDay = isWeekend || isHolidayDay;
                                           
                                           return (
                                              <td 
                                                 key={day} 
                                                 className={`p-1 text-center cursor-pointer hover:bg-blue-50 transition-colors border-r border-slate-200 ${
-                                                   isNonWorkingDay ? 'bg-slate-100' : 'bg-white'
-                                                } ${isCurrentDay ? 'bg-green-50' : ''}`}
-                                                onClick={() => handleCellClick(worker.id, day)}
+                                                   isHolidayDay ? 'bg-red-50' : 
+                                                   isWeekend ? 'bg-slate-100' : 
+                                                   isCurrentDay ? 'bg-green-50' : 'bg-white'
+                                                }`}
+                                                onClick={() => {
+                                                   // Permitir clic en festivos/fin de semana para poder registrar B (baja) o P (paternidad)
+                                                   // El bloqueo se hará al intentar guardar valores no permitidos
+                                                   handleCellClick(worker.id, day);
+                                                }}
                                              >
                                                 <div className={`w-5 h-5 mx-auto flex items-center justify-center text-[10px] font-black rounded ${getCellColor(cellValue)} hover:opacity-80`}>
                                                    {cellValue}
