@@ -279,14 +279,17 @@ const updateCellValue = async (workerId: string, day: number, value: string) => 
    const isHolidayDay = !!holidayData;
    
    // Permitir B (baja médica) y P (paternidad) en festivos/fin de semana
-   // Bloquear F (faltas), D (?), R (reposo), V (vacaciones) y horas (números)
-   const isAllowedValue = value === 'B' || value === 'P';
-   const isBlockedValue = (value && !isNaN(Number(value))) || ['F', 'D', 'R', 'V'].includes(value);
+   // Permitir V (vacaciones) solo en fines de semana, NO en festivos
+   // Bloquear F (faltas), D (?), R (reposo) y horas (números) en festivos/fin de semana
+   const isAllowedValue = value === 'B' || value === 'P' || (value === 'V' && isWeekend && !isHolidayDay);
+   const isBlockedValue = (value && !isNaN(Number(value))) || ['F', 'D', 'R'].includes(value) || (value === 'V' && isHolidayDay);
    
    // Impedir guardar valores bloqueados en festivos o fines de semana
-   if ((isHolidayDay || isWeekend) && isBlockedValue) {
+   if (isBlockedValue) {
+      const context = isHolidayDay ? 'días festivos' : 'fines de semana';
+      const reason = value === 'F' ? 'faltas' : value === 'V' ? 'vacaciones' : value === 'R' ? 'reposos' : 'horas';
       showNotification(
-         `No se pueden registrar ${value === 'F' ? 'faltas' : value === 'V' ? 'vacaciones' : value === 'R' ? 'reposos' : 'horas'} en ${isHolidayDay ? 'días festivos' : 'fines de semana'}`, 
+         `No se pueden registrar ${reason} en ${context}`, 
          'warning'
       );
       setSelectedCell(null);
