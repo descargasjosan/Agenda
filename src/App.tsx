@@ -842,6 +842,13 @@ const saveVacationConfig = async () => {
   const [keepDeliveryNoteOnDuplicate, setKeepDeliveryNoteOnDuplicate] = useState(false);
   const [workerDaysModal, setWorkerDaysModal] = useState<{worker: Worker, month: string} | null>(null);
   const [newCourseName, setNewCourseName] = useState('');
+  
+  // Variables para calculadora de kilómetros
+  const [matrizDistancias, setMatrizDistancias] = useState(new Map());
+  const [sedesMatriz, setSedesMatriz] = useState([]);
+  const [origenSeleccionado, setOrigenSeleccionado] = useState('');
+  const [destinoSeleccionado, setDestinoSeleccionado] = useState('');
+  const [kilometrosCalculados, setKilometrosCalculados] = useState(0);
   const [dbTab, setDbTab] = useState<'tasks' | 'courses'>('tasks');
   const [editingStandardTask, setEditingStandardTask] = useState<StandardTask | null>(null);
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
@@ -1735,6 +1742,160 @@ const saveVacationConfig = async () => {
 
   const handleOpenNewWorker = () => {
     setEditingWorker({ id: `w-${Date.now()}`, code: '', name: '', apodo: undefined, dni: '', phone: '', role: 'Mozo Almacén', status: WorkerStatus.DISPONIBLE, contractType: ContractType.FIJO_DISCONTINUO, hasVehicle: false, startTime: '09:00', endTime: '17:00', restrictions: [], restrictedClientIds: [], skills: [JobType.MANIPULACION], completedCourses: [] });
+  };
+
+  // ── Cargar Matriz de Distancias ───────────────────────────────────────────
+  const cargarMatrizDistancias = async () => {
+    try {
+      // Añadir timestamp para evitar caché
+      const timestamp = new Date().getTime();
+      const response = await fetch(`/data/matriz-distancias.xlsx?t=${timestamp}`);
+      const arrayBuffer = await response.arrayBuffer();
+      const workbook = XLSX.read(arrayBuffer);
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      const data = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+      
+      // Extraer nombres de sedes de la primera fila y primera columna
+      const sedes = data[0].slice(1); // Primera fila sin el primer elemento vacío
+      const matriz = new Map();
+      
+      // Procesar matriz (empezando desde fila 1, columna 1)
+      for (let i = 1; i < data.length; i++) {
+        const origen = data[i][0]; // Primera columna
+        for (let j = 1; j < data[i].length; j++) {
+          const destino = sedes[j - 1];
+          const distancia = data[i][j];
+          
+          if (origen && destino && distancia > 0) {
+            const clave = `${origen}|${destino}`;
+            matriz.set(clave, distancia);
+          }
+        }
+      }
+      
+      console.log(`Matriz cargada: ${matriz.size} distancias, ${sedes.length} sedes`);
+      setMatrizDistancias(matriz);
+      setSedesMatriz(sedes);
+      showNotification(`Matriz actualizada: ${sedes.length} sedes, ${matriz.size} distancias`, 'success');
+    } catch (error) {
+      console.error('Error cargando matriz:', error);
+      showNotification('Error al cargar matriz de distancias', 'error');
+    }
+  };
+
+  // ── Calcular kilómetros entre sedes ─────────────────────────────────────
+  const calcularKilometros = () => {
+    if (!origenSeleccionado || !destinoSeleccionado) {
+      setKilometrosCalculados(0);
+      return;
+    }
+    
+    if (origenSeleccionado === destinoSeleccionado) {
+      setKilometrosCalculados(0);
+      return;
+    }
+    
+    const clave = `${origenSeleccionado}|${destinoSeleccionado}`;
+    const distancia = matrizDistancias.get(clave) || 0;
+    setKilometrosCalculados(distancia);
+  };
+
+  // ── Cargar matriz al iniciar la app ─────────────────────────────────────
+  useEffect(() => {
+    cargarMatrizDistancias();
+  }, []);
+
+  // ── Recalcular cuando cambian los selectores ───────────────────────────
+  useEffect(() => {
+    calcularKilometros();
+  }, [origenSeleccionado, destinoSeleccionado, matrizDistancias]);
+
+  // ── Exportar Clientes a Excel ───────────────────────────────────────────────
+  const exportClientsToExcel = () => {
+    try {
+      if (planning.clients.length === 0) {
+        showNotification("No hay clientes para exportar", "info");
+        return;
+      }
+      
+      // Preparar datos para Excel
+      const excelData: any[][] = [];
+      
+      // Cabecera principal
+      excelData.push(['LISTADO DE CLIENTES Y SEDES']);
+      excelData.push([]); // Fila vacía
+      
+      // Cabeceras de columnas
+      const headers = ['Nombre Cliente', 'SEDE', 'Dirección de la Sede'];
+      excelData.push(headers);
+      excelData.push([]); // Fila vacía
+      
+      // Datos de clientes y sus sedes
+      planning.clients.forEach(client => {
+        if (client.centers && client.centers.length > 0) {
+          // Una fila por cada sede
+          client.centers.forEach(center => {
+            const row = [
+              client.name || '',
+              center.name || '',
+              center.address || ''
+            ];
+            excelData.push(row);
+          });
+        } else {
+          // Cliente sin sedes
+          const row = [
+            client.name || '',
+            'SIN SEDES',
+            ''
+          ];
+          excelData.push(row);
+        }
+      });
+      
+      // Estadísticas finales
+      const totalClients = planning.clients.length;
+      const totalCenters = planning.clients.reduce((sum, client) => sum + (client.centers?.length || 0), 0);
+      
+      excelData.push([]);
+      excelData.push(['RESUMEN']);
+      excelData.push(['Total Clientes:', totalClients]);
+      excelData.push(['Total Sedes:', totalCenters]);
+      
+      // Crear archivo Excel
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.aoa_to_sheet(excelData);
+      
+      // Configurar anchos de columna
+      ws['!cols'] = [
+        { wch: 30 }, // Nombre Cliente
+        { wch: 25 }, // SEDE
+        { wch: 40 }  // Dirección de la Sede
+      ];
+      
+      // Combinar celda de título
+      ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: headers.length - 1 } }];
+      
+      // Estilo para la cabecera principal
+      ws['A1'].s = {
+        font: { bold: true, sz: 16 },
+        alignment: { horizontal: 'center' }
+      };
+      
+      XLSX.utils.book_append_sheet(wb, ws, 'Clientes y Sedes');
+      
+      // Generar nombre de archivo
+      const fileName = `Clientes y Sedes ${new Date().toISOString().split('T')[0]}.xlsx`;
+      
+      // Descargar archivo
+      XLSX.writeFile(wb, fileName);
+      
+      showNotification(`Clientes exportados: ${fileName}`, 'success');
+      
+    } catch (error) {
+      console.error('Error al exportar clientes:', error);
+      showNotification('Error al exportar clientes', 'error');
+    }
   };
 
   const saveWorker = useCallback(async (worker: Worker | null) => {
@@ -2707,6 +2868,57 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                       <button onClick={goToToday} className="px-3 py-2 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-blue-100 transition-colors">Hoy</button>
                    </div>
                </header>
+
+               {/* Calculadora de Kilómetros */}
+               <div className="bg-white m-6 p-6 rounded-2xl border border-slate-100">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-black text-slate-900">Calculadora de Kilómetros</h3>
+                    <button 
+                      onClick={cargarMatrizDistancias}
+                      className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg text-xs font-black uppercase tracking-widest hover:bg-blue-100 transition-colors"
+                    >
+                      Recargar Matriz
+                    </button>
+                  </div>
+                  
+                  <div className="grid grid-cols-3 gap-4 mb-4">
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Origen</label>
+                      <select 
+                        value={origenSeleccionado}
+                        onChange={(e) => setOrigenSeleccionado(e.target.value)}
+                        className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none"
+                      >
+                        <option value="">Seleccionar origen...</option>
+                        {sedesMatriz.map((sede, index) => (
+                          <option key={index} value={sede}>{sede}</option>
+                        ))}
+                      </select>
+                    </div>
+                    
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Destino</label>
+                      <select 
+                        value={destinoSeleccionado}
+                        onChange={(e) => setDestinoSeleccionado(e.target.value)}
+                        className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none"
+                      >
+                        <option value="">Seleccionar destino...</option>
+                        {sedesMatriz.map((sede, index) => (
+                          <option key={index} value={sede}>{sede}</option>
+                        ))}
+                      </select>
+                    </div>
+                    
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Kilómetros</label>
+                      <div className="w-full bg-blue-50 border-2 border-blue-200 rounded-xl px-4 py-3 font-black text-blue-700 text-center">
+                        {kilometrosCalculados > 0 ? `${kilometrosCalculados} km` : '--'}
+                      </div>
+                    </div>
+                  </div>
+               </div>
+
                <FleetManager 
                   planning={planning}
                   onAddVehicle={handleAddVehicle}
@@ -3455,7 +3667,16 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
            <div className="flex-1 bg-slate-50 overflow-y-auto p-8 custom-scrollbar">
              <div className="flex items-center justify-between mb-8">
                <h2 className="text-2xl font-black text-slate-900 italic uppercase">Gestión de Clientes</h2>
-               <button onClick={handleOpenNewClientHandler} className="bg-slate-900 text-white px-6 py-4 rounded-[24px] font-black text-[12px] uppercase tracking-widest">+ Nuevo Cliente</button>
+               <div className="flex gap-3">
+                 <button 
+                   onClick={exportClientsToExcel}
+                   className="bg-green-600 text-white px-6 py-4 rounded-[24px] font-black text-[12px] uppercase tracking-widest flex items-center gap-2 hover:bg-green-700 transition-colors"
+                 >
+                   <FileSpreadsheet className="w-4 h-4" />
+                   Exportar Clientes
+                 </button>
+                 <button onClick={handleOpenNewClientHandler} className="bg-slate-900 text-white px-6 py-4 rounded-[24px] font-black text-[12px] uppercase tracking-widest">+ Nuevo Cliente</button>
+               </div>
              </div>
              <div className="grid grid-cols-4 gap-4">
                {planning.clients.sort((a, b) => a.name.localeCompare(b.name)).map(c => (
