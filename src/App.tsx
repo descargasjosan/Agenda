@@ -849,6 +849,14 @@ const saveVacationConfig = async () => {
   const [origenSeleccionado, setOrigenSeleccionado] = useState('');
   const [destinoSeleccionado, setDestinoSeleccionado] = useState('');
   const [kilometrosCalculados, setKilometrosCalculados] = useState(0);
+  
+  // Variables para calculadora de kilómetros pagados
+  const [operarioSeleccionado, setOperarioSeleccionado] = useState('');
+  const [fechaInicio, setFechaInicio] = useState('');
+  const [fechaFin, setFechaFin] = useState('');
+  const [kilometrosPagados, setKilometrosPagados] = useState(0);
+  const [detallesKilometros, setDetallesKilometros] = useState([]);
+  const [calculandoKilometros, setCalculandoKilometros] = useState(false);
   const [dbTab, setDbTab] = useState<'tasks' | 'courses'>('tasks');
   const [editingStandardTask, setEditingStandardTask] = useState<StandardTask | null>(null);
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
@@ -1809,6 +1817,294 @@ const saveVacationConfig = async () => {
   useEffect(() => {
     calcularKilometros();
   }, [origenSeleccionado, destinoSeleccionado, matrizDistancias]);
+
+  // ── Funciones para Kilómetros Pagados ─────────────────────────────────
+  const obtenerSedeTarea = (job: Job) => {
+    const client = planning.clients.find(c => c.id === job.clientId);
+    const center = client?.centers.find(ct => ct.id === job.centerId);
+    return `${client?.name} - ${center?.name}`;
+  };
+
+  const obtenerSedeTareaConColor = (job: Job, index: number) => {
+    const client = planning.clients.find(c => c.id === job.clientId);
+    const center = client?.centers.find(ct => ct.id === job.centerId);
+    const nombreSede = `${client?.name} - ${center?.name}`;
+    
+    // Colores para las sedes según su posición
+    const colores = [
+      'text-gray-600',    // Primera sede - gris
+      'text-blue-600',    // Segunda sede - azul
+      'text-green-600',   // Tercera sede - verde
+      'text-purple-600',  // Cuarta sede - púrpura
+      'text-orange-600',  // Quinta sede - naranja
+      'text-pink-600',    // Sexta sede - rosa
+      'text-indigo-600',  // Séptima sede - índigo
+      'text-red-600',     // Octava sede - rojo
+      'text-teal-600',    // Novena sede - teal
+      'text-amber-600'    // Décima sede - ámbar
+    ];
+    
+    const color = colores[index % colores.length];
+    
+    return {
+      nombre: nombreSede,
+      color: color
+    };
+  };
+
+  const obtenerTareasDia = (operarioId: string, fecha: string) => {
+    return planning.jobs
+      .filter(job => 
+        job.date === fecha && 
+        job.assignedWorkerIds.includes(operarioId) && 
+        !job.isCancelled
+      )
+      .sort((a, b) => a.startTime.localeCompare(b.startTime));
+  };
+
+  const obtenerDiasRango = (fechaInicio: string, fechaFin: string) => {
+    const dias = [];
+    const inicio = new Date(fechaInicio);
+    const fin = new Date(fechaFin);
+    
+    for (let dia = new Date(inicio); dia <= fin; dia.setDate(dia.getDate() + 1)) {
+      dias.push(dia.toISOString().split('T')[0]);
+    }
+    
+    return dias;
+  };
+
+  const calcularDistancia = (origen: string, destino: string) => {
+    const clave = `${origen}|${destino}`;
+    return matrizDistancias.get(clave) || 0;
+  };
+
+  const calcularKilometrosPagados = async () => {
+    if (!operarioSeleccionado || !fechaInicio || !fechaFin) {
+      showNotification('Por favor, completa todos los campos', 'warning');
+      return;
+    }
+
+    setCalculandoKilometros(true);
+    
+    try {
+      let totalKm = 0;
+      const detalles = [];
+      
+      const dias = obtenerDiasRango(fechaInicio, fechaFin);
+      
+      for (const fecha of dias) {
+        const tareasDia = obtenerTareasDia(operarioSeleccionado, fecha);
+        
+        if (tareasDia.length === 0) continue;
+        
+        let kmDia = 0;
+        const detallesDia = {
+          fecha,
+          tareas: tareasDia.length,
+          kmPrimero: { valor: 0, paga: false, destino: '' },
+          kmIntermedios: 0,
+          intermediosDetalles: [],
+          kmUltimo: { valor: 0, paga: false, origen: '' },
+          kmTotal: 0,
+          sedesTrabajadas: [],
+          sedesConColores: []
+        };
+        
+        // Primer trayecto: OFICINA → primera sede
+        const primerDestinoInfo = obtenerSedeTareaConColor(tareasDia[0], 0);
+        const kmPrimero = calcularDistancia('OFICINA - VALENCIA', primerDestinoInfo.nombre);
+        const pagaPrimero = kmPrimero >= 17;
+        
+        detallesDia.kmPrimero = { valor: kmPrimero, paga: pagaPrimero, destino: primerDestinoInfo.nombre };
+        detallesDia.sedesTrabajadas.push(primerDestinoInfo.nombre);
+        detallesDia.sedesConColores.push(primerDestinoInfo);
+        
+        if (pagaPrimero) {
+          kmDia += kmPrimero;
+        }
+        
+        // Trayectos intermedios - SIEMPRE PAGAN (sin importar distancia)
+        let kmIntermedios = 0;
+        const intermediosDetalles = [];
+        
+        for (let i = 1; i < tareasDia.length; i++) {
+          const origenInfo = obtenerSedeTareaConColor(tareasDia[i-1], i-1);
+          const destinoInfo = obtenerSedeTareaConColor(tareasDia[i], i);
+          const kmIntermedio = calcularDistancia(origenInfo.nombre, destinoInfo.nombre);
+          kmIntermedios += kmIntermedio;
+          
+          intermediosDetalles.push({
+            origen: origenInfo.nombre,
+            destino: destinoInfo.nombre,
+            km: kmIntermedio,
+            siemprePaga: true
+          });
+          
+          if (!detallesDia.sedesTrabajadas.includes(destinoInfo.nombre)) {
+            detallesDia.sedesTrabajadas.push(destinoInfo.nombre);
+            detallesDia.sedesConColores.push(destinoInfo);
+          }
+        }
+        
+        detallesDia.kmIntermedios = kmIntermedios;
+        detallesDia.intermediosDetalles = intermediosDetalles;
+        kmDia += kmIntermedios; // SIEMPRE se añaden
+        
+        // Último trayecto: última sede → OFICINA
+        const ultimaTarea = tareasDia[tareasDia.length-1];
+        const ultimoOrigenInfo = obtenerSedeTareaConColor(ultimaTarea, tareasDia.length-1);
+        const kmUltimo = calcularDistancia(ultimoOrigenInfo.nombre, 'OFICINA - VALENCIA');
+        const pagaUltimo = kmUltimo >= 17;
+        
+        detallesDia.kmUltimo = { valor: kmUltimo, paga: pagaUltimo, origen: ultimoOrigenInfo.nombre };
+        
+        if (pagaUltimo) {
+          kmDia += kmUltimo;
+        }
+        
+        detallesDia.kmTotal = kmDia;
+        totalKm += kmDia;
+        detalles.push(detallesDia);
+      }
+      
+      setKilometrosPagados(totalKm);
+      setDetallesKilometros(detalles);
+      
+      showNotification(`Cálculo completado: ${totalKm.toFixed(1)} km pagados`, 'success');
+      
+    } catch (error) {
+      console.error('Error calculando kilómetros:', error);
+      showNotification('Error al calcular kilómetros', 'error');
+    } finally {
+      setCalculandoKilometros(false);
+    }
+  };
+
+  // ── Exportar Kilómetros Pagados a Excel ───────────────────────────────────
+  const exportKilometrosPagados = () => {
+    try {
+      if (kilometrosPagados === 0 || detallesKilometros.length === 0) {
+        showNotification("No hay datos para exportar", "info");
+        return;
+      }
+      
+      const operario = planning.workers.find(w => w.id === operarioSeleccionado);
+      const operarioNombre = operario?.name || 'Operario';
+      
+      // Preparar datos para Excel
+      const excelData: any[][] = [];
+      
+      // Cabecera principal
+      excelData.push([`INFORME DE KILÓMETROS PAGADOS - ${operarioNombre}`]);
+      excelData.push([`Período: ${formatDateDMY(fechaInicio)} al ${formatDateDMY(fechaFin)}`]);
+      excelData.push([]); // Fila vacía
+      
+      // Resumen general
+      excelData.push(['RESUMEN GENERAL']);
+      excelData.push(['Total Kilómetros Pagados:', kilometrosPagados.toFixed(1), 'km']);
+      excelData.push(['Días Trabajados:', detallesKilometros.length]);
+      excelData.push(['Media Diaria:', (kilometrosPagados / detallesKilometros.length).toFixed(1), 'km']);
+      excelData.push([]);
+      
+      // Cabeceras de tabla detallada
+      const headers = [
+        'Fecha',
+        'Sedes Trabajadas',
+        'Primer Trayecto (OFICINA → Sede)',
+        'Km Primer Trayecto',
+        'Paga Primer Trayecto',
+        'Trayectos Intermedios',
+        'Km Intermedios',
+        'Último Trayecto (Sede → OFICINA)',
+        'Km Último Trayecto',
+        'Paga Último Trayecto',
+        'Total Km Pagados Día'
+      ];
+      excelData.push(headers);
+      excelData.push([]); // Fila vacía
+      
+      // Datos detallados por día
+      detallesKilometros.forEach(dia => {
+        const sedesStr = dia.sedesTrabajadas.join(' → ');
+        const intermediosStr = dia.intermediosDetalles
+          .map(d => `${d.origen} → ${d.destino} (${d.km}km)`)
+          .join(' | ');
+        
+        const row = [
+          formatDateDMY(dia.fecha),
+          sedesStr,
+          `OFICINA → ${dia.kmPrimero.destino}`,
+          dia.kmPrimero.valor.toFixed(1),
+          dia.kmPrimero.paga ? 'SÍ' : 'NO',
+          intermediosStr || 'Sin intermedios',
+          dia.kmIntermedios.toFixed(1),
+          `${dia.kmUltimo.origen} → OFICINA`,
+          dia.kmUltimo.valor.toFixed(1),
+          dia.kmUltimo.paga ? 'SÍ' : 'NO',
+          dia.kmTotal.toFixed(1)
+        ];
+        
+        excelData.push(row);
+      });
+      
+      // Estadísticas finales
+      excelData.push([]);
+      excelData.push(['ESTADÍSTICAS ADICIONALES']);
+      excelData.push(['Primeros trayectos pagados:', detallesKilometros.filter(d => d.kmPrimero.paga).length, 'de', detallesKilometros.length]);
+      excelData.push(['Últimos trayectos pagados:', detallesKilometros.filter(d => d.kmUltimo.paga).length, 'de', detallesKilometros.length]);
+      excelData.push(['Total km intermedios:', detallesKilometros.reduce((sum, d) => sum + d.kmIntermedios, 0).toFixed(1), 'km']);
+      
+      // Crear archivo Excel
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.aoa_to_sheet(excelData);
+      
+      // Configurar anchos de columna
+      ws['!cols'] = [
+        { wch: 12 }, // Fecha
+        { wch: 40 }, // Sedes Trabajadas
+        { wch: 30 }, // Primer Trayecto
+        { wch: 15 }, // Km Primer Trayecto
+        { wch: 15 }, // Paga Primer Trayecto
+        { wch: 50 }, // Trayectos Intermedios
+        { wch: 15 }, // Km Intermedios
+        { wch: 30 }, // Último Trayecto
+        { wch: 15 }, // Km Último Trayecto
+        { wch: 15 }, // Paga Último Trayecto
+        { wch: 18 }  // Total Km Pagados Día
+      ];
+      
+      // Combinar celdas de título
+      ws['!merges'] = [
+        { s: { r: 0, c: 0 }, e: { r: 0, c: headers.length - 1 } },
+        { s: { r: 1, c: 0 }, e: { r: 1, c: headers.length - 1 } }
+      ];
+      
+      // Estilos para cabeceras principales
+      ws['A1'].s = {
+        font: { bold: true, sz: 16 },
+        alignment: { horizontal: 'center' }
+      };
+      ws['A2'].s = {
+        font: { bold: true, sz: 12 },
+        alignment: { horizontal: 'center' }
+      };
+      
+      XLSX.utils.book_append_sheet(wb, ws, 'Kilómetros Pagados');
+      
+      // Generar nombre de archivo
+      const fileName = `Kilometros Pagados ${operarioNombre} ${fechaInicio} a ${fechaFin}.xlsx`;
+      
+      // Descargar archivo
+      XLSX.writeFile(wb, fileName);
+      
+      showNotification(`Kilómetros pagados exportados: ${fileName}`, 'success');
+      
+    } catch (error) {
+      console.error('Error al exportar kilómetros pagados:', error);
+      showNotification('Error al exportar kilómetros pagados', 'error');
+    }
+  };
 
   // ── Exportar Clientes a Excel ───────────────────────────────────────────────
   const exportClientsToExcel = () => {
@@ -2868,6 +3164,190 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                       <button onClick={goToToday} className="px-3 py-2 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-blue-100 transition-colors">Hoy</button>
                    </div>
                </header>
+
+               {/* Calculadora de Kilómetros Pagados */}
+               <div className="bg-white m-6 p-6 rounded-2xl border border-slate-100">
+                  <h3 className="text-lg font-black text-slate-900 mb-6">Calculadora de Kilómetros Pagados</h3>
+                  
+                  {/* Filtros */}
+                  <div className="grid grid-cols-3 gap-4 mb-6">
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Operario (con vehículo)</label>
+                      <select 
+                        value={operarioSeleccionado}
+                        onChange={(e) => setOperarioSeleccionado(e.target.value)}
+                        className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none"
+                      >
+                        <option value="">Seleccionar operario...</option>
+                        {planning.workers
+                          .filter(w => !w.isArchived && w.hasVehicle)
+                          .sort((a, b) => a.name.localeCompare(b.name))
+                          .map(worker => (
+                            <option key={worker.id} value={worker.id}>
+                              {worker.name} 🚗
+                            </option>
+                          ))}
+                      </select>
+                      {planning.workers.filter(w => !w.isArchived && w.hasVehicle).length === 0 && (
+                        <p className="text-xs text-amber-600 mt-1">
+                          ⚠️ No hay operarios con vehículo propio
+                        </p>
+                      )}
+                    </div>
+                    
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Fecha Inicio</label>
+                      <input 
+                        type="date"
+                        value={fechaInicio}
+                        onChange={(e) => setFechaInicio(e.target.value)}
+                        className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Fecha Fin</label>
+                      <input 
+                        type="date"
+                        value={fechaFin}
+                        onChange={(e) => setFechaFin(e.target.value)}
+                        className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none"
+                      />
+                    </div>
+                  </div>
+                  
+                  {/* Botón de cálculo */}
+                  <div className="flex gap-3 mb-6">
+                    <button 
+                      onClick={calcularKilometrosPagados}
+                      disabled={calculandoKilometros}
+                      className="px-6 py-3 bg-green-600 text-white rounded-xl font-black text-[12px] uppercase tracking-widest hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {calculandoKilometros ? 'Calculando...' : 'Calcular Kilómetros Pagados'}
+                    </button>
+                    
+                    {kilometrosPagados > 0 && (
+                      <button 
+                        onClick={exportKilometrosPagados}
+                        className="px-6 py-3 bg-blue-600 text-white rounded-xl font-black text-[12px] uppercase tracking-widest hover:bg-blue-700 transition-colors flex items-center gap-2"
+                      >
+                        <FileSpreadsheet className="w-4 h-4" />
+                        Exportar a Excel
+                      </button>
+                    )}
+                  </div>
+                  
+                  {/* Resultados */}
+                  {kilometrosPagados > 0 && (
+                    <div className="bg-slate-50 p-6 rounded-xl border border-slate-200">
+                      {/* Resumen completo en una sola línea */}
+                      <div className="flex items-center justify-center gap-8 mb-6">
+                        {/* Total kilómetros */}
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-3xl font-black text-slate-800">
+                            {kilometrosPagados.toFixed(1)} km
+                          </h4>
+                          <p className="text-lg text-slate-600 font-bold uppercase tracking-widest">
+                            Total Kilómetros Pagados
+                          </p>
+                        </div>
+                        
+                        {/* Separador */}
+                        <div className="w-px h-8 bg-slate-300"></div>
+                        
+                        {/* Estadísticas */}
+                        <div className="flex items-center gap-6">
+                          <div className="text-center">
+                            <div className="text-xl font-bold text-slate-700">
+                              {detallesKilometros.filter(d => d.kmPrimero.paga).length}
+                            </div>
+                            <div className="text-xs text-slate-500">Primeros trayectos pagados</div>
+                          </div>
+                          <div className="text-center">
+                            <div className="text-xl font-bold text-slate-700">
+                              {detallesKilometros.reduce((sum, d) => sum + d.kmIntermedios, 0).toFixed(1)}
+                            </div>
+                            <div className="text-xs text-slate-500">Km intermedios totales</div>
+                          </div>
+                          <div className="text-center">
+                            <div className="text-xl font-bold text-slate-700">
+                              {detallesKilometros.filter(d => d.kmUltimo.paga).length}
+                            </div>
+                            <div className="text-xs text-slate-500">Últimos trayectos pagados</div>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Detalles por día con más altura */}
+                      <div className="max-h-80 overflow-y-auto pr-2">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b border-slate-300">
+                              <th className="text-left py-2 w-28 pr-4">Fecha</th>
+                              <th className="text-left py-2 flex-1">Sedes Trabajadas</th>
+                              <th className="text-center py-2 w-20 pl-4">Primer</th>
+                              <th className="text-center py-2 w-20 pl-4">Intermedios</th>
+                              <th className="text-center py-2 w-20 pl-4">Último</th>
+                              <th className="text-right py-2 w-20 pr-4">Total</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {detallesKilometros.map((dia, index) => (
+                              <tr key={index} className="border-b border-slate-100">
+                                <td className="py-2 text-xs pr-4">{formatDateDMY(dia.fecha)}</td>
+                                <td className="py-2">
+                                  <div className="text-xs whitespace-normal truncate" title={dia.sedesTrabajadas.join(' → ')}>
+                                    {dia.sedesConColores.map((sede, index) => (
+                                      <span key={index} className={`font-semibold ${sede.color}`}>
+                                        {sede.nombre}
+                                        {index < dia.sedesConColores.length - 1 && (
+                                          <span className="text-slate-400 mx-1">→</span>
+                                        )}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </td>
+                                <td className="text-center py-2 pl-4">
+                                  <div>
+                                    <span className={dia.kmPrimero.paga ? 'text-green-600' : 'text-red-600'}>
+                                      {dia.kmPrimero.valor.toFixed(1)}km
+                                    </span>
+                                    {dia.kmPrimero.paga && (
+                                      <div className="text-xs text-green-500">✓</div>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="text-center py-2 text-green-600 pl-4">
+                                  <div>
+                                    {dia.kmIntermedios.toFixed(1)}km
+                                    {dia.intermediosDetalles.length > 0 && (
+                                      <div className="text-xs text-green-500">
+                                        {dia.intermediosDetalles.length} trayectos
+                                      </div>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="text-center py-2 pl-4">
+                                  <div>
+                                    <span className={dia.kmUltimo.paga ? 'text-green-600' : 'text-red-600'}>
+                                      {dia.kmUltimo.valor.toFixed(1)}km
+                                    </span>
+                                    {dia.kmUltimo.paga && (
+                                      <div className="text-xs text-green-500">✓</div>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="text-right py-2 font-bold text-slate-800 pr-4">
+                                  {dia.kmTotal.toFixed(1)}km
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+               </div>
 
                {/* Calculadora de Kilómetros */}
                <div className="bg-white m-6 p-6 rounded-2xl border border-slate-100">
