@@ -4706,7 +4706,15 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                            
                            {/* Columna Anticipo */}
                            <td className="p-1 text-center border-r border-slate-200">
-                              <span className="text-xs text-slate-600">-</span>
+                              <span className="text-xs text-slate-600">
+                                 {(() => {
+                                    const activeWorkers = planning.workers.filter(w => !w.isArchived);
+                                    return activeWorkers.reduce((sum, w) => {
+                                       const advance = getWorkerAdvance(w.id);
+                                       return sum + (parseInt(advance) || 0);
+                                    }, 0);
+                                 })()}€
+                              </span>
                            </td>
                            
                            {/* Columna S. Bruto */}
