@@ -2584,7 +2584,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
       });
       
       // Añadir columnas de totales
-      headers.push('Faltas', 'Baja Médica', 'Reposo', 'Vacaciones', 'Horas', 'Saldo Vacaciones', 'Anticipo');
+      headers.push('Faltas', 'Baja Médica', 'Reposo', 'Vacaciones', 'Horas', 'Saldo Vacaciones', 'Anticipo', 'S. Bruto');
       
       excelData.push(headers);
       excelData.push([]); // Fila vacía después de cabeceras
@@ -2616,7 +2616,8 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
           totals.totalVacaciones || 0,
           totals.totalHours || 0,
           vac.remaining || 0,
-          advance || 0
+          advance || 0,
+          worker.salary || ''
         );
         
         excelData.push(row);
@@ -2640,7 +2641,8 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
         grandTotals.totalVacaciones || 0,
         grandTotals.totalHours || 0,
         '',
-        ''
+        '',
+        activeWorkers.reduce((sum, w) => sum + (w.salary || 0), 0)
       );
       
       excelData.push([]);
@@ -2663,7 +2665,8 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
         { wch: 10 }, // Vacaciones
         { wch: 8 },  // Horas
         { wch: 12 }, // Saldo Vacaciones
-        { wch: 8 }   // Anticipo
+        { wch: 8 },  // Anticipo
+        { wch: 10 }  // S. Bruto
       ];
       ws['!cols'] = colWidths;
       
@@ -3370,9 +3373,11 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                         className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none"
                       >
                         <option value="">Seleccionar origen...</option>
-                        {sedesMatriz.map((sede, index) => (
-                          <option key={index} value={sede}>{sede}</option>
-                        ))}
+                        {sedesMatriz
+                          .sort((a, b) => a.localeCompare(b))
+                          .map((sede, index) => (
+                            <option key={index} value={sede}>{sede}</option>
+                          ))}
                       </select>
                     </div>
                     
@@ -3384,9 +3389,11 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                         className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none"
                       >
                         <option value="">Seleccionar destino...</option>
-                        {sedesMatriz.map((sede, index) => (
-                          <option key={index} value={sede}>{sede}</option>
-                        ))}
+                        {sedesMatriz
+                          .sort((a, b) => a.localeCompare(b))
+                          .map((sede, index) => (
+                            <option key={index} value={sede}>{sede}</option>
+                          ))}
                       </select>
                     </div>
                     
@@ -4439,6 +4446,8 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                            <th className="p-1 text-xs font-black text-slate-700 uppercase text-center border-r border-slate-200 min-w-[35px]">Vac. Mes</th>
                            <th className="p-1 text-xs font-black text-slate-700 uppercase text-center border-r border-slate-200 min-w-[40px]">Saldo Vac.</th>
                            <th className="p-1 text-xs font-black text-slate-700 uppercase text-center border-r border-slate-200 min-w-[35px]">Anticipo</th>
+                           <th className="p-1 text-xs font-black text-slate-700 uppercase text-center border-r border-slate-200 min-w-[45px]">S. Bruto</th>
+                           <th className="p-1 text-xs font-black text-slate-700 uppercase text-center min-w-[45px]">S. Neto</th>
                         </tr>
                      </thead>
                      
@@ -4598,10 +4607,122 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                                           title="Anticipo mensual (máximo 4 cifras)"
                                        />
                                     </td>
+                                    {/* Columna Salario Bruto */}
+                                    <td className="p-1 text-center border-r border-slate-200 bg-white">
+                                       <input
+                                          type="number"
+                                          placeholder="0"
+                                          value={worker.salary || ''}
+                                          onChange={(e) => {
+                                             const value = e.target.value;
+                                             const updatedWorker = { ...worker, salary: value ? parseFloat(value) : undefined };
+                                             saveWorker(updatedWorker);
+                                          }}
+                                          className={`w-16 px-1 py-0.5 text-[10px] text-center border rounded focus:outline-none focus:ring-1 focus:ring-blue-500 [-moz-appearance:_textfield] [&::-webkit-inner-spin-button]:m-0 [&::-webkit-outer-spin-button]:m-0 [&::-webkit-inner-spin-button]:hidden [&::-webkit-outer-spin-button]:hidden ${
+                                             worker.salary && worker.salary > 0 
+                                                ? 'border-blue-600 bg-blue-50 text-blue-700 font-bold' 
+                                                : 'border-slate-300'
+                                          }`}
+                                          title="Salario Bruto (€)"
+                                       />
+                                    </td>
+                                    {/* Columna Salario Neto */}
+                                    <td className="p-1 text-center bg-white">
+                                       <input
+                                          type="number"
+                                          placeholder="0"
+                                          value={worker.netSalary || ''}
+                                          onChange={(e) => {
+                                             const value = e.target.value;
+                                             const updatedWorker = { ...worker, netSalary: value ? parseFloat(value) : undefined };
+                                             saveWorker(updatedWorker);
+                                          }}
+                                          className={`w-16 px-1 py-0.5 text-[10px] text-center border rounded focus:outline-none focus:ring-1 focus:ring-green-500 [-moz-appearance:_textfield] [&::-webkit-inner-spin-button]:m-0 [&::-webkit-outer-spin-button]:m-0 [&::-webkit-inner-spin-button]:hidden [&::-webkit-outer-spin-button]:hidden ${
+                                             worker.netSalary && worker.netSalary > 0 
+                                                ? 'border-green-600 bg-green-50 text-green-700 font-bold' 
+                                                : 'border-slate-300'
+                                          }`}
+                                          title="Salario Neto (€)"
+                                       />
+                                    </td>
                                  </tr>
                               );
                            });
                         })()}
+
+                        {/* Fila de Totales Generales */}
+                        <tr className="border-t-2 border-slate-300 bg-slate-50 font-black">
+                           {/* Celda TOTALES - coincide con la columna Operario de las filas */}
+                           <td className="p-2 text-center border-r border-slate-200 bg-white">
+                              <span className="text-xs text-slate-700 uppercase tracking-widest">TOTALES</span>
+                           </td>
+                           
+                           {/* Totales por día - mismo número que en las filas de operarios */}
+                           {(() => {
+                              const days = getMonthDays(selectedMonth);
+                              return days.map(day => {
+                                 const dayTotal = calculateDayTotals(day);
+                                 return (
+                                    <td key={day} className="p-1 text-center border-r border-slate-200">
+                                       <span className="text-xs text-slate-700">
+                                          {dayTotal.totalHours >= 0 ? '+' : ''}{dayTotal.totalHours}
+                                       </span>
+                                    </td>
+                                 );
+                              });
+                           })()}
+                           
+                           {/* Columna Faltas */}
+                           <td className="p-1 text-center border-l border-slate-200">
+                              <span className="text-xs text-yellow-600">{calculateGrandTotals(selectedMonth).totalFaltas}</span>
+                           </td>
+                           
+                           {/* Columna Horas */}
+                           <td className="p-1 text-center border-l border-r border-slate-200">
+                              <span className="text-xs text-blue-600">
+                                 {calculateGrandTotals(selectedMonth).totalHours >= 0 ? '+' : ''}{calculateGrandTotals(selectedMonth).totalHours}
+                              </span>
+                           </td>
+                           
+                           {/* Columna Baja */}
+                           <td className="p-1 text-center border-l border-r border-slate-200">
+                              <span className="text-xs text-red-600">{calculateGrandTotals(selectedMonth).totalBajaMedica}</span>
+                           </td>
+                           
+                           {/* Columna Reposo */}
+                           <td className="p-1 text-center border-l border-r border-slate-200">
+                              <span className="text-xs text-sky-600">{calculateGrandTotals(selectedMonth).totalReposo}</span>
+                           </td>
+                           
+                           {/* Columna Vac. Mes */}
+                           <td className="p-1 text-center border-r border-slate-200">
+                              <span className="text-xs text-green-600">{calculateGrandTotals(selectedMonth).totalVacaciones}</span>
+                           </td>
+                           
+                           {/* Columna Saldo Vac. */}
+                           <td className="p-1 text-center border-r border-slate-200">
+                              <span className="text-xs text-emerald-600">-</span>
+                           </td>
+                           
+                           {/* Columna Anticipo */}
+                           <td className="p-1 text-center border-r border-slate-200">
+                              <span className="text-xs text-slate-600">-</span>
+                           </td>
+                           
+                           {/* Columna S. Bruto */}
+                           <td className="p-1 text-center border-r border-slate-200">
+                              <span className="text-xs text-blue-600 font-bold">
+                                 {planning.workers.filter(w => !w.isArchived).reduce((sum, w) => sum + (w.salary || 0), 0)}€
+                              </span>
+                           </td>
+                           
+                           {/* Columna S. Neto */}
+                           <td className="p-1 text-center">
+                              <span className="text-xs text-green-600 font-bold">
+                                 {planning.workers.filter(w => !w.isArchived).reduce((sum, w) => sum + (w.netSalary || 0), 0)}€
+                              </span>
+                           </td>
+                        </tr>
                      </tbody>
                   </table>
                </div>
@@ -5299,6 +5420,30 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                      {getCurrentWorkerStatus(editingWorker).status}
                    </span>
                  </div>
+              </div>
+            </div>
+
+            {/* Cuarta fila: Salario Bruto - Salario Neto */}
+            <div className="grid grid-cols-12 gap-4 mb-6">
+              <div className="col-span-6 space-y-1">
+                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Salario Bruto (€)</label>
+                 <input 
+                   className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none" 
+                   value={editingWorker.salary || ''} 
+                   onChange={e => setEditingWorker({...editingWorker, salary: e.target.value ? parseFloat(e.target.value) : undefined})} 
+                   placeholder="1500"
+                   type="number"
+                 />
+              </div>
+              <div className="col-span-6 space-y-1">
+                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Salario Neto (€)</label>
+                 <input 
+                   className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none" 
+                   value={editingWorker.netSalary || ''} 
+                   onChange={e => setEditingWorker({...editingWorker, netSalary: e.target.value ? parseFloat(e.target.value) : undefined})} 
+                   placeholder="1200"
+                   type="number"
+                 />
               </div>
             </div>
 
