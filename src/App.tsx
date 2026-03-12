@@ -1428,7 +1428,7 @@ const saveVacationConfig = async () => {
 
   const handleOpenNewJob = (clientId: string = '', date?: string) => {
     const firstClient = clientId ? planning.clients.find(c => c.id === clientId) : planning.clients[0];
-    const newJob: Job = { id: `j-${Date.now()}`, date: date || planning.currentDate, clientId: firstClient?.id || '', centerId: firstClient?.centers?.[0]?.id || '', type: JobType.DESCARGA, startTime: '09:00', endTime: '13:00', requiredWorkers: 3, assignedWorkerIds: [], ref: '', deliveryNote: '', locationDetails: '', isCancelled: false };
+    const newJob: Job = { id: `j-${Date.now()}`, date: date || planning.currentDate, clientId: firstClient?.id || '', centerId: firstClient?.centers?.[0]?.id || '', type: JobType.DESCARGA, startTime: '', endTime: '', requiredWorkers: 3, assignedWorkerIds: [], ref: '', deliveryNote: '', locationDetails: '', isCancelled: false };
     setEditingJob(newJob);
   };
 
