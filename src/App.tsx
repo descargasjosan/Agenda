@@ -4708,19 +4708,19 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                                           {!isAdvancePaid(worker.id) && getWorkerAdvance(worker.id) && getWorkerAdvance(worker.id) !== '0' && (
                                              <button
                                                 onClick={() => markAdvanceAsPaid(worker.id)}
-                                                className="ml-1 p-1 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+                                                className="ml-1 p-1 bg-green-600 text-white rounded hover:bg-green-700 transition-colors text-[10px] font-bold"
                                                 title="Marcar anticipo como pagado"
                                              >
-                                                <CheckCircle className="w-1.5 h-1.5" />
+                                                ✓
                                              </button>
                                           )}
                                           {isAdvancePaid(worker.id) && getWorkerAdvance(worker.id) && getWorkerAdvance(worker.id) !== '0' && (
                                              <button
                                                 onClick={() => markAdvanceAsUnpaid(worker.id)}
-                                                className="ml-1 p-1 bg-orange-500 text-white rounded hover:bg-orange-600 transition-colors"
+                                                className="ml-1 p-1 bg-orange-500 text-white rounded hover:bg-orange-600 transition-colors text-[10px] font-bold"
                                                 title="Marcar anticipo como pendiente"
                                              >
-                                                <XCircle className="w-1.5 h-1.5" />
+                                                ✗
                                              </button>
                                           )}
                                        </div>
