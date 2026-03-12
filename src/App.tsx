@@ -2329,9 +2329,29 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
   }, [planning.workers, persistWorker]);
 
   const handleAddStatusRecord = useCallback(async () => {
-    if (!editingWorker || !editingStatusRecord) return;
-    if (!editingStatusRecord.startDate) { showNotification("Debes seleccionar una fecha de inicio", "error"); return; }
-    if (!editingStatusRecord.endDate || editingStatusRecord.endDate === '') { showNotification("Debes seleccionar una fecha de fin o marcar como IND.", "error"); return; }
+    console.log('🔍 handleAddStatusRecord llamado:', { editingWorker: !!editingWorker, editingStatusRecord });
+    
+    if (!editingWorker) {
+      console.log('❌ No hay editingWorker');
+      return;
+    }
+    
+    if (!editingStatusRecord) {
+      console.log('❌ No hay editingStatusRecord');
+      return;
+    }
+    
+    if (!editingStatusRecord.startDate) { 
+      showNotification("Debes seleccionar una fecha de inicio", "error"); 
+      return; 
+    }
+    
+    if (!editingStatusRecord.endDate || editingStatusRecord.endDate === '') { 
+      showNotification("Debes seleccionar una fecha de fin o marcar como IND.", "error"); 
+      return; 
+    }
+    
+    console.log('✅ Validaciones pasadas, procesando registro:', editingStatusRecord);
     
     try {
       const updatedWorker = addOrUpdateStatusRecord(editingWorker, editingStatusRecord.status, editingStatusRecord.startDate, editingStatusRecord.endDate, planning.customHolidays);
