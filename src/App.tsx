@@ -255,12 +255,12 @@ const saveWorkerAdvance = async (workerId: string, advance: string) => {
          id: advanceId,
          worker_id: workerId,
          date: `${selectedMonth}-99`, // Día 99 para indicar que no es un día real del mes
-         value: 'ADV-PAID', // Valor especial para identificar anticipos pagados
+         value: 'ADV', // Valor especial para identificar anticipos pendientes
          month: selectedMonth,
          advance: finalAdvance
       });
       
-      showNotification(`Anticipo de ${finalAdvance}€ guardado y marcado como pagado para ${planning.workers.find(w => w.id === workerId)?.name}`, 'success');
+      showNotification(`Anticipo de ${finalAdvance}€ guardado para ${planning.workers.find(w => w.id === workerId)?.name}`, 'success');
    } else {
       // Eliminar anticipo si está vacío
       await deleteWorkerControl(advanceId);
@@ -4690,11 +4690,11 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                                                 const value = e.target.value.replace(/[^0-9]/g, '').slice(0, 4);
                                                 saveWorkerAdvance(worker.id, value);
                                              }}
-                                             className={`w-8 px-1 py-0.5 text-[10px] text-center border rounded focus:outline-none focus:ring-1 focus:ring-blue-500 ${
+                                             className={`px-1 py-0.5 text-[10px] text-center border rounded focus:outline-none focus:ring-1 focus:ring-blue-500 ${
                                                 (() => {
-                                                   const advance = getWorkerAdvance(worker.id);
+                                                   const adv = getWorkerAdvance(worker.id);
                                                    const isPaid = isAdvancePaid(worker.id);
-                                                   if (advance && advance !== '0') {
+                                                   if (adv && adv !== '0') {
                                                       return isPaid 
                                                          ? 'border-green-700 bg-green-700 text-white font-bold' 
                                                          : 'border-orange-400 bg-orange-100 text-orange-700 font-bold';
@@ -4704,25 +4704,53 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                                              }`}
                                              maxLength={4}
                                              title="Anticipo mensual (máximo 4 cifras)"
+                                             style={{
+                                                width: '40px'
+                                             }}
                                           />
-                                          {!isAdvancePaid(worker.id) && getWorkerAdvance(worker.id) && getWorkerAdvance(worker.id) !== '0' && (
-                                             <button
-                                                onClick={() => markAdvanceAsPaid(worker.id)}
-                                                className="ml-1 p-1 bg-green-600 text-white rounded hover:bg-green-700 transition-colors text-[10px] font-bold"
-                                                title="Marcar anticipo como pagado"
-                                             >
-                                                ✓
-                                             </button>
-                                          )}
-                                          {isAdvancePaid(worker.id) && getWorkerAdvance(worker.id) && getWorkerAdvance(worker.id) !== '0' && (
-                                             <button
-                                                onClick={() => markAdvanceAsUnpaid(worker.id)}
-                                                className="ml-1 p-1 bg-orange-500 text-white rounded hover:bg-orange-600 transition-colors text-[10px] font-bold"
-                                                title="Marcar anticipo como pendiente"
-                                             >
-                                                ✗
-                                             </button>
-                                          )}
+                                          {/* Icono siempre visible */}
+                                          <button
+                                             onClick={() => {
+                                                if (getWorkerAdvance(worker.id) && getWorkerAdvance(worker.id) !== '0') {
+                                                   if (isAdvancePaid(worker.id)) {
+                                                      markAdvanceAsUnpaid(worker.id);
+                                                   } else {
+                                                      markAdvanceAsPaid(worker.id);
+                                                   }
+                                                }
+                                             }}
+                                             className={`p-0.5 transition-colors text-[8px] font-bold ${
+                                                (() => {
+                                                   const adv = getWorkerAdvance(worker.id);
+                                                   const isPaid = isAdvancePaid(worker.id);
+                                                   if (adv && adv !== '0') {
+                                                      return isPaid 
+                                                         ? 'bg-green-500 text-white rounded hover:bg-green-600' 
+                                                         : 'bg-orange-500 text-white rounded hover:bg-orange-600';
+                                                   }
+                                                   return 'bg-slate-200 text-slate-400 rounded hover:bg-slate-300';
+                                                })()
+                                             }`}
+                                             title={(() => {
+                                                const adv = getWorkerAdvance(worker.id);
+                                                const isPaid = isAdvancePaid(worker.id);
+                                                if (adv && adv !== '0') {
+                                                   return isPaid 
+                                                         ? 'Marcar anticipo como pendiente' 
+                                                         : 'Marcar anticipo como pagado';
+                                                }
+                                                return 'Anticipo vacío';
+                                             })()}
+                                          >
+                                             {(() => {
+                                                const adv = getWorkerAdvance(worker.id);
+                                                const isPaid = isAdvancePaid(worker.id);
+                                                if (adv && adv !== '0') {
+                                                   return isPaid ? '✓' : '€';
+                                                }
+                                                return '€';
+                                             })()}
+                                          </button>
                                        </div>
                                     </td>
                                     {/* Columna Salario Bruto */}
