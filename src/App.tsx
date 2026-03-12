@@ -331,7 +331,9 @@ const updateCellValue = async (workerId: string, day: number, value: string) => 
    // Permitir V (vacaciones) solo en fines de semana, NO en festivos
    // Bloquear F (faltas), D (?), R (reposo) y horas (números) en festivos/fin de semana
    const isAllowedValue = value === 'B' || value === 'P' || (value === 'V' && isWeekend && !isHolidayDay);
-   const isBlockedValue = (value && !isNaN(Number(value))) || ['F', 'D', 'R'].includes(value) || (value === 'V' && isHolidayDay);
+   
+   // Solo bloquear si realmente es fin de semana O festivo
+   const isBlockedValue = (isWeekend || isHolidayDay) && ((value && !isNaN(Number(value))) || ['F', 'D', 'R'].includes(value) || (value === 'V' && isHolidayDay));
    
    // Impedir guardar valores bloqueados en festivos o fines de semana
    if (isBlockedValue) {
