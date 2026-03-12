@@ -2372,6 +2372,48 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
     }
   }, [editingWorker, persistWorker, showNotification]);
 
+  const handleEditStatusRecord = useCallback((recordId: string) => {
+    const worker = planning.workers.find(w => w.id === editingWorker?.id);
+    if (!worker) return;
+
+    // Buscar el registro de estado por ID
+    const statusRecord = worker.statusRecords?.find(r => r.id === recordId);
+    if (!statusRecord) return;
+
+    // Cargar el registro para edición
+    setEditingStatusRecord({
+      id: statusRecord.id,
+      status: statusRecord.status,
+      startDate: statusRecord.startDate,
+      endDate: statusRecord.endDate || ''
+    });
+    setShowAddRecordForm(true);
+  }, [editingWorker, planning.workers]);
+
+  const handleDeleteStatusRecord = useCallback(async (recordId: string) => {
+    const worker = planning.workers.find(w => w.id === editingWorker?.id);
+    if (!worker) return;
+
+    // Eliminar el registro de estado por ID
+    const updatedWorker = {
+      ...worker,
+      statusRecords: worker.statusRecords?.filter(r => r.id !== recordId) || []
+    };
+    
+    // Recalcular el estado actual
+    const currentStatus = getCurrentWorkerStatus(updatedWorker);
+    const finalWorker = { 
+      ...updatedWorker, 
+      status: currentStatus.status, 
+      statusStartDate: currentStatus.startDate, 
+      statusEndDate: currentStatus.endDate 
+    };
+    
+    setEditingWorker(finalWorker);
+    await persistWorker(finalWorker);
+    showNotification("Registro de estado eliminado", "success");
+  }, [editingWorker, planning.workers, persistWorker, showNotification]);
+
   const handleCheckWorkerStatuses = useCallback(async () => {
     const today = new Date().toISOString().split('T')[0];
     const workersNeedingUpdate = planning.workers.filter(w => w.status !== WorkerStatus.DISPONIBLE && w.statusEndDate && w.statusEndDate < today);

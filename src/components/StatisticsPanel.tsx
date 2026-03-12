@@ -2,30 +2,167 @@
 import React, { useState, useMemo } from 'react';
 import { 
   BarChart3, Users, Clock, CalendarDays, Filter, Building2, MapPin, 
-  TrendingUp, Activity, Calculator, ArrowRight, Ban, X, FileText, AlertCircle, Download, FileSpreadsheet, User, Briefcase, CheckCircle2, Stethoscope, StickyNote, Fuel
+  TrendingUp, Activity, Calculator, ArrowRight, Ban, X, FileText, AlertCircle, Download, FileSpreadsheet, User, Briefcase, CheckCircle2, Stethoscope, StickyNote, Fuel, Plus, Minus
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { PlanningState, Job, Worker, NoteType, FuelRecord } from '../lib/types';
 import { formatDateDMY } from '../lib/utils';
+
+// Función para formatear horas
+const formatTime = (hours: number): string => {
+  const h = Math.floor(hours);
+  const m = Math.floor((hours - h) * 60);
+  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+};
 
 interface StatisticsPanelProps {
   planning: PlanningState;
 }
 
 const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ planning }) => {
-  // FECHAS POR DEFECTO: Primer y último día del mes actual
-  const today = new Date();
-  const firstDay = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
-  const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().split('T')[0];
-
-  const [startDate, setStartDate] = useState(firstDay);
-  const [endDate, setEndDate] = useState(lastDay);
+  // Estados para filtros
+  const [startDate, setStartDate] = useState(() => {
+    const today = new Date();
+    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
+    return firstDay;
+  });
+  const [endDate, setEndDate] = useState(() => {
+    const today = new Date();
+    const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().split('T')[0];
+    return lastDay;
+  });
   const [selectedClientId, setSelectedClientId] = useState<string>('all');
   const [selectedCenterId, setSelectedCenterId] = useState<string>('all');
   const [selectedWorkerId, setSelectedWorkerId] = useState<string>('all'); 
   
   const [showCancelledDetails, setShowCancelledDetails] = useState(false);
   const [showFuelDetails, setShowFuelDetails] = useState(false);
+  const [showSitePresence, setShowSitePresence] = useState(false);
+  const [selectedSiteId, setSelectedSiteId] = useState<string>('all');
+  
+  // Estado para controlar qué sedes están expandidas
+  const [expandedSites, setExpandedSites] = useState<Record<string, boolean>>({});
+
+  // Función para toggle expansión de sedes
+  const toggleSiteExpansion = (siteId: string) => {
+    setExpandedSites(prev => ({
+      ...prev,
+      [siteId]: !prev[siteId]
+    }));
+  };
+
+  // Calcular detalles de operarios por sede
+  const siteWorkersDetails = useMemo(() => {
+    const details: Record<string, Array<{
+      workerId: string;
+      workerName: string;
+      date: string;
+      startTime: string;
+      endTime: string;
+      hoursAtSite: number;
+    }>> = {};
+
+    // Procesar cada día del rango
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    
+    for (let date = new Date(start); date <= end; date.setDate(date.getDate() + 1)) {
+      const dateStr = date.toISOString().split('T')[0];
+      
+      // Obtener TODAS las tareas de este día
+      const allDayJobs = planning.jobs.filter(job => 
+        job.date === dateStr && 
+        !job.isCancelled &&
+        (selectedClientId === 'all' || job.clientId === selectedClientId) &&
+        (selectedCenterId === 'all' || job.centerId === selectedCenterId)
+      );
+
+      if (allDayJobs.length === 0) continue;
+
+      // Agrupar tareas por operario
+      const workerTasks: Record<string, typeof allDayJobs> = {};
+      allDayJobs.forEach(job => {
+        job.assignedWorkerIds.forEach(workerId => {
+          if (!workerTasks[workerId]) workerTasks[workerId] = [];
+          workerTasks[workerId].push(job);
+        });
+      });
+
+      // Para cada operario, calcular sus horas en cada sede
+      Object.entries(workerTasks).forEach(([workerId, tasks]) => {
+        if (tasks.length === 0) return;
+
+        const worker = planning.workers.find(w => w.id === workerId);
+        const workerName = worker?.name || 'Desconocido';
+
+        // Ordenar tareas por hora de inicio
+        tasks.sort((a, b) => a.startTime.localeCompare(b.startTime));
+        
+        // Calcular jornada
+        const firstTaskStart = parseFloat(tasks[0].startTime.split(':')[0]) + parseFloat(tasks[0].startTime.split(':')[1]) / 60;
+        const workDayDuration = 9;
+        const breakTime = 1;
+        const actualWorkDayDuration = workDayDuration - breakTime;
+        const workDayEnd = firstTaskStart + workDayDuration;
+        
+        tasks.forEach((task, index) => {
+          // Obtener hora real de inicio del operario (workerTimes) o usar startTime por defecto
+          const realStartTime = task.workerTimes?.[workerId] || task.startTime;
+          const taskStart = parseFloat(realStartTime.split(':')[0]) + parseFloat(realStartTime.split(':')[1]) / 60;
+          
+          let endTime: number;
+          let hoursAtSite: number;
+          
+          if (index === 0) {
+            // Primera tarea: usar hora de inicio de siguiente tarea o fin de jornada
+            const nextTaskRealStartTime = tasks[index + 1]?.workerTimes?.[workerId] || tasks[index + 1]?.startTime;
+            endTime = tasks.length > 1 ? 
+              parseFloat(nextTaskRealStartTime.split(':')[0]) + parseFloat(nextTaskRealStartTime.split(':')[1]) / 60 : 
+              workDayEnd;
+            hoursAtSite = Math.min(endTime - taskStart, actualWorkDayDuration);
+          } else if (index < tasks.length - 1) {
+            // Tareas intermedias: usar hora de inicio de siguiente tarea
+            const nextTaskRealStartTime = tasks[index + 1]?.workerTimes?.[workerId] || tasks[index + 1]?.startTime;
+            endTime = parseFloat(nextTaskRealStartTime.split(':')[0]) + parseFloat(nextTaskRealStartTime.split(':')[1]) / 60;
+            hoursAtSite = Math.min(endTime - taskStart, actualWorkDayDuration);
+          } else {
+            // Última tarea: usar fin de jornada
+            endTime = workDayEnd;
+            hoursAtSite = Math.min(workDayEnd - taskStart, actualWorkDayDuration);
+          }
+
+          // Debug específico para ISRAEL
+          if (workerName.includes('ISRAEL')) {
+            console.log(`🔍 DEBUG ISRAEL - Tarea ${index + 1}:`);
+            console.log(`   - task.startTime: ${task.startTime}`);
+            console.log(`   - task.workerTimes[${workerId}]: ${task.workerTimes?.[workerId]}`);
+            console.log(`   - realStartTime: ${realStartTime} (${taskStart}h)`);
+            console.log(`   - task.endTime: ${task.endTime}`);
+            console.log(`   - endTime calculado: ${formatTime(endTime)} (${endTime}h)`);
+            console.log(`   - hoursAtSite: ${hoursAtSite}h`);
+            console.log(`   - Sede: ${task.centerId}`);
+          }
+
+          if (hoursAtSite > 0) {
+            if (!details[task.centerId]) {
+              details[task.centerId] = [];
+            }
+            
+            details[task.centerId].push({
+              workerId,
+              workerName,
+              date: dateStr,
+              startTime: realStartTime, // Usar hora real de inicio
+              endTime: formatTime(endTime),
+              hoursAtSite
+            });
+          }
+        });
+      });
+    }
+
+    return details;
+  }, [planning.jobs, planning.workers, planning.clients, startDate, endDate, selectedClientId, selectedCenterId]);
 
   const sortedWorkers = useMemo(() => {
     return [...planning.workers]
@@ -53,6 +190,229 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ planning }) => {
       return true;
     });
   }, [planning.fuelRecords, startDate, endDate, selectedWorkerId]);
+
+  // Lógica para calcular horas por sede
+  const sitePresenceStats = useMemo(() => {
+    console.log('🔍 ANÁLISIS REAL DE HORAS POR SEDE');
+    console.log('📅 Periodo:', startDate, '-', endDate);
+    console.log('='.repeat(80));
+    
+    const siteData: Record<string, { totalHours: number; totalWorkers: number; days: Set<string> }> = {};
+    
+    // Obtener todas las sedes únicas
+    const allSites = new Set<string>();
+    planning.clients.forEach(client => {
+      client.centers?.forEach(center => {
+        allSites.add(center.id);
+      });
+    });
+
+    // Inicializar datos para cada sede
+    allSites.forEach(siteId => {
+      siteData[siteId] = {
+        totalHours: 0,
+        totalWorkers: 0,
+        days: new Set()
+      };
+    });
+
+    // Procesar cada día del rango
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    
+    // Para registrar operarios únicos por sede por día
+    const workersBySiteByDay: Record<string, Record<string, Set<string>>> = {};
+    
+    for (let date = new Date(start); date <= end; date.setDate(date.getDate() + 1)) {
+      const dateStr = date.toISOString().split('T')[0];
+      
+      // Obtener TODAS las tareas de este día (sin filtrar por operario)
+      const allDayJobs = planning.jobs.filter(job => 
+        job.date === dateStr && 
+        !job.isCancelled &&
+        (selectedClientId === 'all' || job.clientId === selectedClientId) &&
+        (selectedCenterId === 'all' || job.centerId === selectedCenterId)
+      );
+
+      // Si hay filtro de operario, obtener también las tareas filtradas para mostrar logs
+      const dayJobs = selectedWorkerId === 'all' 
+        ? allDayJobs 
+        : allDayJobs.filter(job => job.assignedWorkerIds.includes(selectedWorkerId));
+
+      if (allDayJobs.length === 0) continue;
+
+      console.log(`\n📅 DÍA: ${dateStr}`);
+      console.log('📋 Tareas totales del día:', allDayJobs.length);
+      if (selectedWorkerId !== 'all') {
+        console.log('📋 Tareas del operario filtrado:', dayJobs.length);
+      }
+
+      // Agrupar TODAS las tareas por operario (para el cálculo real)
+      const allWorkerTasks: Record<string, typeof allDayJobs> = {};
+      allDayJobs.forEach(job => {
+        job.assignedWorkerIds.forEach(workerId => {
+          if (!allWorkerTasks[workerId]) allWorkerTasks[workerId] = [];
+          allWorkerTasks[workerId].push(job);
+        });
+      });
+
+      // Agrupar tareas filtradas por operario (solo para mostrar logs si hay filtro)
+      const workerTasks: Record<string, typeof dayJobs> = {};
+      dayJobs.forEach(job => {
+        job.assignedWorkerIds.forEach(workerId => {
+          if (!workerTasks[workerId]) workerTasks[workerId] = [];
+          workerTasks[workerId].push(job);
+        });
+      });
+
+      console.log('👥 Operarios totales con tareas:', Object.keys(allWorkerTasks).length);
+      if (selectedWorkerId !== 'all') {
+        console.log('👥 Operarios filtrados con tareas:', Object.keys(workerTasks).length);
+      }
+
+      // Inicializar registro de operarios para este día
+      if (!workersBySiteByDay[dateStr]) {
+        workersBySiteByDay[dateStr] = {};
+      }
+
+      // Para cada operario (TODOS), calcular su presencia en sedes
+      Object.entries(allWorkerTasks).forEach(([workerId, tasks]) => {
+        if (tasks.length === 0) return;
+
+        const worker = planning.workers.find(w => w.id === workerId);
+        console.log(`\n   👤 ${worker?.name || 'Desconocido'} (${workerId}):`);
+
+        // Ordenar tareas por hora de inicio
+        tasks.sort((a, b) => a.startTime.localeCompare(b.startTime));
+        
+        // Calcular jornada desde primera tarea hasta 9h de trabajo
+        const firstTaskStart = parseFloat(tasks[0].startTime.split(':')[0]) + parseFloat(tasks[0].startTime.split(':')[1]) / 60;
+        const workDayDuration = 9; // 9 horas teóricas
+        const breakTime = 1; // 1 hora de descansos (2 × 30min)
+        const actualWorkDayDuration = workDayDuration - breakTime; // 8 horas reales
+        const workDayEnd = firstTaskStart + workDayDuration; // Jornada teórica hasta 17:00
+        
+        console.log(`      🕐 Jornada: ${formatTime(firstTaskStart)} - ${formatTime(workDayEnd)} (${workDayDuration}h teóricas - ${breakTime}h descansos = ${actualWorkDayDuration}h reales)`);
+        
+        let currentSite = tasks[0].centerId;
+        let currentSiteHours = 0;
+        
+        // Registrar este operario en la primera sede que trabaja
+        if (!workersBySiteByDay[dateStr][currentSite]) {
+          workersBySiteByDay[dateStr][currentSite] = new Set();
+        }
+        workersBySiteByDay[dateStr][currentSite].add(workerId);
+        
+        tasks.forEach((task, index) => {
+          // Obtener hora real de inicio del operario (workerTimes) o usar startTime por defecto
+          const realStartTime = task.workerTimes?.[workerId] || task.startTime;
+          const taskStart = parseFloat(realStartTime.split(':')[0]) + parseFloat(realStartTime.split(':')[1]) / 60;
+          const taskEnd = parseFloat(task.endTime.split(':')[0]) + parseFloat(task.endTime.split(':')[1]) / 60;
+          
+          const client = planning.clients.find(c => c.id === task.clientId);
+          const center = client?.centers?.find(ct => ct.id === task.centerId);
+          const siteName = `${client?.name || 'Empresa Desconocida'} - ${center?.name || 'Sede Desconocida'}`;
+          
+          console.log(`      📍 ${index + 1}. ${siteName}: ${realStartTime} - ${task.endTime} (real: ${realStartTime}, programada: ${task.startTime})`);
+          
+          if (index === 0) {
+            // Primera tarea: usar hora real de inicio y hora de inicio de siguiente tarea o fin de jornada
+            const nextTaskRealStartTime = tasks[index + 1]?.workerTimes?.[workerId] || tasks[index + 1]?.startTime;
+            const endTime = tasks.length > 1 ? 
+              parseFloat(nextTaskRealStartTime.split(':')[0]) + parseFloat(nextTaskRealStartTime.split(':')[1]) / 60 : 
+              workDayEnd; // Siempre usar fin de jornada, nunca fin de tarea
+            const hoursAtFirstSite = Math.min(endTime - taskStart, actualWorkDayDuration); // Máximo 8h reales
+            currentSiteHours = hoursAtFirstSite;
+            
+            console.log(`         ⏰ Primera tarea: ${hoursAtFirstSite.toFixed(1)}h en ${siteName} (desde ${realStartTime} hasta ${tasks.length > 1 ? nextTaskRealStartTime : formatTime(workDayEnd)})`);
+            
+            if (siteData[currentSite]) {
+              siteData[currentSite].totalHours += currentSiteHours;
+              siteData[currentSite].days.add(dateStr);
+            }
+          } else if (index < tasks.length - 1) {
+            // Cambios de sede: calcular horas entre inicio de esta tarea y inicio de la siguiente tarea
+            const nextTaskRealStartTime = tasks[index + 1]?.workerTimes?.[workerId] || tasks[index + 1]?.startTime;
+            const hoursAtCurrentSite = Math.min(parseFloat(nextTaskRealStartTime.split(':')[0]) + parseFloat(nextTaskRealStartTime.split(':')[1]) / 60 - taskStart, actualWorkDayDuration);
+            
+            console.log(`         ⏰ Cambio a ${siteName}: ${hoursAtCurrentSite.toFixed(1)}h (desde ${realStartTime} hasta ${nextTaskRealStartTime})`);
+            
+            if (hoursAtCurrentSite > 0 && siteData[task.centerId]) {
+              siteData[task.centerId].totalHours += hoursAtCurrentSite;
+              siteData[task.centerId].days.add(dateStr);
+            }
+            
+            // Registrar operario en la nueva sede
+            if (!workersBySiteByDay[dateStr][task.centerId]) {
+              workersBySiteByDay[dateStr][task.centerId] = new Set();
+            }
+            workersBySiteByDay[dateStr][task.centerId].add(workerId);
+            
+            currentSite = task.centerId;
+          } else {
+            // Última tarea: calcular hasta fin de jornada
+            const hoursAtLastSite = Math.min(workDayEnd - taskStart, actualWorkDayDuration);
+            
+            console.log(`         ⏰ Última tarea en ${siteName}: ${hoursAtLastSite.toFixed(1)}h (desde ${realStartTime} hasta ${formatTime(workDayEnd)})`);
+            
+            if (hoursAtLastSite > 0 && siteData[task.centerId]) {
+              siteData[task.centerId].totalHours += hoursAtLastSite;
+              siteData[task.centerId].days.add(dateStr);
+            }
+            
+            // Registrar operario en la última sede
+            if (!workersBySiteByDay[dateStr][task.centerId]) {
+              workersBySiteByDay[dateStr][task.centerId] = new Set();
+            }
+            workersBySiteByDay[dateStr][task.centerId].add(workerId);
+            
+            currentSite = task.centerId;
+          }
+        });
+      });
+    }
+
+    // Calcular operarios únicos por sede
+    Object.entries(workersBySiteByDay).forEach(([dateStr, sitesByDay]) => {
+      Object.entries(sitesByDay).forEach(([siteId, workers]) => {
+        if (siteData[siteId]) {
+          siteData[siteId].totalWorkers += workers.size;
+        }
+      });
+    });
+
+    // Convertir a array para mostrar
+    const result = Object.entries(siteData).map(([siteId, data]) => {
+      const client = planning.clients.find(c => c.centers?.some(ct => ct.id === siteId));
+      const center = client?.centers?.find(ct => ct.id === siteId);
+      const siteName = `${client?.name || 'Empresa Desconocida'} - ${center?.name || 'Sede Desconocida'}`;
+      
+      return {
+        siteId,
+        siteName,
+        totalHours: data.totalHours,
+        totalWorkers: data.totalWorkers,
+        totalDays: data.days.size
+      };
+    }).filter(site => site.totalHours > 0);
+
+    console.log('\n📊 RESUMEN FINAL:');
+    console.log('='.repeat(80));
+    result.forEach(site => {
+      console.log(`📍 ${site.siteName}:`);
+      console.log(`   📊 Total horas: ${site.totalHours.toFixed(1)}h`);
+      console.log(`   👥 Total operarios: ${site.totalWorkers}`);
+      console.log(`   📅 Días activos: ${site.totalDays}`);
+      console.log(`   📈 Media horas/día: ${site.totalDays > 0 ? (site.totalHours / site.totalDays).toFixed(1) : '0.0'}h`);
+    });
+
+    return {
+      sites: result,
+      totalDays: result.reduce((sum, site) => sum + site.totalDays, 0),
+      totalHours: result.reduce((sum, site) => sum + site.totalHours, 0),
+      totalWorkers: result.reduce((sum, site) => sum + site.totalWorkers, 0)
+    };
+  }, [planning.jobs, planning.clients, planning.workers, startDate, endDate, selectedClientId, selectedCenterId, selectedWorkerId]);
 
   const flattenedActivity = useMemo(() => {
     const activity: Array<{
@@ -420,33 +780,22 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ planning }) => {
               </div>
            </div>
 
-           <div className="bg-white rounded-[12px] p-2 border border-slate-100 shadow-sm relative overflow-hidden group hover:shadow-xl hover:scale-[1.02] transition-all duration-300">
-              <div className="absolute right-0 top-0 w-32 h-32 bg-purple-50 rounded-full -mr-10 -mt-10 group-hover:bg-purple-100 transition-colors" />
+           <div onClick={() => {setShowCancelledDetails(false); setShowFuelDetails(false); setShowSitePresence(!showSitePresence);}} className={`bg-white rounded-[12px] p-2 border shadow-sm relative overflow-hidden group hover:shadow-xl hover:scale-[1.02] transition-all duration-300 cursor-pointer ${showSitePresence ? 'border-green-300 ring-2 ring-green-50' : 'border-slate-100'}`}>
+              <div className="absolute right-0 top-0 w-32 h-32 bg-green-50 rounded-full -mr-10 -mt-10 group-hover:bg-green-100 transition-colors" />
               <div className="relative z-10 flex items-start justify-between">
                 <div className="flex-1">
-                  {selectedWorkerId === 'all' ? (
-                      <>
-                          <h3 className="text-2xl font-[900] text-slate-900 mb-1">
-                          {stats.averageDailyWorkers.toLocaleString('es-ES', { maximumFractionDigits: 1 })}
-                          </h3>
-                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Media Empleados/Día</p>
-                      </>
-                  ) : (
-                      <>
-                          <h3 className="text-2xl font-[900] text-slate-900 mb-1">
-                              {activeJobs.length}
-                          </h3>
-                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Servicios Totales</p>
-                      </>
-                  )}
+                  <h3 className="text-2xl font-[900] text-slate-900 mb-1">
+                    {sitePresenceStats.totalDays}
+                  </h3>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Horas por Sede</p>
                 </div>
-                <div className="w-8 h-8 bg-white rounded-xl flex items-center justify-center text-purple-600 shadow-sm">
-                  <Activity className="w-4 h-4" />
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center shadow-sm transition-colors ${showSitePresence ? 'bg-green-600 text-white' : 'bg-white text-green-600'}`}>
+                  {showSitePresence ? <MapPin className="w-4 h-4" /> : <Building2 className="w-4 h-4" />}
                 </div>
               </div>
               <div className="mt-2 flex items-center gap-2">
-                 <span className="bg-purple-100 text-purple-700 px-2 py-1 rounded-lg text-[9px] font-black uppercase">
-                     {selectedWorkerId === 'all' ? `Base: ${stats.activeDays} días` : 'Asignados'}
+                 <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase transition-colors ${showSitePresence ? 'bg-green-600 text-white' : 'bg-green-100 text-green-700'}`}>
+                    {showSitePresence ? 'Ver Resumen' : 'Análisis Diario'}
                  </span>
               </div>
            </div>
@@ -517,7 +866,154 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ planning }) => {
 
         </div>
 
-        {showCancelledDetails ? (
+        {showSitePresence ? (
+           <div className="bg-white rounded-[32px] border border-green-100 shadow-sm overflow-hidden animate-in fade-in slide-in-from-bottom-4">
+              <div className="p-8 border-b border-green-50 bg-green-50/30 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                   <div className="w-12 h-12 bg-green-100 rounded-2xl flex items-center justify-center text-green-600">
+                      <MapPin className="w-6 h-6" />
+                   </div>
+                   <div>
+                      <h3 className="text-lg font-black text-green-900 uppercase italic">Análisis de Horas por Sede</h3>
+                      <p className="text-[10px] font-bold text-green-400 uppercase tracking-widest">Desglose diario de presencia en cada sede</p>
+                   </div>
+                </div>
+                <button onClick={() => setShowSitePresence(false)} className="p-2 hover:bg-green-100 rounded-xl text-green-400 hover:text-green-700 transition-colors">
+                   <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div className="p-6">
+                <div className="flex items-center gap-4 mb-6">
+                  <div className="flex items-center gap-2 px-3 py-2 bg-green-50 rounded-xl border border-green-200">
+                    <MapPin className="w-4 h-4 text-green-600" />
+                    <select 
+                        className="text-[10px] font-bold text-green-700 bg-transparent outline-none uppercase cursor-pointer"
+                        value={selectedSiteId}
+                        onChange={(e) => setSelectedSiteId(e.target.value)}
+                    >
+                      <option value="all">Todas las Sedes</option>
+                      {sitePresenceStats.sites
+                        .sort((a, b) => a.siteName.localeCompare(b.siteName))
+                        .map(site => (
+                        <option key={site.siteId} value={site.siteId}>{site.siteName}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                   <table className="w-full text-left">
+                      <thead>
+                         <tr className="bg-green-50/50 border-b border-green-100">
+                            <th className="px-6 py-4 text-[10px] font-black text-green-400 uppercase tracking-widest">Sede</th>
+                            <th className="px-6 py-4 text-[10px] font-black text-green-400 uppercase tracking-widest text-center">Total Horas</th>
+                            <th className="px-6 py-4 text-[10px] font-black text-green-400 uppercase tracking-widest text-center">Total Operarios</th>
+                            <th className="px-6 py-4 text-[10px] font-black text-green-400 uppercase tracking-widest text-center">Días Activos</th>
+                            <th className="px-6 py-4 text-[10px] font-black text-green-400 uppercase tracking-widest text-center">Media Horas/Día</th>
+                            <th className="px-6 py-4 text-[10px] font-black text-green-400 uppercase tracking-widest text-center"></th>
+                         </tr>
+                      </thead>
+                      <tbody className="divide-y divide-green-50">
+                         {sitePresenceStats.sites
+                            .filter(site => selectedSiteId === 'all' || site.siteId === selectedSiteId)
+                            .length > 0 ? (
+                            sitePresenceStats.sites
+                               .filter(site => selectedSiteId === 'all' || site.siteId === selectedSiteId)
+                               .map(site => (
+                                  <React.Fragment key={site.siteId}>
+                                     <tr className="hover:bg-green-50/30 transition-colors">
+                                        <td className="px-6 py-4">
+                                           <div className="flex items-center gap-2">
+                                              <Building2 className="w-4 h-4 text-green-600" />
+                                              <span className="text-xs font-black text-slate-900">{site.siteName}</span>
+                                           </div>
+                                        </td>
+                                        <td className="px-6 py-4 text-center">
+                                           <span className="inline-flex items-center justify-center px-3 py-1 bg-green-100 text-green-700 rounded-lg font-black text-xs">
+                                              {site.totalHours.toFixed(1)} h
+                                           </span>
+                                        </td>
+                                        <td className="px-6 py-4 text-center">
+                                           <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-green-100 text-green-700 font-black text-xs">
+                                              {site.totalWorkers}
+                                           </span>
+                                        </td>
+                                        <td className="px-6 py-4 text-center">
+                                           <span className="inline-flex items-center justify-center px-3 py-1 bg-blue-100 text-blue-700 rounded-lg font-black text-xs">
+                                              {site.totalDays}
+                                           </span>
+                                        </td>
+                                        <td className="px-6 py-4 text-center">
+                                           <span className="inline-flex items-center justify-center px-3 py-1 bg-purple-100 text-purple-700 rounded-lg font-black text-xs">
+                                              {site.totalDays > 0 ? (site.totalHours / site.totalDays).toFixed(1) : '0.0'} h
+                                           </span>
+                                        </td>
+                                        <td className="px-6 py-4 text-center">
+                                           <button
+                                              onClick={() => toggleSiteExpansion(site.siteId)}
+                                              className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-green-100 text-green-700 hover:bg-green-200 transition-colors"
+                                           >
+                                              {expandedSites[site.siteId] ? <Minus className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                                           </button>
+                                        </td>
+                                     </tr>
+                                     {expandedSites[site.siteId] && (
+                                        <tr>
+                                           <td colSpan={6} className="px-6 py-4 bg-green-50/50">
+                                              <div className="space-y-3">
+                                                 <h4 className="text-xs font-black text-green-700 uppercase tracking-widest mb-3">Detalle de Operarios</h4>
+                                                 {siteWorkersDetails[site.siteId]?.length > 0 ? (
+                                                    <div className="space-y-2">
+                                                       {siteWorkersDetails[site.siteId]
+                                                          .sort((a, b) => a.date.localeCompare(b.date) || a.workerName.localeCompare(b.workerName))
+                                                          .map((detail, index) => (
+                                                             <div key={index} className="flex items-center justify-between p-3 bg-white rounded-lg border border-green-100">
+                                                                <div className="flex items-center gap-3">
+                                                                   <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
+                                                                      <User className="w-4 h-4 text-green-600" />
+                                                                   </div>
+                                                                   <div>
+                                                                      <p className="text-xs font-black text-slate-900">{detail.workerName}</p>
+                                                                      <p className="text-[9px] text-slate-500">{detail.date}</p>
+                                                                   </div>
+                                                                </div>
+                                                                <div className="flex items-center gap-4">
+                                                                   <div className="text-right">
+                                                                      <p className="text-[9px] text-slate-500">Horario</p>
+                                                                      <p className="text-xs font-black text-slate-900">{detail.startTime} - {detail.endTime}</p>
+                                                                   </div>
+                                                                   <div className="text-right">
+                                                                      <p className="text-[9px] text-slate-500">Horas</p>
+                                                                      <p className="text-xs font-black text-green-700">{detail.hoursAtSite.toFixed(1)}h</p>
+                                                                   </div>
+                                                                </div>
+                                                             </div>
+                                                          ))}
+                                                    </div>
+                                                 ) : (
+                                                    <p className="text-center text-slate-400 text-xs font-black">No hay operarios asignados a esta sede en el periodo seleccionado</p>
+                                                 )}
+                                              </div>
+                                           </td>
+                                        </tr>
+                                     )}
+                                  </React.Fragment>
+                               ))
+                         ) : (
+                            <tr>
+                               <td colSpan={6} className="px-6 py-12 text-center text-slate-400">
+                                  <MapPin className="w-12 h-12 mx-auto mb-3 text-slate-200" />
+                                  <p className="font-black uppercase text-xs tracking-widest">No hay datos de presencia en este periodo</p>
+                               </td>
+                            </tr>
+                         )}
+                      </tbody>
+                   </table>
+                </div>
+              </div>
+           </div>
+        ) : (
            <div className="bg-white rounded-[32px] border border-red-100 shadow-sm overflow-hidden animate-in fade-in slide-in-from-bottom-4">
               <div className="p-8 border-b border-red-50 bg-red-50/30 flex items-center justify-between">
                 <div className="flex items-center gap-4">
@@ -603,8 +1099,9 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ planning }) => {
                  </table>
               </div>
            </div>
-        ) : (
-            !showCancelledDetails && !showFuelDetails && (
+        )}
+
+        {!showCancelledDetails && !showFuelDetails && !showSitePresence && (
             <div className="bg-white rounded-[32px] border border-blue-100 shadow-sm overflow-hidden animate-in fade-in slide-in-from-bottom-4">
                 <div className="p-8 border-b border-blue-50 bg-blue-50/30 flex items-center justify-between">
                     <div className="flex items-center gap-4">
@@ -741,7 +1238,6 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ planning }) => {
                     </table>
                 </div>
             </div>
-            )
         )}
 
         {showFuelDetails ? (
