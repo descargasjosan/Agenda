@@ -340,10 +340,32 @@ export const addOrUpdateStatusRecord = (
   worker: Worker, 
   status: WorkerStatus, 
   startDate: string, 
-  endDate: string
+  endDate: string,
+  customHolidays: Holiday[] = []
 ): Worker => {
   if (status === WorkerStatus.DISPONIBLE || !startDate) {
     return worker;
+  }
+
+  // Validar vacaciones en festivos
+  if (status === WorkerStatus.VACACIONES) {
+    const start = new Date(startDate);
+    const end = endDate === 'IND.' ? new Date('9999-12-31') : new Date(endDate);
+    
+    // Verificar si hay festivos en el rango de vacaciones
+    const holidaysInRange: string[] = [];
+    for (let date = new Date(start); date <= end; date.setDate(date.getDate() + 1)) {
+      const dateStr = date.toISOString().split('T')[0];
+      if (isHoliday(dateStr, customHolidays)) {
+        holidaysInRange.push(dateStr);
+      }
+    }
+    
+    // Permitir guardar pero con advertencia si hay festivos
+    if (holidaysInRange.length > 0) {
+      // No lanzar error, solo registrar para advertencia posterior
+      // No hacer nada aquí, la advertencia se manejará en App.tsx
+    }
   }
 
   const newRecord: WorkerStatusRecord = {

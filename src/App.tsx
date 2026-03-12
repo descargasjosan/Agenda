@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { 
-  CalendarIcon, Users, Building2, Car, HeartPulse, Settings, Download, Upload, Cloud, CloudOff, AlertCircle, CheckCircle2, X, ChevronLeft, ChevronRight, CalendarDays, Search, Plus, Trash2, Edit2, Copy, FileText, Loader2, LayoutGrid, Table, ListTodo, Bell, MessageSquare, Send, Filter, ArrowRight, Clock, User, Mail, Phone, MapPin, Briefcase, Star, TrendingUp, Activity, DownloadCloud, Database, RotateCcw, BarChart3, MessageCircle, Calendar, CheckCircle, GraduationCap, FileSpreadsheet, ChevronDown, Sparkles, ClipboardList, Hash, Save, StickyNote, Fuel, AlertTriangle, RefreshCw 
+  CalendarIcon, Users, Building2, Car, HeartPulse, Settings, Download, Upload, Cloud, CloudOff, AlertCircle, CheckCircle2, X, ChevronLeft, ChevronRight, CalendarDays, Search, Plus, Trash2, Edit2, Copy, FileText, Loader2, LayoutGrid, Table, ListTodo, Bell, MessageSquare, Send, Filter, ArrowRight, Clock, User, Mail, Phone, MapPin, Briefcase, Star, TrendingUp, Activity, DownloadCloud, Database, RotateCcw, BarChart3, MessageCircle, Calendar, CheckCircle, XCircle, GraduationCap, FileSpreadsheet, ChevronDown, Sparkles, ClipboardList, Hash, Save, StickyNote, Fuel, AlertTriangle, RefreshCw 
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { useSupabaseData } from './hooks/useSupabaseData';
@@ -255,17 +255,66 @@ const saveWorkerAdvance = async (workerId: string, advance: string) => {
          id: advanceId,
          worker_id: workerId,
          date: `${selectedMonth}-99`, // Día 99 para indicar que no es un día real del mes
-         value: 'ADV', // Valor especial para identificar anticipos
+         value: 'ADV-PAID', // Valor especial para identificar anticipos pagados
          month: selectedMonth,
          advance: finalAdvance
       });
       
-      showNotification(`Anticipo de ${finalAdvance}€ guardado para ${planning.workers.find(w => w.id === workerId)?.name}`, 'success');
+      showNotification(`Anticipo de ${finalAdvance}€ guardado y marcado como pagado para ${planning.workers.find(w => w.id === workerId)?.name}`, 'success');
    } else {
       // Eliminar anticipo si está vacío
       await deleteWorkerControl(advanceId);
       showNotification('Anticipo eliminado', 'info');
    }
+};
+
+// Función para marcar anticipo como pagado
+const markAdvanceAsPaid = async (workerId: string) => {
+   const advanceId = `${workerId}-${selectedMonth}-advance`;
+   const currentAdvance = getWorkerAdvance(workerId);
+   
+   if (currentAdvance && currentAdvance !== '0') {
+      await saveWorkerControl({
+         id: advanceId,
+         worker_id: workerId,
+         date: `${selectedMonth}-99`,
+         value: 'ADV-PAID', // Cambiar a pagado
+         month: selectedMonth,
+         advance: currentAdvance
+      });
+      
+      showNotification(`Anticipo marcado como pagado para ${planning.workers.find(w => w.id === workerId)?.name}`, 'success');
+   }
+};
+
+// Función para desmarcar anticipo como pagado (volver a pendiente)
+const markAdvanceAsUnpaid = async (workerId: string) => {
+   const advanceId = `${workerId}-${selectedMonth}-advance`;
+   const currentAdvance = getWorkerAdvance(workerId);
+   
+   if (currentAdvance && currentAdvance !== '0') {
+      await saveWorkerControl({
+         id: advanceId,
+         worker_id: workerId,
+         date: `${selectedMonth}-99`,
+         value: 'ADV', // Cambiar a pendiente
+         month: selectedMonth,
+         advance: currentAdvance
+      });
+      
+      showNotification(`Anticipo marcado como pendiente para ${planning.workers.find(w => w.id === workerId)?.name}`, 'info');
+   }
+};
+
+// Función para verificar si el anticipo está pagado
+const isAdvancePaid = (workerId: string): boolean => {
+   const advanceId = `${workerId}-${selectedMonth}-advance`;
+   const advanceControl = planning.workerControls.find(c => 
+      c.worker_id === workerId && 
+      c.month === selectedMonth && 
+      c.date === `${selectedMonth}-99`
+   );
+   return advanceControl?.value === 'ADV-PAID';
 };
 
 // Función para actualizar valor de celda
@@ -496,7 +545,7 @@ const syncToStatusRecords = useCallback(async (workerId: string, day: number, va
          // Paso 4: crear rangos contiguos y añadirlos
          const ranges = createContiguousRanges(sameStatusDays, year, month);
          ranges.forEach(range => {
-            updatedWorker = addOrUpdateStatusRecord(updatedWorker, statusType!, range.start, range.end);
+            updatedWorker = addOrUpdateStatusRecord(updatedWorker, statusType!, range.start, range.end, planning.customHolidays);
          });
 
          const currentStatus = getCurrentWorkerStatus(updatedWorker);
@@ -2281,31 +2330,43 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
     if (!editingWorker || !editingStatusRecord) return;
     if (!editingStatusRecord.startDate) { showNotification("Debes seleccionar una fecha de inicio", "error"); return; }
     if (!editingStatusRecord.endDate || editingStatusRecord.endDate === '') { showNotification("Debes seleccionar una fecha de fin o marcar como IND.", "error"); return; }
-    const updatedWorker = addOrUpdateStatusRecord(editingWorker, editingStatusRecord.status, editingStatusRecord.startDate, editingStatusRecord.endDate);
-    const currentStatus = getCurrentWorkerStatus(updatedWorker);
-    const finalWorker = { ...updatedWorker, status: currentStatus.status, statusStartDate: currentStatus.startDate, statusEndDate: currentStatus.endDate };
-    setEditingWorker(finalWorker);
-    await persistWorker(finalWorker);
-    setEditingStatusRecord(null);
-    setShowAddRecordForm(false);
-    showNotification("Registro de estado añadido", "success");
-  }, [editingWorker, editingStatusRecord, persistWorker, showNotification]);
-
-  const handleEditStatusRecord = (recordId: string) => {
-    if (!editingWorker?.statusRecords) return;
-    const record = editingWorker.statusRecords.find(r => r.id === recordId);
-    if (record) { setEditingStatusRecord({ id: record.id, status: record.status, startDate: record.startDate, endDate: record.endDate || 'IND.' }); setShowAddRecordForm(true); }
-  };
-
-  const handleDeleteStatusRecord = useCallback(async (recordId: string) => {
-    if (!editingWorker) return;
-    if (confirm("¿Estás seguro de que quieres eliminar este registro?")) {
-      const updatedWorker = removeStatusRecord(editingWorker, recordId);
+    
+    try {
+      const updatedWorker = addOrUpdateStatusRecord(editingWorker, editingStatusRecord.status, editingStatusRecord.startDate, editingStatusRecord.endDate, planning.customHolidays);
       const currentStatus = getCurrentWorkerStatus(updatedWorker);
       const finalWorker = { ...updatedWorker, status: currentStatus.status, statusStartDate: currentStatus.startDate, statusEndDate: currentStatus.endDate };
       setEditingWorker(finalWorker);
       await persistWorker(finalWorker);
-      showNotification("Registro eliminado", "success");
+      setEditingStatusRecord(null);
+      setShowAddRecordForm(false);
+      
+      // Verificar si las vacaciones incluyen festivos para advertir
+      if (editingStatusRecord.status === WorkerStatus.VACACIONES) {
+        const start = new Date(editingStatusRecord.startDate);
+        const end = editingStatusRecord.endDate === 'IND.' ? new Date('9999-12-31') : new Date(editingStatusRecord.endDate);
+        const holidaysInRange: string[] = [];
+        
+        for (let date = new Date(start); date <= end; date.setDate(date.getDate() + 1)) {
+          const dateStr = date.toISOString().split('T')[0];
+          if (isHoliday(dateStr, planning.customHolidays)) {
+            const holiday = planning.customHolidays.find(h => h.date === dateStr) || isHoliday(dateStr, planning.customHolidays);
+            holidaysInRange.push(`${dateStr} (${holiday?.name || 'Festivo'})`);
+          }
+        }
+        
+        if (holidaysInRange.length > 0) {
+          showNotification(
+            `Vacaciones guardadas. Nota: Incluyen festivos: ${holidaysInRange.join(', ')}`,
+            'warning'
+          );
+        } else {
+          showNotification("Registro de estado añadido", "success");
+        }
+      } else {
+        showNotification("Registro de estado añadido", "success");
+      }
+    } catch (error) {
+      showNotification(error instanceof Error ? error.message : "Error al añadir registro de estado", "error");
     }
   }, [editingWorker, persistWorker, showNotification]);
 
@@ -4620,25 +4681,49 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                                     </td>
                                     {/* Columna de Anticipos */}
                                     <td className="p-1 text-center border-r border-slate-200 bg-white">
-                                       <input
-                                          type="text"
-                                          placeholder="0"
-                                          value={getWorkerAdvance(worker.id)}
-                                          onChange={(e) => {
-                                             const value = e.target.value.replace(/[^0-9]/g, '').slice(0, 4);
-                                             saveWorkerAdvance(worker.id, value);
-                                          }}
-                                          className={`w-8 px-1 py-0.5 text-[10px] text-center border rounded focus:outline-none focus:ring-1 focus:ring-blue-500 ${
-                                             (() => {
-                                                const advance = getWorkerAdvance(worker.id);
-                                                return advance && advance !== '0' 
-                                                   ? 'border-green-600 bg-green-800 text-white font-bold' 
-                                                   : 'border-slate-300';
-                                             })()
-                                          }`}
-                                          maxLength={4}
-                                          title="Anticipo mensual (máximo 4 cifras)"
-                                       />
+                                       <div className="flex items-center justify-center gap-1">
+                                          <input
+                                             type="text"
+                                             placeholder="0"
+                                             value={getWorkerAdvance(worker.id)}
+                                             onChange={(e) => {
+                                                const value = e.target.value.replace(/[^0-9]/g, '').slice(0, 4);
+                                                saveWorkerAdvance(worker.id, value);
+                                             }}
+                                             className={`w-8 px-1 py-0.5 text-[10px] text-center border rounded focus:outline-none focus:ring-1 focus:ring-blue-500 ${
+                                                (() => {
+                                                   const advance = getWorkerAdvance(worker.id);
+                                                   const isPaid = isAdvancePaid(worker.id);
+                                                   if (advance && advance !== '0') {
+                                                      return isPaid 
+                                                         ? 'border-green-700 bg-green-700 text-white font-bold' 
+                                                         : 'border-orange-400 bg-orange-100 text-orange-700 font-bold';
+                                                   }
+                                                   return 'border-slate-300';
+                                                })()
+                                             }`}
+                                             maxLength={4}
+                                             title="Anticipo mensual (máximo 4 cifras)"
+                                          />
+                                          {!isAdvancePaid(worker.id) && getWorkerAdvance(worker.id) && getWorkerAdvance(worker.id) !== '0' && (
+                                             <button
+                                                onClick={() => markAdvanceAsPaid(worker.id)}
+                                                className="ml-1 p-1 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+                                                title="Marcar anticipo como pagado"
+                                             >
+                                                <CheckCircle className="w-1.5 h-1.5" />
+                                             </button>
+                                          )}
+                                          {isAdvancePaid(worker.id) && getWorkerAdvance(worker.id) && getWorkerAdvance(worker.id) !== '0' && (
+                                             <button
+                                                onClick={() => markAdvanceAsUnpaid(worker.id)}
+                                                className="ml-1 p-1 bg-orange-500 text-white rounded hover:bg-orange-600 transition-colors"
+                                                title="Marcar anticipo como pendiente"
+                                             >
+                                                <XCircle className="w-1.5 h-1.5" />
+                                             </button>
+                                          )}
+                                       </div>
                                     </td>
                                     {/* Columna Salario Bruto */}
                                     <td className="p-1 text-center border-r border-slate-200 bg-white">
