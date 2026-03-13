@@ -966,6 +966,7 @@ const saveVacationConfig = async () => {
   const [showAddMedicalProvider, setShowAddMedicalProvider] = useState(false);
   const [workerSearchFilter, setWorkerSearchFilter] = useState('');
   const [medicalWorkerFilter, setMedicalWorkerFilter] = useState('');
+const [planningFilter, setPlanningFilter] = useState('');
   const [exportHistory, setExportHistory] = useState(() => {
     const saved = localStorage.getItem('exportHistory');
     return saved ? JSON.parse(saved) : {};
@@ -1004,6 +1005,42 @@ const saveVacationConfig = async () => {
       });
     }
   }, [planning.currentDate]);
+
+  // ── Filtrado de planificación (cliente u operario) ─────────────────────────────
+  const filteredPlanning = useMemo(() => {
+    if (!planningFilter.trim()) {
+      return planning; // Si no hay filtro, devolver planning original
+    }
+
+    const filter = planningFilter.toLowerCase().trim();
+    
+    // Filtrar tareas que coincidan con cliente u operario (lógica OR)
+    const filteredJobs = planning.jobs.filter(job => {
+      // Buscar por nombre de cliente
+      const client = planning.clients.find(c => c.id === job.clientId);
+      const clientMatch = client?.name.toLowerCase().includes(filter);
+      
+      // Buscar por operario (código, nombre o apellido)
+      const workerMatch = job.assignedWorkerIds.some(workerId => {
+        const worker = planning.workers.find(w => w.id === workerId);
+        if (!worker) return false;
+        
+        return (
+          (worker.code && worker.code.toLowerCase().includes(filter)) ||
+          (worker.name && worker.name.toLowerCase().includes(filter)) ||
+          (worker.surname && worker.surname.toLowerCase().includes(filter))
+        );
+      });
+      
+      // Lógica OR: mostrar si coincide cliente O operario
+      return clientMatch || workerMatch;
+    });
+
+    return {
+      ...planning,
+      jobs: filteredJobs
+    };
+  }, [planning, planningFilter]);
 
   // ── Funciones de UI ────────────────────────────────────────────────────────
 
@@ -3278,6 +3315,13 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                           </div>
                       )}
                       <button onClick={goToToday} className="px-3 py-2 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-blue-100 transition-colors">Hoy</button>
+                      <input 
+                        type="text" 
+                        value={planningFilter}
+                        onChange={(e) => setPlanningFilter(e.target.value)}
+                        className="w-48 p-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="🔍 Cliente u operario..."
+                      />
                    </div>
                    <div className="flex items-center gap-3">
                       <button onClick={() => setShowNotificationsModal(true)} className="relative p-3 bg-slate-50 rounded-xl hover:bg-blue-50 text-slate-400 hover:text-blue-600 transition-colors">
@@ -3286,7 +3330,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                       </button>
                    </div>
                 </header>
-                <PlanningBoard planning={planning} datesToShow={datesToShow} onDropWorker={handleAssignWorker} onRemoveWorker={handleRemoveWorker} onAddJob={handleOpenNewJob} onEditJob={setEditingJob} onDuplicateJob={handleOpenDuplicate} onShowWorkerList={handleShowWorkerList} onExportAccessList={exportWorkerAccessList} highlightedWorker={highlightedWorker} onDragStartFromBoard={(wId) => setDraggedWorkerId(wId)} onReorderJob={handleReorderJobs} onReorderClient={handleReorderClients} onEditNote={handleOpenNote} onUpdateJobReinforcementGroups={handleUpdateJobReinforcementGroups} draggedWorkerId={draggedWorkerId} showNotification={showNotification} />
+                <PlanningBoard planning={filteredPlanning} datesToShow={datesToShow} onDropWorker={handleAssignWorker} onRemoveWorker={handleRemoveWorker} onAddJob={handleOpenNewJob} onEditJob={setEditingJob} onDuplicateJob={handleOpenDuplicate} onShowWorkerList={handleShowWorkerList} onExportAccessList={exportWorkerAccessList} highlightedWorker={highlightedWorker} onDragStartFromBoard={(wId) => setDraggedWorkerId(wId)} onReorderJob={handleReorderJobs} onReorderClient={handleReorderClients} onEditNote={handleOpenNote} onUpdateJobReinforcementGroups={handleUpdateJobReinforcementGroups} draggedWorkerId={draggedWorkerId} showNotification={showNotification} />
              </div>
          )}
          {view === 'compact' && <CompactPlanningView planning={planning} />}
