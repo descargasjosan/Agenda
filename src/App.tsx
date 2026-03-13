@@ -2473,12 +2473,6 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
     showNotification("Tarea eliminada", "success");
   }, [persistDeleteStandardTask, showNotification]);
 
-  const clearAllStandardTasks = useCallback(async () => {
-    if (planning.standardTasks.length === 0) { showNotification("No hay plantillas para eliminar", "info"); return; }
-    await Promise.all(planning.standardTasks.map(t => persistDeleteStandardTask(t.id)));
-    showNotification(`Se eliminaron ${planning.standardTasks.length} plantillas`, "success");
-  }, [planning.standardTasks, persistDeleteStandardTask, showNotification]);
-
   // ── CRUD: Courses ──────────────────────────────────────────────────────────
   const handleAddGlobalCourse = useCallback(async () => {
     if (!newCourseName.trim()) return;
@@ -2958,7 +2952,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
   const cleanupOldData = (data: PlanningState): PlanningState => ({
     ...data,
     standardTasks: (data.standardTasks || []).filter(t => t.id && t.name && t.defaultWorkers && t.type && Array.isArray(t.assignedClientIds)),
-    clients: (data.clients || []).map(c => ({ ...c, regularTasks: (c.regularTasks || []).filter(t => t.id && t.name && t.defaultWorkers && t.category) })),
+    clients: (data.clients || []).map(c => ({ ...c })), // Eliminar regularTasks
     courses: (data.courses || []).filter(c => c.id && c.name && Array.isArray(c.assignedWorkerIds)),
     workers: data.workers || [], jobs: data.jobs || [], vehicles: data.vehicles || [], vehicleAssignments: data.vehicleAssignments || [], holidays: data.holidays || []
   });
@@ -2989,14 +2983,6 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
     if (activeStatusFilters.length > 0) workers = workers.filter(w => activeStatusFilters.some(k => getCorrectWorkerStatus(w) === statusMapping[k]));
     return workers;
   }, [cleanedPlanning.workers, workerTableSearch, showArchivedWorkers, workerAvailabilityFilter, workerContractFilter, workerStatusFilter, cleanedPlanning.jobs, cleanedPlanning.currentDate]);
-
-  const getClientQuickTemplates = (clientId: string) => {
-    const client = cleanedPlanning.clients.find(c => c.id === clientId);
-    if (!client) return [];
-    const regularTemplates = (client.regularTasks || []).filter(t => t && t.id && t.name && t.defaultWorkers && t.category);
-    const standardTemplates = cleanedPlanning.standardTasks.filter(t => t && t.id && t.name && t.defaultWorkers && t.type && Array.isArray((t as any).assignedClientIds) && (t as any).assignedClientIds.includes(clientId)).map(t => ({ id: `st-${t.id}`, name: t.name, defaultWorkers: t.defaultWorkers, category: t.type }));
-    return [...regularTemplates, ...standardTemplates];
-  };
 
   const loadExampleData = async () => {
     await Promise.all([
@@ -4073,12 +4059,12 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                 {/* Vista compacta de registros */}
                 <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
                   {/* Header */}
-                  <div className="grid grid-cols-6 gap-2 p-3 bg-slate-50 border-b border-slate-200">
-                    <div className="text-xs font-bold text-slate-700 uppercase">Tipo</div>
-                    <div className="text-xs font-bold text-slate-700 uppercase">Proveedor</div>
-                    <div className="text-xs font-bold text-slate-700 uppercase">Operarios</div>
-                    <div className="text-xs font-bold text-slate-700 uppercase">Realización</div>
-                    <div className="text-xs font-bold text-slate-700 uppercase">Caducidad</div>
+                  <div className="grid gap-2 p-3 bg-slate-50 border-b border-slate-200" style={{ gridTemplateColumns: '16.67% 11.67% 38.33% 11.67% 11.67% 10%' }}>
+                    <div className="text-xs font-bold text-slate-700 uppercase border-r border-slate-100 pr-2">Tipo</div>
+                    <div className="text-xs font-bold text-slate-700 uppercase border-r border-slate-100 pr-2">Proveedor</div>
+                    <div className="text-xs font-bold text-slate-700 uppercase border-r border-slate-100 pr-2">Operarios</div>
+                    <div className="text-xs font-bold text-slate-700 uppercase border-r border-slate-100 pr-2">Realización</div>
+                    <div className="text-xs font-bold text-slate-700 uppercase border-r border-slate-100 pr-2">Caducidad</div>
                     <div className="text-xs font-bold text-slate-700 uppercase">Acciones</div>
                   </div>
                   
@@ -4093,42 +4079,76 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                           worker.code.toLowerCase().includes(medicalWorkerFilter.toLowerCase())
                         );
                       })
-                    );
+                    ).sort((a, b) => {
+                      // Ordenar por fecha de realización (issueDate) - más reciente primero
+                      const getDateA = a.issueDate || a.date || a.createdAt || '';
+                      const getDateB = b.issueDate || b.date || b.createdAt || '';
+                      
+                      const dateA = new Date(getDateA).getTime();
+                      const dateB = new Date(getDateB).getTime();
+                      
+                      // Si no hay fechas válidas, usar el ID como fallback
+                      if (isNaN(dateA) && isNaN(dateB)) {
+                        const idA = a.id || '';
+                        const idB = b.id || '';
+                        return idB.localeCompare(idA); // Descendente
+                      }
+                      
+                      if (isNaN(dateA)) return 1; // A va al final
+                      if (isNaN(dateB)) return -1; // B va al final
+                      
+                      return dateB - dateA; // Descendente (más reciente primero)
+                    });
                     
                     return filteredCourses.map(course => {
                       const assignedWorker = course.assignedWorkerIds[0]; // Solo hay un operario por registro
                       const worker = planning.workers.find(w => w.id === assignedWorker);
                       const workerName = worker ? worker.name : '';
                       
+                      // Generar ID único si no existe
+                      const generateUniqueId = (course: any) => {
+                        if (course.id) return course.id;
+                        const workerId = course.assignedWorkerIds[0] || 'unknown';
+                        const issueDate = course.issueDate || 'unknown';
+                        const provider = course.provider || 'unknown';
+                        return `${workerId}-${issueDate}-${provider}`;
+                      };
+                      
+                      const courseId = generateUniqueId(course);
+                      
+                      // Crear una copia del curso con ID válido
+                      const courseWithId = { ...course, id: courseId };
+                      
                       console.log('🔍 Renderizando course:', { 
-                        id: course.id, 
+                        id: courseId, 
                         provider: course.provider, 
-                        hasId: !!course.id,
-                        idType: typeof course.id 
+                        hasId: !!courseId,
+                        idType: typeof courseId,
+                        fullCourse: course
                       });
                       
                       return (
-                        <div key={course.id || `course-${Math.random()}`} className="grid grid-cols-6 gap-2 p-3 border-b border-slate-100 hover:bg-slate-50 items-center">
-                          <div className="text-sm font-medium text-slate-900 truncate">
+                        <div key={courseId} className="grid gap-2 p-3 border-b border-slate-100 hover:bg-slate-50 items-center" style={{ gridTemplateColumns: '16.67% 11.67% 38.33% 11.67% 11.67% 10%' }}>
+                          <div className="text-sm font-medium text-slate-900 truncate border-r border-slate-100 pr-2">
                             {course.type === 'recognition' ? '🏥 Reconocimiento médico' : (course.name || '📚 Curso')}
                           </div>
-                          <div className="text-sm text-slate-600 truncate">
+                          <div className="text-sm text-slate-600 truncate border-r border-slate-100 pr-2">
                             {course.provider}
                           </div>
-                          <div className="text-sm text-slate-600">
+                          <div className="text-sm text-slate-600 border-r border-slate-100 pr-2">
                             {workerName || '-'}
                           </div>
-                          <div className="text-sm text-slate-600">
+                          <div className="text-sm text-slate-600 truncate border-r border-slate-100 pr-2">
                             {formatDateEuropean(course.issueDate) || '-'}
                           </div>
-                          <div className="text-sm text-slate-600">
+                          <div className="text-sm text-slate-600 truncate border-r border-slate-100 pr-2">
                             {formatDateEuropean(course.expiryDate) || '-'}
                           </div>
-                          <div className="flex gap-1">
+                          <div className="flex gap-1 justify-center items-center">
                             <button 
                               onClick={() => {
-                                console.log('🔍 Botón editar presionado, course.id:', course.id);
-                                setPlanning(prev => ({ ...prev, editingMedicalCourse: course }));
+                                console.log('🔍 Botón editar presionado, course.id:', courseId);
+                                setPlanning(prev => ({ ...prev, editingMedicalCourse: courseWithId }));
                               }}
                               className="p-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
                               title="Editar"
@@ -4137,9 +4157,9 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                             </button>
                             <button 
                               onClick={() => {
-                                console.log('🔍 Botón eliminar presionado, course.id:', course.id);
+                                console.log('🔍 Botón eliminar presionado, course.id:', courseId);
                                 if (confirm('¿Eliminar este registro médico?')) {
-                                  deleteMedicalCourseHandler(course.id);
+                                  deleteMedicalCourseHandler(courseId);
                                 }
                               }}
                               className="p-1 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
@@ -4244,9 +4264,35 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                     const numB = parseInt(b.code.replace(/\D/g, ''), 10);
                     return numA - numB;
                   }).map(worker => {
-                   const workerMedicalCourses = planning.medicalCourses.filter(course => 
-                     course.assignedWorkerIds.includes(worker.id)
-                   );
+                   const workerMedicalCourses = planning.medicalCourses
+                     .filter(course => course.assignedWorkerIds.includes(worker.id))
+                     .sort((a, b) => {
+                       // Extraer timestamp del ID si es posible, o usar updatedAt/createdAt
+                       const getTimestamp = (course: any) => {
+                         // Intentar extraer timestamp del ID (formato: timestamp-workerId)
+                         const idTimestamp = course.id ? parseInt(course.id.split('-')[0]) : 0;
+                         if (!isNaN(idTimestamp) && idTimestamp > 1000000000000) return idTimestamp;
+                         
+                         // Usar fechas si existen
+                         if (course.updatedAt) return new Date(course.updatedAt).getTime();
+                         if (course.createdAt) return new Date(course.createdAt).getTime();
+                         if (course.date) return new Date(course.date).getTime();
+                         
+                         // Último recurso: usar el ID completo como string
+                         return course.id ? course.id.toString() : '';
+                       };
+                       
+                       const valueA = getTimestamp(a);
+                       const valueB = getTimestamp(b);
+                       
+                       // Orden descendente (más reciente primero)
+                       if (typeof valueA === 'number' && typeof valueB === 'number') {
+                         return valueB - valueA;
+                       }
+                       
+                       // Si son strings, ordenar alfabéticamente invertido
+                       return valueB.toString().localeCompare(valueA.toString());
+                     });
                    const workerAlerts = planning.medicalAlerts.filter(alert => alert.workerId === worker.id);
                    const hasAlerts = workerAlerts.length > 0;
                    
@@ -5263,32 +5309,6 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                        </div>
                     </div>
                  </div>
-
-                 {editingJob.clientId && getClientQuickTemplates(editingJob.clientId)?.length ? (
-                    <div className="animate-in fade-in slide-in-from-top-2">
-                       <div className="flex items-center gap-2 mb-2">
-                          <Sparkles className="w-3 h-3 text-amber-500" />
-                          <label className="text-[10px] font-black text-amber-600 uppercase tracking-widest">Plantillas Rápidas</label>
-                       </div>
-                       <div className="flex flex-wrap gap-2">
-                          {getClientQuickTemplates(editingJob.clientId).map(task => (
-                             <button
-                                key={task.id}
-                                onClick={() => setEditingJob({
-                                   ...editingJob,
-                                   type: task.category,
-                                   customName: task.name,
-                                   requiredWorkers: task.defaultWorkers
-                                })}
-                                className="px-3 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 text-[10px] font-bold uppercase tracking-wide transition-all shadow-sm flex items-center gap-1.5"
-                             >
-                                <span>{task.name}</span>
-                                <span className="bg-white px-1.5 rounded-md text-[9px] font-black text-amber-500">{task.defaultWorkers} Ops</span>
-                             </button>
-                          ))}
-                       </div>
-                    </div>
-                 ) : null}
 
                  <div className="bg-slate-50/50 rounded-2xl p-1 border border-slate-100">
                     <div className="grid grid-cols-3 gap-2">
@@ -6718,7 +6738,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                 </div>
               </div>
               <p className="text-[9px] text-slate-400">
-                Clientes que verán esta plantilla rápida
+                Clientes asignados a esta tarea estándar
               </p>
             </div>
           </div>
