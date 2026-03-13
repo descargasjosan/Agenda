@@ -2766,7 +2766,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
       });
       
       // Añadir columnas de totales
-      headers.push('Faltas', 'Baja Médica', 'Reposo', 'Vacaciones', 'Horas', 'Saldo Vacaciones', 'Anticipo', 'S. Bruto');
+      headers.push('Faltas', 'Baja Médica', 'Reposo', 'Vacaciones', 'Horas', 'Saldo Vacaciones', 'Anticipo', 'S. Bruto', 'S. Neto');
       
       excelData.push(headers);
       excelData.push([]); // Fila vacía después de cabeceras
@@ -2799,7 +2799,8 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
           totals.totalHours || 0,
           vac.remaining || 0,
           advance || 0,
-          worker.salary || ''
+          worker.salary || '',
+          worker.netSalary || (worker.salary ? Math.round(worker.salary * 0.8) : '') // S. Neto (80% del S. Bruto si no hay valor específico)
         );
         
         excelData.push(row);
@@ -2824,7 +2825,8 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
         grandTotals.totalHours || 0,
         '',
         '',
-        activeWorkers.reduce((sum, w) => sum + (w.salary || 0), 0)
+        activeWorkers.reduce((sum, w) => sum + (w.salary || 0), 0),
+        activeWorkers.reduce((sum, w) => sum + (w.netSalary || (w.salary ? Math.round(w.salary * 0.8) : 0)), 0)
       );
       
       excelData.push([]);
@@ -2848,7 +2850,8 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
         { wch: 8 },  // Horas
         { wch: 12 }, // Saldo Vacaciones
         { wch: 8 },  // Anticipo
-        { wch: 10 }  // S. Bruto
+        { wch: 10 }, // S. Bruto
+        { wch: 10 }  // S. Neto
       ];
       ws['!cols'] = colWidths;
       
@@ -4722,7 +4725,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                                           <div className="font-black text-xs text-slate-900 min-w-[35px] text-right">
                                              {worker.code}
                                           </div>
-                                          <div className="font-black text-xs text-slate-900 flex-1">
+                                          <div className={`font-black text-xs flex-1 ${worker.contractType === ContractType.FIJO_DISCONTINUO ? 'text-red-600' : 'text-slate-900'}`}>
                                              {worker.name}
                                           </div>
                                        </div>
