@@ -4646,7 +4646,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                </div>
 
                {/* Grid de Control de Operarios - 30% más pequeño */}
-               <div className="bg-white rounded-xl border border-slate-200 overflow-x-auto max-h-[70vh] overflow-y-auto">
+               <div className="bg-white rounded-xl border border-slate-200 overflow-x-auto max-h-[91vh] overflow-y-auto">
                   <table className="w-full min-w-[800px] text-xs">
                      {/* Header con días del mes */}
                      <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
