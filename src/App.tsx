@@ -4671,7 +4671,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                                  const dayOfWeek = getDayOfWeek(year, month, day);
                                  const isCurrentDay = day === getCurrentDay() && month === new Date().getMonth() + 1 && year === new Date().getFullYear();
                                  return (
-                                    <th key={day} className={`p-1 text-center border-r border-slate-200 min-w-[25px] ${isCurrentDay ? 'bg-green-100' : ''}`}>
+                                    <th key={day} className={`p-1 text-center border-r border-slate-200 min-w-[25px] ${isCurrentDay ? 'bg-green-300' : ''}`}>
                                        <div className="text-xs font-black text-slate-700">
                                           {day}
                                        </div>
@@ -4756,7 +4756,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                                                 className={`p-1 text-center cursor-pointer hover:bg-blue-50 transition-colors border-r border-slate-200 ${
                                                    isHolidayDay ? 'bg-red-50' : 
                                                    isWeekend ? 'bg-slate-100' : 
-                                                   isCurrentDay ? 'bg-green-50' : 'bg-white'
+                                                   isCurrentDay ? 'bg-green-300' : 'bg-white'
                                                 }`}
                                                 onClick={() => {
                                                    // Permitir clic en festivos/fin de semana para poder registrar B (baja) o P (paternidad)
