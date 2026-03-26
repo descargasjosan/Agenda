@@ -6495,7 +6495,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                             }
                           }
                           
-                          return `   • *Cliente:* ${client?.name}\n   • *Centro:* ${center?.name || 'Sede Principal'}\n   • *Dirección:* ${address}\n   • *Ver en Mapa:* ${mapUrl}\n\n   • *Hora Inicio:* ${workerStartTime}\n   • *Tarea:* ${firstJob.customName || firstJob.type}`;
+                          return `   • *Cliente:* ${client?.name}\n   • *Centro:* ${center?.name || 'Sede Principal'}\n   • *Dirección:* ${address}\n   • *Ver en Mapa:* ${mapUrl}\n\n   • *Hora Inicio:* ${workerStartTime}\n   • *Tarea:* ${firstJob.customName || firstJob.type}\n\n*📱 Recordaros que tenéis la obligatoriedad de fichar diariamente la jornada laboral*`;
                         })()}\n\nPor favor, confirma recepción del mensaje`;
 
                        const encodedMessage = encodeURIComponent(message);
