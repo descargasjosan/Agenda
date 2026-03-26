@@ -184,7 +184,7 @@ const App: React.FC = () => {
   const [workerAvailabilityFilter, setWorkerAvailabilityFilter] = useState<'all' | 'free' | 'assigned'>('all');
   const [workerContractFilter, setWorkerContractFilter] = useState<'all' | 'fixedDiscontinuous' | 'others'>('all');
   const [workerStatusFilter, setWorkerStatusFilter] = useState<{[key: string]: boolean}>({
-    'DISPONIBLE': true, 'VACACIONES': true, 'BAJA_MEDICA': true, 'BAJA_PATERNIDAD': true
+    'DISPONIBLE': true, 'VACACIONES': true, 'BAJA_MEDICA': true, 'BAJA_PATERNIDAD': true, 'PERMISO_RETRIBUIDO': true
   });
   const [itemToDelete, setItemToDelete] = useState<{ id: string, type: 'job' | 'worker' | 'client' | 'task' | 'course', name: string } | null>(null);
   const [confirmDeleteCourse, setConfirmDeleteCourse] = useState<string | null>(null);
@@ -411,6 +411,8 @@ const syncFromStatusRecords = useCallback(async (showSummary: boolean = false) =
                case 'Baja Médica': statusCode = 'B'; break;
                case 'BAJA_PATERNIDAD':
                case 'Baja Paternidad': statusCode = 'P'; break;
+               case 'PERMISO_RETRIBUIDO':
+               case 'Permiso Retribuido': statusCode = 'D'; break;
                default: statusCode = ''; break;
             }
             newWorkerData[day] = statusCode;
@@ -499,12 +501,13 @@ const syncToStatusRecords = useCallback(async (workerId: string, day: number, va
          };
       });
       
-      // Solo procesar como estado si es V, B, P
+      // Solo procesar como estado si es V, B, P, D
       let statusType: WorkerStatus | null = null;
       switch(value) {
          case 'V': statusType = WorkerStatus.VACACIONES; break;
          case 'B': statusType = WorkerStatus.BAJA_MEDICA; break;
          case 'P': statusType = WorkerStatus.BAJA_PATERNIDAD; break;
+         case 'D': statusType = WorkerStatus.PERMISO_RETRIBUIDO; break;
          default: statusType = null; break;
       }
       
@@ -522,7 +525,8 @@ const syncToStatusRecords = useCallback(async (workerId: string, day: number, va
             const s = getCurrentWorkerStatusForDate(updatedWorker, dStr);
             const sCode = s.status === WorkerStatus.VACACIONES ? 'V' :
                           s.status === WorkerStatus.BAJA_MEDICA ? 'B' :
-                          s.status === WorkerStatus.BAJA_PATERNIDAD ? 'P' : '';
+                          s.status === WorkerStatus.BAJA_PATERNIDAD ? 'P' :
+                          s.status === WorkerStatus.PERMISO_RETRIBUIDO ? 'D' : '';
             if (sCode === value) sameStatusDays.push(d);
          });
 
@@ -741,6 +745,7 @@ const calculateWorkerTotals = (workerId: string) => {
             case 'B': totalBajaMedica++; break;
             case 'R': totalReposo++; break;
             case 'V': totalVacaciones++; break;
+            case 'D': totalVacaciones++; break; // Permiso retribuido cuenta como vacaciones
          }
       }
    });
@@ -774,6 +779,7 @@ const calculateGrandTotals = (month: string) => {
                case 'B': grandTotalBajaMedica++; break;
                case 'R': grandTotalReposo++; break;
                case 'V': grandTotalVacaciones++; break;
+               case 'D': grandTotalVacaciones++; break; // Permiso retribuido cuenta como vacaciones
             }
          }
       });
@@ -864,7 +870,7 @@ const calculateVacationBalance = (workerId: string) => {
       const yearStart = `${year}-01-01`;
       const yearEnd = `${year}-12-31`;
       worker.statusRecords
-         .filter(r => r.status === WorkerStatus.VACACIONES || (r.status as string) === 'Vacaciones' || (r.status as string) === 'VACACIONES')
+         .filter(r => r.status === WorkerStatus.VACACIONES || r.status === WorkerStatus.PERMISO_RETRIBUIDO || (r.status as string) === 'Vacaciones' || (r.status as string) === 'VACACIONES')
          .forEach(r => {
             const start = new Date(Math.max(new Date(r.startDate + 'T00:00:00').getTime(), new Date(yearStart + 'T00:00:00').getTime()));
             const end = new Date(Math.min(new Date((r.endDate || r.startDate) + 'T00:00:00').getTime(), new Date(yearEnd + 'T00:00:00').getTime()));
@@ -3019,7 +3025,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
       else workers = workers.filter(w => w.contractType === ContractType.FIJO_CONTINUO);
     }
     const activeStatusFilters = Object.keys(workerStatusFilter).filter(k => workerStatusFilter[k]);
-    const statusMapping: {[k: string]: string} = { 'DISPONIBLE': 'Disponible', 'VACACIONES': 'Vacaciones', 'BAJA_MEDICA': 'Baja Médica', 'BAJA_PATERNIDAD': 'Baja Paternidad' };
+    const statusMapping: {[k: string]: string} = { 'DISPONIBLE': 'Disponible', 'VACACIONES': 'Vacaciones', 'BAJA_MEDICA': 'Baja Médica', 'BAJA_PATERNIDAD': 'Baja Paternidad', 'PERMISO_RETRIBUIDO': 'Permiso Retribuido' };
     if (activeStatusFilters.length > 0) workers = workers.filter(w => activeStatusFilters.some(k => getCorrectWorkerStatus(w) === statusMapping[k]));
     return workers;
   }, [cleanedPlanning.workers, workerTableSearch, showArchivedWorkers, workerAvailabilityFilter, workerContractFilter, workerStatusFilter, cleanedPlanning.jobs, cleanedPlanning.currentDate]);
@@ -3290,6 +3296,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
             onDragStart={handleDragStart}
             getCorrectWorkerStatus={getCorrectWorkerStatus}
             onWorkerHighlight={handleWorkerHighlight}
+            workerControlData={workerControlData}
           />
          )}
 
@@ -3711,7 +3718,8 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                             'DISPONIBLE': false,
                             'VACACIONES': false,
                             'BAJA_MEDICA': false,
-                            'BAJA_PATERNIDAD': false
+                            'BAJA_PATERNIDAD': false,
+                            'PERMISO_RETRIBUIDO': false
                           });
                         } else {
                           // Si no todos están activos, activar todos
@@ -3719,7 +3727,8 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                             'DISPONIBLE': true,
                             'VACACIONES': true,
                             'BAJA_MEDICA': true,
-                            'BAJA_PATERNIDAD': true
+                            'BAJA_PATERNIDAD': true,
+                            'PERMISO_RETRIBUIDO': true
                           });
                         }
                       }}
@@ -3818,6 +3827,29 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                       }`}
                     >
                       Baja Paternidad
+                    </button>
+                    <button
+                      onClick={() => {
+                        const allActive = Object.values(workerStatusFilter).every(v => v);
+                        setWorkerStatusFilter((prev: Record<string, boolean>) => ({
+                          ...prev, 
+                          'PERMISO_RETRIBUIDO': !prev['PERMISO_RETRIBUIDO'],
+                          // Si todos estaban activos, desactivar los demás al cambiar este
+                          ...(allActive ? {
+                            'DISPONIBLE': false,
+                            'VACACIONES': false,
+                            'BAJA_MEDICA': false,
+                            'BAJA_PATERNIDAD': false
+                          } : {})
+                        }));
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all ${
+                        workerStatusFilter['PERMISO_RETRIBUIDO'] 
+                          ? 'bg-orange-500 text-white shadow-sm' 
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      Permiso Retribuido
                     </button>
                   </div>
 
@@ -5845,6 +5877,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                         <option value={WorkerStatus.VACACIONES}>Vacaciones</option>
                         <option value={WorkerStatus.BAJA_MEDICA}>Baja Médica</option>
                         <option value={WorkerStatus.BAJA_PATERNIDAD}>Baja Paternidad</option>
+                        <option value={WorkerStatus.PERMISO_RETRIBUIDO}>Permiso Retribuido</option>
                       </select>
                     </div>
                     <div className="space-y-1">

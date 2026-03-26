@@ -3,6 +3,7 @@ export enum WorkerStatus {
   VACACIONES = 'Vacaciones',
   BAJA_MEDICA = 'Baja Médica',
   BAJA_PATERNIDAD = 'Baja Paternidad',
+  PERMISO_RETRIBUIDO = 'Permiso Retribuido',
   DISPONIBLE = 'Disponible'
 }
 

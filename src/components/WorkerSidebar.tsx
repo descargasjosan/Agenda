@@ -12,6 +12,7 @@ interface WorkerSidebarProps {
   onUpdateWorkerStatus: (workerId: string, status: WorkerStatus) => void;
   getCorrectWorkerStatus?: (worker: Worker) => WorkerStatus;
   onWorkerHighlight?: (workerId: string) => void;
+  workerControlData?: {[month: string]: {[workerId: string]: {[day: string]: string}}};
 }
 
 const WorkerSidebar: React.FC<WorkerSidebarProps> = ({ 
@@ -21,7 +22,8 @@ const WorkerSidebar: React.FC<WorkerSidebarProps> = ({
   selectedWorkerId,
   onSelectWorker,
   getCorrectWorkerStatus,
-  onWorkerHighlight
+  onWorkerHighlight,
+  workerControlData = {}
 }) => {
   const [searchTerm, setSearchTerm] = React.useState('');
   const [availabilityFilter, setAvailabilityFilter] = React.useState<'all' | 'free' | 'assigned'>('all');
@@ -47,10 +49,28 @@ const WorkerSidebar: React.FC<WorkerSidebarProps> = ({
     return getShortName(displayName);
   };
 
-  // Función para determinar el estado de un operario en una fecha específica (basada en registros)
+  // Función para determinar el estado de un operario en una fecha específica (basada en registros + grid de control)
   const getWorkerStatusForDate = (worker: Worker, date: string): WorkerStatus => {
+    // Primero revisar statusRecords
     if (!worker.statusRecords || worker.statusRecords.length === 0) {
-      return WorkerStatus.DISPONIBLE;
+      // Si no hay registros, revisar el grid de control
+      const [year, month] = date.split('-');
+      const monthKey = `${year}-${String(month).padStart(2, '0')}`;
+      const day = parseInt(date.split('-')[2]);
+      
+      const controlData = workerControlData || {};
+      const monthData = controlData[monthKey] || {};
+      const workerData = monthData[worker.id] || {};
+      const dayValue = workerData[day] || '';
+      
+      // Convertir valores del grid a estados
+      switch(dayValue) {
+        case 'V': return WorkerStatus.VACACIONES;
+        case 'B': return WorkerStatus.BAJA_MEDICA;
+        case 'P': return WorkerStatus.BAJA_PATERNIDAD;
+        case 'D': return WorkerStatus.PERMISO_RETRIBUIDO;
+        default: return WorkerStatus.DISPONIBLE;
+      }
     }
 
     const targetDate = new Date(date);
@@ -63,7 +83,28 @@ const WorkerSidebar: React.FC<WorkerSidebarProps> = ({
       return targetDate >= startDate && targetDate <= endDate;
     });
 
-    return activeRecord ? activeRecord.status : WorkerStatus.DISPONIBLE;
+    if (activeRecord) {
+      return activeRecord.status;
+    }
+    
+    // Si no hay registro activo, revisar el grid de control
+    const [year, month] = date.split('-');
+    const monthKey = `${year}-${String(month).padStart(2, '0')}`;
+    const day = parseInt(date.split('-')[2]);
+    
+    const controlData = workerControlData || {};
+    const monthData = controlData[monthKey] || {};
+    const workerData = monthData[worker.id] || {};
+    const dayValue = workerData[day] || '';
+    
+    // Convertir valores del grid a estados
+    switch(dayValue) {
+      case 'V': return WorkerStatus.VACACIONES;
+      case 'B': return WorkerStatus.BAJA_MEDICA;
+      case 'P': return WorkerStatus.BAJA_PATERNIDAD;
+      case 'D': return WorkerStatus.PERMISO_RETRIBUIDO;
+      default: return WorkerStatus.DISPONIBLE;
+    }
   };
 
   // FILTRO: Muestra trabajadores activos/disponibles y gestiona las fechas de bajas/vacaciones
@@ -80,7 +121,8 @@ const WorkerSidebar: React.FC<WorkerSidebarProps> = ({
     const isUnavailableStatus = [
       WorkerStatus.VACACIONES, 
       WorkerStatus.BAJA_MEDICA, 
-      WorkerStatus.BAJA_PATERNIDAD
+      WorkerStatus.BAJA_PATERNIDAD,
+      WorkerStatus.PERMISO_RETRIBUIDO
     ].includes(statusForCurrentDate);
 
     if (isUnavailableStatus) {
