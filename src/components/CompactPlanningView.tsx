@@ -290,7 +290,7 @@ const CompactPlanningView: React.FC<CompactPlanningViewProps> = ({ planning }) =
         </div>
 
         {/* Tabla Compacta */}
-        <div className="flex-1 overflow-auto bg-white custom-scrollbar">
+        <div className="flex-1 overflow-auto bg-white custom-scrollbar" data-compact-view="true">
            <table className="w-full text-left border-collapse">
               <thead className="bg-slate-900 text-white sticky top-0 z-20 shadow-md">
                  <tr>

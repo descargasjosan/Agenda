@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { 
-  CalendarIcon, Users, Building2, Car, HeartPulse, Settings, Download, Upload, Cloud, CloudOff, AlertCircle, CheckCircle2, X, ChevronLeft, ChevronRight, CalendarDays, Search, Plus, Trash2, Edit2, Copy, FileText, Loader2, LayoutGrid, Table, ListTodo, Bell, MessageSquare, Send, Filter, ArrowRight, Clock, User, Mail, Phone, MapPin, Briefcase, Star, TrendingUp, Activity, DownloadCloud, Database, RotateCcw, BarChart3, MessageCircle, Calendar, CheckCircle, XCircle, GraduationCap, FileSpreadsheet, ChevronDown, Sparkles, ClipboardList, Hash, Save, StickyNote, Fuel, AlertTriangle, RefreshCw 
+  CalendarIcon, Users, Building2, Car, HeartPulse, Settings, Download, Upload, Cloud, CloudOff, AlertCircle, CheckCircle2, X, ChevronLeft, ChevronRight, CalendarDays, Search, Plus, Trash2, Edit2, Copy, FileText, Loader2, LayoutGrid, Table, ListTodo, Bell, MessageSquare, Send, Filter, ArrowRight, Clock, User, Mail, Phone, MapPin, Briefcase, Star, TrendingUp, Activity, DownloadCloud, Database, RotateCcw, BarChart3, MessageCircle, Calendar, CheckCircle, XCircle, GraduationCap, FileSpreadsheet, ChevronDown, Sparkles, ClipboardList, Hash, Save, StickyNote, Fuel, AlertTriangle, RefreshCw, Camera 
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { useSupabaseData } from './hooks/useSupabaseData';
@@ -982,9 +982,192 @@ const [planningFilter, setPlanningFilter] = useState('');
   const APP_VERSION = 'v2.0.0';
   // Stubs de compatibilidad con UI (en v2 el guardado es granular, no hay "auto-backup" separado)
   const [autoBackupEnabled, setAutoBackupEnabled] = useState(true);
-  const [lastAutoBackupTime] = useState<Date | null>(null);
+  const [lastAutoBackupTime, setLastAutoBackupTime] = useState<Date | null>(null);
+  const [autoBackupSchedule, setAutoBackupSchedule] = useState(false); // DESACTIVADO TEMPORALMENTE - Causaba bucle infinito
 
-  // ── Estados compatibles con v1 (UI sin cambios) ────────────────────────────
+  // ── Backup automático cada 3 horas (6:00-21:00) ─────────────────────
+  const performAutoBackup = useCallback(() => {
+    if (!autoBackupEnabled || !autoBackupSchedule) return;
+    
+    console.log('🔄 Auto-backup desactivado temporalmente para evitar bucle infinito');
+    return; // SALIDA TEMPRANA PARA EVITAR BUCLE
+    
+    try {
+      const dataStr = JSON.stringify(planning, null, 2);
+      const blob = new Blob([dataStr], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const now = new Date();
+      const timestamp = now.toISOString().split('T')[0] + '_' + now.toTimeString().split(' ')[0].replace(/:/g, '-');
+      link.download = `AUTO_BACKUP_${timestamp}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      
+      setLastAutoBackupTime(now);
+      console.log(`🔄 Auto-backup realizado: ${timestamp}`);
+      
+      // Guardar historial de backups automáticos
+      const backupHistory = JSON.parse(localStorage.getItem('autoBackupHistory') || '[]');
+      backupHistory.push({ timestamp: timestamp, size: Math.round(dataStr.length / 1024) });
+      // Mantener solo últimos 50 backups
+      if (backupHistory.length > 50) backupHistory.shift();
+      localStorage.setItem('autoBackupHistory', JSON.stringify(backupHistory));
+      
+    } catch (error) {
+      console.error('❌ Error en auto-backup:', error);
+    }
+  }, [planning, autoBackupEnabled, autoBackupSchedule]);
+
+  // ── Sistema de Backup Automático Simple y Robusto ─────────────────────
+  useEffect(() => {
+    if (!autoBackupEnabled) return;
+    
+    console.log('🔄 Iniciando sistema de backup automático simple');
+    
+    // Backup cada hora (3600000 ms = 1 hora)
+    const hourlyBackup = setInterval(() => {
+      try {
+        const dataStr = JSON.stringify(planning, null, 2);
+        const blob = new Blob([dataStr], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        const now = new Date();
+        const timestamp = now.toISOString().split('T')[0] + '_' + now.toTimeString().split(' ')[0].replace(/:/g, '-');
+        link.download = `AUTO_BACKUP_${timestamp}.json`;
+        link.click();
+        URL.revokeObjectURL(url);
+        
+        console.log(`✅ Backup automático cada hora: ${timestamp}`);
+      } catch (error) {
+        console.error('❌ Error en backup automático:', error);
+      }
+    }, 3600000); // 1 hora
+    
+    // Backup al cerrar página
+    const handleBeforeUnload = () => {
+      try {
+        const dataStr = JSON.stringify(planning, null, 2);
+        const blob = new Blob([dataStr], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        const now = new Date();
+        const timestamp = now.toISOString().split('T')[0] + '_' + now.toTimeString().split(' ')[0].replace(/:/g, '-');
+        link.download = `CLOSE_BACKUP_${timestamp}.json`;
+        link.click();
+        URL.revokeObjectURL(url);
+        
+        console.log(`✅ Backup al cerrar página: ${timestamp}`);
+      } catch (error) {
+        console.error('❌ Error en backup al cerrar:', error);
+      }
+    };
+    
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
+    return () => {
+      clearInterval(hourlyBackup);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [autoBackupEnabled, planning]);
+
+  // ── Sistema de Captura Automática al Finalizar Jornada ─────────────────────
+  useEffect(() => {
+    const checkAndCaptureDay = () => {
+      const now = new Date();
+      const hour = now.getHours();
+      const minute = now.getMinutes();
+      const currentDate = now.toISOString().split('T')[0];
+      
+      // 📸 Capturar automáticamente a las 21:30 (final de jornada)
+      if (hour === 21 && minute === 30) {
+        captureDaySnapshot(currentDate);
+      }
+    };
+    
+    // Verificar cada minuto
+    const interval = setInterval(checkAndCaptureDay, 60000);
+    
+    return () => clearInterval(interval);
+  }, [planning]);
+
+  // ── Función de Captura de Pantalla de la Vista Compacta ─────────────────────
+  const captureDaySnapshot = useCallback(async (date: string) => {
+    try {
+      console.log(`📸 Iniciando captura automática del día: ${date}`);
+      
+      // Buscar la vista compacta en el DOM
+      const compactView = document.querySelector('[data-compact-view="true"]');
+      if (!compactView) {
+        console.warn('📸 Vista compacta no encontrada para captura');
+        return;
+      }
+      
+      // Usar html2canvas si está disponible, fallback a DOM manipulation
+      if (window.html2canvas) {
+        const canvas = await window.html2canvas(compactView as HTMLElement, {
+          backgroundColor: '#ffffff',
+          scale: 1,
+          logging: false
+        });
+        
+        // Convertir a blob y descargar
+        canvas.toBlob((blob) => {
+          if (blob) {
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `CAPTURA_DIA_${date.replace(/-/g, '_')}.png`;
+            link.click();
+            URL.revokeObjectURL(url);
+            
+            console.log(`📸 Captura de pantalla guardada: ${date}`);
+          }
+        });
+      } else {
+        // Fallback: Captura de datos en texto
+        const dayJobs = planning.jobs.filter(job => job.date === date && !job.isCancelled);
+        const snapshotData = {
+          date: date,
+          timestamp: new Date().toISOString(),
+          totalJobs: dayJobs.length,
+          jobs: dayJobs.map(job => ({
+            id: job.id,
+            client: planning.clients.find(c => c.id === job.clientId)?.name,
+            ref: job.ref,
+            startTime: job.startTime,
+            endTime: job.endTime,
+            workers: job.assignedWorkerIds.map(id => {
+              const worker = planning.workers.find(w => w.id === id);
+              return worker ? `${worker.code} - ${worker.name}` : 'Desconocido';
+            }),
+            notes: job.notes
+          }))
+        };
+        
+        const dataStr = JSON.stringify(snapshotData, null, 2);
+        const blob = new Blob([dataStr], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `CAPTURA_DIA_${date.replace(/-/g, '_')}.json`;
+        link.click();
+        URL.revokeObjectURL(url);
+        
+        console.log(`📸 Captura de datos guardada: ${date}`);
+      }
+    } catch (error) {
+      console.error('❌ Error en captura automática:', error);
+    }
+  }, [planning]);
+
+  // ── Botón manual de captura para testing ─────────────────────────────────────
+  const captureTodaySnapshot = () => {
+    const today = new Date().toISOString().split('T')[0];
+    captureDaySnapshot(today);
+  };
   // En v2 no hay "dataRecoveryMode" porque los datos se cargan desde tablas.
   // Mantenemos la variable por compatibilidad con el JSX original pero siempre false.
   const [dataRecoveryMode, setDataRecoveryMode] = useState(false);
@@ -3258,12 +3441,33 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
          {dbStatus === 'saved' && <><CheckCircle2 className="w-3 h-3" /> Guardado</>}
          {dbStatus === 'error' && <><CloudOff className="w-3 h-3" /> Sin conexión (Clic para reintentar)</>}
       </div>
-
       {/* Indicador de Backup Automático - Arriba */}
       {autoBackupEnabled && (
         <div className="fixed bottom-16 left-4 z-[400] px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-2 border shadow-sm transition-all bg-amber-50 text-amber-600 border-amber-100">
           <DownloadCloud className="w-3 h-3" />
-          {lastAutoBackupTime ? `Auto ${lastAutoBackupTime.toLocaleTimeString()}` : 'Auto activo'}
+          Backup Activo
+        </div>
+      )}
+
+      {/* Indicador de Sincronización - Crítico para seguridad de datos */}
+      {dbStatus === 'loading' && (
+        <div className="fixed top-6 right-20 z-[400] px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-2 border shadow-sm transition-all bg-orange-50 text-orange-600 border-orange-100">
+          <RefreshCw className="w-3 h-3 animate-spin" />
+          Sincronizando...
+        </div>
+      )}
+      
+      {dbStatus === 'connected' && (
+        <div className="fixed top-6 right-20 z-[400] px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-2 border shadow-sm transition-all bg-green-50 text-green-600 border-green-100">
+          <CheckCircle2 className="w-3 h-3" />
+          Sincronizado
+        </div>
+      )}
+      
+      {dbStatus === 'error' && (
+        <div className="fixed top-6 right-20 z-[400] px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-2 border shadow-sm transition-all bg-red-50 text-red-600 border-red-100">
+          <AlertCircle className="w-3 h-3" />
+          Sin conexión
         </div>
       )}
 
@@ -5238,6 +5442,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                   </div>
                   
                   <button onClick={exportBackup} className="w-full py-4 bg-blue-50 rounded-2xl font-black text-xs uppercase tracking-widest text-blue-600 hover:bg-blue-100 flex items-center justify-center gap-2 transition-colors"><DownloadCloud className="w-4 h-4" /> Exportar Backup COMPLETO</button>
+                  <button onClick={captureTodaySnapshot} className="w-full py-4 bg-purple-50 rounded-2xl font-black text-xs uppercase tracking-widest text-purple-600 hover:bg-purple-100 flex items-center justify-center gap-2 transition-colors"><Camera className="w-4 h-4" /> Capturar Hoy (21:30 Auto)</button>
                   <button onClick={exportDatabaseToExcel} className="w-full py-4 bg-green-50 rounded-2xl font-black text-xs uppercase tracking-widest text-green-600 hover:bg-green-100 flex items-center justify-center gap-2 transition-colors"><FileSpreadsheet className="w-4 h-4" /> Exportar Todo a Excel</button>
                   
                   <button onClick={handleMigrateData} className="w-full py-4 bg-red-50 rounded-2xl font-black text-xs uppercase tracking-widest text-red-600 hover:bg-red-100 flex items-center justify-center gap-2 transition-colors"><Database className="w-4 h-4" /> Importar Datos Antiguos</button>

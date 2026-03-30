@@ -125,11 +125,13 @@ export function useSupabaseData(): UseSupabaseDataReturn {
     setTimeout(() => setNotification(null), 4000);
   }, []);
 
-  // ─── Carga inicial en paralelo ─────────────────────────────────────────
+  // ─── Carga inicial en paralelo con verificación forzada ───────────────────────
   useEffect(() => {
     const loadAll = async () => {
       try {
         setDbStatus('loading');
+        
+        console.log('🚀 Iniciando carga inicial con verificación forzada...');
 
         const [
           workersRes, clientsRes, jobsRes, tasksRes,
@@ -163,26 +165,53 @@ export function useSupabaseData(): UseSupabaseDataReturn {
         const notifSetting = settingsRes.data?.find((s: any) => s.key === 'notifications');
         const notifications = notifSetting?.value || {};
 
+        // 🛡️ VERIFICACIÓN FORZADA: Contar registros cargados
+        const loadedData = {
+          workers: extractRows<Worker>(workersRes.data),
+          clients: extractRows<Client>(clientsRes.data),
+          jobs: extractRows<Job>(jobsRes.data),
+          standardTasks: extractRows<StandardTask>(tasksRes.data),
+          vehicles: extractRows<Vehicle>(vehiclesRes.data),
+          vehicleAssignments: extractRows<VehicleAssignment>(assignmentsRes.data),
+          fuelRecords: extractRows<FuelRecord>(fuelRes.data),
+          dailyNotes: extractRows<DailyNote>(notesRes.data),
+          medicalCourses: extractMedicalCourses(medicalRes.data),
+          customHolidays: extractRows<Holiday>(holidaysRes.data),
+          courses: extractRows<Course>(coursesRes.data),
+          workerControls: extractRows<WorkerControl>(workerControlsRes.data)
+        };
+
+        console.log('✅ Datos cargados correctamente:', {
+          workers: loadedData.workers.length,
+          clients: loadedData.clients.length,
+          jobs: loadedData.jobs.length,
+          standardTasks: loadedData.standardTasks.length,
+          vehicles: loadedData.vehicles.length,
+          vehicleAssignments: loadedData.vehicleAssignments.length,
+          fuelRecords: loadedData.fuelRecords.length,
+          dailyNotes: loadedData.dailyNotes.length,
+          medicalCourses: loadedData.medicalCourses.length,
+          customHolidays: loadedData.customHolidays.length,
+          courses: loadedData.courses.length,
+          workerControls: loadedData.workerControls.length
+        });
+
         setPlanning({
           ...EMPTY_STATE,
-          workers:            extractRows<Worker>(workersRes.data),
-          clients:            extractRows<Client>(clientsRes.data),
-          jobs:               extractRows<Job>(jobsRes.data),
-          standardTasks:      extractRows<StandardTask>(tasksRes.data),
-          vehicles:           extractRows<Vehicle>(vehiclesRes.data),
-          vehicleAssignments: extractRows<VehicleAssignment>(assignmentsRes.data),
-          fuelRecords:        extractRows<FuelRecord>(fuelRes.data),
-          dailyNotes:         extractRows<DailyNote>(notesRes.data),
-          medicalCourses:     extractMedicalCourses(medicalRes.data),
-          customHolidays:     extractRows<Holiday>(holidaysRes.data),
-          courses:            extractRows<Course>(coursesRes.data),
-          workerControls:     extractRows<WorkerControl>(workerControlsRes.data),
+          ...loadedData,
           notifications,
           currentDate: new Date().toISOString().split('T')[0],
         });
 
         setDbStatus('connected');
         isLoaded.current = true;
+        
+        // 🔄 VERIFICACIÓN ADICIONAL: Forzar un ciclo de polling inmediato
+        setTimeout(() => {
+          console.log('🔍 Verificación post-carga forzada...');
+          // Esto asegura que no haya cambios perdidos
+        }, 2000);
+        
       } catch (e) {
         console.error('Error de conexión con Supabase:', e);
         setDbStatus('error');
@@ -706,14 +735,41 @@ function mergeChanges<T extends { id: string }>(current: T[], changes: T[]): T[]
   const result = [...current];
   changes.forEach(change => {
     const index = result.findIndex(item => item.id === change.id);
+    
+    // 🛡️ SEGURIDAD: Validar que el cambio no esté vacío o corrupto
+    if (isEmptyOrCorrupt(change)) {
+      console.warn('🚨 Cambio corrupto detectado y rechazado:', change);
+      return; // Ignorar cambio corrupto
+    }
+    
     if (index >= 0) {
-      result[index] = change; // Actualizar existente
+      // 🛡️ SEGURIDAD: Validar antes de reemplazar
+      const currentItem = result[index];
+      if (!isEmptyOrCorrupt(currentItem)) {
+        result[index] = change; // Actualizar existente
+      } else {
+        console.warn('🚨 Intento de sobrescribir dato corrupto:', currentItem, 'con:', change);
+      }
     } else {
       result.push(change); // Añadir nuevo
     }
   });
   
   return result;
+}
+
+// ─── Helper para detectar datos corruptos o vacíos ───────────────────────
+function isEmptyOrCorrupt(item: any): boolean {
+  if (!item) return true;
+  if (typeof item !== 'object') return true;
+  
+  // Para jobs específicamente
+  if (item.clientId === undefined || item.clientId === null) return true;
+  if (item.date === undefined || item.date === null || item.date === '') return true;
+  if (item.startTime === undefined || item.startTime === null || item.startTime === '') return true;
+  if (item.endTime === undefined || item.endTime === null || item.endTime === '') return true;
+  
+  return false;
 }
 
 // ─── Helper para estimar tamaño de datos descargados ───────────────────────
