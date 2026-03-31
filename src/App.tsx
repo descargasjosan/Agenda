@@ -2979,13 +2979,15 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
         const totals = calculateWorkerTotals(worker.id);
         const vac = calculateVacationBalance(worker.id);
         const advance = getWorkerAdvance(worker.id);
+        const accumulated = calculateAccumulatedHours(worker.id);
+        const displayTotal = totals.totalHours + accumulated; // Mismo valor que en el grid
         
         row.push(
           totals.totalFaltas || 0,
           totals.totalBajaMedica || 0,
           totals.totalReposo || 0,
           totals.totalVacaciones || 0,
-          totals.totalHours || 0,
+          displayTotal || 0, // 🎯 CORREGIDO: Usar displayTotal como en el grid
           vac.remaining || 0,
           advance || 0,
           worker.salary || '',
