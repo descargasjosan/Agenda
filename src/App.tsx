@@ -1680,16 +1680,27 @@ const [planningFilter, setPlanningFilter] = useState('');
       keepDeliveryNote: keepDeliveryNoteOnDuplicate
     });
     
-    // Extraer todas las propiedades excepto las que vamos a controlar explícitamente
-    const { id, date, assignedWorkerIds, ref, deliveryNote, ...jobData } = duplicatingJob;
+    // Extraer solo las propiedades que queremos copiar explícitamente
+    const { 
+      id, 
+      date, 
+      assignedWorkerIds, 
+      ref, 
+      deliveryNote, 
+      reinforcementGroups, // 🚨 NO queremos copiar los grupos de refuerzo
+      workerTimes, // 🚨 Tampoco queremos copiar los tiempos personalizados
+      ...jobData 
+    } = duplicatingJob;
     
     const newJob: Job = { 
-      ...jobData, // Copiar todo excepto id, date, assignedWorkerIds, ref, deliveryNote
+      ...jobData, // Copiar todo excepto las propiedades excluidas arriba
       id: `j-${Date.now()}`, 
       date: duplicationDate, 
       assignedWorkerIds: keepWorkersOnDuplicate ? duplicatingJob.assignedWorkerIds : [],
       ref: keepDeliveryNoteOnDuplicate ? (duplicatingJob.ref || '') : '', // Control explícito del ref
-      deliveryNote: keepDeliveryNoteOnDuplicate ? (duplicatingJob.deliveryNote || '') : '' // Control explícito del deliveryNote
+      deliveryNote: keepDeliveryNoteOnDuplicate ? (duplicatingJob.deliveryNote || '') : '', // Control explícito del deliveryNote
+      reinforcementGroups: [], // 🛡️ FORZAR: Siempre vacío en duplicación
+      workerTimes: {} // 🛡️ FORZAR: Siempre vacío en duplicación
     };
     
     console.log('🔍 Nueva tarea creada:', newJob);
