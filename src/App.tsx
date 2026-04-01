@@ -702,6 +702,47 @@ useEffect(() => {
 // eslint-disable-next-line react-hooks/exhaustive-deps
 }, [planning.workers, planning.workerControls, isSyncingFromGrid]);
 
+// Detector de visibilidad para identificar throttling
+useEffect(() => {
+   const handleVisibilityChange = () => {
+      console.log(`👁️ [VISIBILITY] Cambio de estado: ${document.hidden ? 'BACKGROUND' : 'FOREGROUND'}`);
+      if (!document.hidden) {
+         console.log('👁️ [VISIBILITY] App volvió a primer plano - Forzando sincronización completa');
+         
+         // Forzar sincronización inmediata al volver
+         if (view === 'workerControl' && selectedMonth && planning.workers.length > 0 && !isSyncingFromGrid) {
+            syncFromStatusRecords();
+         }
+         
+         // 🔄 FORZAR ACTUALIZACIÓN COMPLETA para vista de planificación
+         if (view === 'planning') {
+            console.log('🔄 [FORCE] Forzando actualización completa de planning');
+            
+            // Forzar una actualización del estado para romper cualquier cache de React
+            setPlanning(prev => ({ ...prev }));
+            
+            // También forzar recarga de datos si hace más de 30 segundos en background
+            const now = Date.now();
+            const lastBackgroundTime = parseInt(localStorage.getItem('lastBackgroundTime') || '0');
+            
+            if (now - lastBackgroundTime > 30000) { // 30 segundos
+               console.log('🔄 [FORCE] Tiempo en background > 30s, forzando recarga completa');
+               window.location.reload(); // Recarga completa como último recurso
+            }
+         }
+      } else {
+         // Guardar timestamp cuando pasa a background
+         localStorage.setItem('lastBackgroundTime', Date.now().toString());
+      }
+   };
+
+   document.addEventListener('visibilitychange', handleVisibilityChange);
+   
+   return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+   };
+}, [view, selectedMonth, planning.workers, planning.workerControls, isSyncingFromGrid, syncFromStatusRecords]);
+
 // Función para obtener color de celda según valor
 const getCellColor = (value: string) => {
    if (value === '') return 'bg-white border border-slate-200';

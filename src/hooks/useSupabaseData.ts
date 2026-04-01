@@ -763,11 +763,13 @@ function isEmptyOrCorrupt(item: any): boolean {
   if (!item) return true;
   if (typeof item !== 'object') return true;
   
-  // Para jobs específicamente
+  // Para jobs específicamente - solo validar campos críticos
+  if (item.id === undefined || item.id === null || item.id === '') return true;
   if (item.clientId === undefined || item.clientId === null) return true;
   if (item.date === undefined || item.date === null || item.date === '') return true;
-  if (item.startTime === undefined || item.startTime === null || item.startTime === '') return true;
-  if (item.endTime === undefined || item.endTime === null || item.endTime === '') return true;
+  
+  // startTime y endTime pueden estar vacíos (tareas sin horario definido)
+  // No los consideramos corruptos
   
   return false;
 }
