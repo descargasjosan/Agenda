@@ -1653,8 +1653,8 @@ const [planningFilter, setPlanningFilter] = useState('');
   };
 
   const handleOpenNewJob = (clientId: string = '', date?: string) => {
-    const firstClient = clientId ? planning.clients.find(c => c.id === clientId) : planning.clients[0];
-    const newJob: Job = { id: `j-${Date.now()}`, date: date || planning.currentDate, clientId: firstClient?.id || '', centerId: firstClient?.centers?.[0]?.id || '', type: JobType.DESCARGA, startTime: '', endTime: '', requiredWorkers: 3, assignedWorkerIds: [], ref: '', deliveryNote: '', locationDetails: '', isCancelled: false };
+    const selectedClient = clientId ? planning.clients.find(c => c.id === clientId) : null;
+    const newJob: Job = { id: `j-${Date.now()}`, date: date || planning.currentDate, clientId: selectedClient?.id || '', centerId: selectedClient?.centers?.[0]?.id || '', type: JobType.DESCARGA, startTime: '', endTime: '', requiredWorkers: 3, assignedWorkerIds: [], ref: '', deliveryNote: '', locationDetails: '', isCancelled: false };
     setEditingJob(newJob);
   };
 

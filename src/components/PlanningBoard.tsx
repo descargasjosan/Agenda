@@ -276,6 +276,14 @@ const PlanningBoard: React.FC<PlanningBoardProps> = ({
                  <div><p className="text-lg font-black text-red-600 leading-none">{stats.discontinuos}</p><p className="text-[8px] font-bold text-slate-400 uppercase tracking-tight">Fijos Disc.</p></div>
               </div>
            </div>
+           <button
+              onClick={() => onAddJob('', datesToShow[0])}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-black text-xs uppercase tracking-widest transition-colors shadow-sm hover:shadow-md hover:-translate-y-0.5"
+              title="Crear nueva tarea sin cliente preseleccionado"
+           >
+              <Plus className="w-3.5 h-3.5" />
+              NUEVA TAREA
+           </button>
         </div>
       )}
 
