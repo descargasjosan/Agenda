@@ -1745,11 +1745,26 @@ const [planningFilter, setPlanningFilter] = useState('');
       daysInMonth.push(new Date(year, month - 1, day));
     }
     
-    // Filtrar tareas del operario en el mes
-    const workerJobs = planning.jobs.filter(job => 
+    // 🛡️ EXCLUIR "RECONOCIMIENTO MÉDICO" - No es trabajo real para FD
+    const getFilteredJobs = (jobs: Job[]) => {
+      return jobs.filter(job => {
+        // Excluir explícitamente tareas de RECONOCIMIENTO MÉDICO
+        const medicalRecognitionClient = planning.clients.find(c => 
+          c.name === "RECONOCIMIENTO MÉDICO"
+        );
+        if (medicalRecognitionClient && job.clientId === medicalRecognitionClient.id) {
+          return false; // 🚨 Excluir esta tarea
+        }
+        return true; // ✅ Incluir todas las demás
+      });
+    };
+    
+    // Filtrar tareas del operario en el mes (excluyendo RECONOCIMIENTO MÉDICO)
+    const allWorkerJobs = planning.jobs.filter(job => 
       job.assignedWorkerIds.includes(workerId) &&
       job.date.startsWith(yearMonth)
     );
+    const workerJobs = getFilteredJobs(allWorkerJobs);
     
     // Obtener días trabajados del mes actual
     const workedDays = new Set<string>();
@@ -1760,15 +1775,19 @@ const [planningFilter, setPlanningFilter] = useState('');
     // Ampliar con días frontera de meses adyacentes (hasta 3 días antes/después)
     // para detectar fines de semana que cruzan el límite de mes
     const extendedWorkedDays = new Set<string>(workedDays);
-    planning.jobs
-      .filter(job => job.assignedWorkerIds.includes(workerId) && !job.date.startsWith(yearMonth))
-      .forEach(job => {
-        const jobDate = new Date(job.date + 'T00:00:00');
-        const diffFromStart = (firstDay.getTime() - jobDate.getTime()) / 86400000;
-        const diffFromEnd = (jobDate.getTime() - lastDay.getTime()) / 86400000;
-        if (diffFromStart >= 0 && diffFromStart <= 3) extendedWorkedDays.add(job.date);
-        if (diffFromEnd >= 0 && diffFromEnd <= 3) extendedWorkedDays.add(job.date);
-      });
+    
+    // 🛡️ APLICAR MISMO FILTRO A TAREAS DE MESES ADYACENTES
+    const allExtendedJobs = planning.jobs
+      .filter(job => job.assignedWorkerIds.includes(workerId) && !job.date.startsWith(yearMonth));
+    const filteredExtendedJobs = getFilteredJobs(allExtendedJobs);
+    
+    filteredExtendedJobs.forEach(job => {
+      const jobDate = new Date(job.date + 'T00:00:00');
+      const diffFromStart = (firstDay.getTime() - jobDate.getTime()) / 86400000;
+      const diffFromEnd = (jobDate.getTime() - lastDay.getTime()) / 86400000;
+      if (diffFromStart >= 0 && diffFromStart <= 3) extendedWorkedDays.add(job.date);
+      if (diffFromEnd >= 0 && diffFromEnd <= 3) extendedWorkedDays.add(job.date);
+    });
     
     // Detectar fines de semana (viernes+lunes trabajados, incluyendo cruces de mes)
     const weekendDays = new Set<string>();
@@ -3282,7 +3301,22 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
     // Obtener operarios fijos discontinuos que trabajaron cada día
     const getWorkersForDate = (date: Date): Worker[] => {
       const dateStr = date.toISOString().split('T')[0];
-      const dayJobs = cleanedPlanning.jobs.filter(job => job.date === dateStr && !job.isCancelled);
+      
+      // 🛡️ EXCLUIR "RECONOCIMIENTO MÉDICO" - No es trabajo real para Previsión Social
+      const dayJobs = cleanedPlanning.jobs.filter(job => {
+        if (job.date !== dateStr || job.isCancelled) return false;
+        
+        // Excluir explícitamente tareas de RECONOCIMIENTO MÉDICO
+        const medicalRecognitionClient = cleanedPlanning.clients.find(c => 
+          c.name === "RECONOCIMIENTO MÉDICO"
+        );
+        if (medicalRecognitionClient && job.clientId === medicalRecognitionClient.id) {
+          return false; // 🚨 Excluir esta tarea
+        }
+        
+        return true; // ✅ Incluir todas las demás
+      });
+      
       const assignedWorkerIds = new Set(dayJobs.flatMap(job => job.assignedWorkerIds));
       
       return cleanedPlanning.workers.filter(worker => 
