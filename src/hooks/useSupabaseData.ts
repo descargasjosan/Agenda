@@ -141,7 +141,7 @@ export function useSupabaseData(): UseSupabaseDataReturn {
         ] = await Promise.all([
           supabase.from('workers').select('data'),
           supabase.from('clients').select('data'),
-          supabase.from('jobs').select('data'),
+          supabase.from('jobs').select('data').order('updated_at', { ascending: false }),
           supabase.from('standard_tasks').select('data'),
           supabase.from('vehicles').select('data'),
           supabase.from('vehicle_assignments').select('data'),
