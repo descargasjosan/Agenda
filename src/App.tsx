@@ -1087,134 +1087,22 @@ const [planningFilter, setPlanningFilter] = useState('');
     }, 3600000); // 1 hora
     
     // Backup al cerrar página
-    const handleBeforeUnload = () => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       try {
         const dataStr = JSON.stringify(planning, null, 2);
-        const blob = new Blob([dataStr], { type: "application/json" });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        const now = new Date();
-        const timestamp = now.toISOString().split('T')[0] + '_' + now.toTimeString().split(' ')[0].replace(/:/g, '-');
-        link.download = `CLOSE_BACKUP_${timestamp}.json`;
-        link.click();
-        URL.revokeObjectURL(url);
-        
-        console.log(`✅ Backup al cerrar página: ${timestamp}`);
       } catch (error) {
-        console.error('❌ Error en backup al cerrar:', error);
+        console.error('Error al capturar antes de cerrar:', error);
       }
     };
     
     window.addEventListener('beforeunload', handleBeforeUnload);
     
     return () => {
-      clearInterval(hourlyBackup);
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
-  }, [autoBackupEnabled, planning]);
-
-  // ── Sistema de Captura Automática al Finalizar Jornada ─────────────────────
-  useEffect(() => {
-    const checkAndCaptureDay = () => {
-      const now = new Date();
-      const hour = now.getHours();
-      const minute = now.getMinutes();
-      const currentDate = now.toISOString().split('T')[0];
-      
-      // 📸 Capturar automáticamente a las 21:30 (final de jornada)
-      if (hour === 21 && minute === 30) {
-        captureDaySnapshot(currentDate);
-      }
-    };
-    
-    // Verificar cada minuto
-    const interval = setInterval(checkAndCaptureDay, 60000);
-    
-    return () => clearInterval(interval);
   }, [planning]);
 
-  // ── Función de Captura de Pantalla de la Vista Compacta ─────────────────────
-  const captureDaySnapshot = useCallback(async (date: string) => {
-    try {
-      console.log(`📸 Iniciando captura automática del día: ${date}`);
-      
-      // Buscar la vista compacta en el DOM
-      const compactView = document.querySelector('[data-compact-view="true"]');
-      if (!compactView) {
-        console.warn('📸 Vista compacta no encontrada para captura');
-        return;
-      }
-      
-      // Usar html2canvas si está disponible, fallback a DOM manipulation
-      if (window.html2canvas) {
-        const canvas = await window.html2canvas(compactView as HTMLElement, {
-          backgroundColor: '#ffffff',
-          scale: 1,
-          logging: false
-        });
-        
-        // Convertir a blob y descargar
-        canvas.toBlob((blob) => {
-          if (blob) {
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `CAPTURA_DIA_${date.replace(/-/g, '_')}.png`;
-            link.click();
-            URL.revokeObjectURL(url);
-            
-            console.log(`📸 Captura de pantalla guardada: ${date}`);
-          }
-        });
-      } else {
-        // Fallback: Captura de datos en texto
-        const dayJobs = planning.jobs.filter(job => job.date === date && !job.isCancelled);
-        const snapshotData = {
-          date: date,
-          timestamp: new Date().toISOString(),
-          totalJobs: dayJobs.length,
-          jobs: dayJobs.map(job => ({
-            id: job.id,
-            client: planning.clients.find(c => c.id === job.clientId)?.name,
-            ref: job.ref,
-            startTime: job.startTime,
-            endTime: job.endTime,
-            workers: job.assignedWorkerIds.map(id => {
-              const worker = planning.workers.find(w => w.id === id);
-              return worker ? `${worker.code} - ${worker.name}` : 'Desconocido';
-            }),
-            notes: job.notes
-          }))
-        };
-        
-        const dataStr = JSON.stringify(snapshotData, null, 2);
-        const blob = new Blob([dataStr], { type: "application/json" });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `CAPTURA_DIA_${date.replace(/-/g, '_')}.json`;
-        link.click();
-        URL.revokeObjectURL(url);
-        
-        console.log(`📸 Captura de datos guardada: ${date}`);
-      }
-    } catch (error) {
-      console.error('❌ Error en captura automática:', error);
-    }
-  }, [planning]);
-
-  // ── Botón manual de captura para testing ─────────────────────────────────────
-  const captureTodaySnapshot = () => {
-    const today = new Date().toISOString().split('T')[0];
-    captureDaySnapshot(today);
-  };
-  // En v2 no hay "dataRecoveryMode" porque los datos se cargan desde tablas.
-  // Mantenemos la variable por compatibilidad con el JSX original pero siempre false.
-  const [dataRecoveryMode, setDataRecoveryMode] = useState(false);
-  const [advancedRecovery, setAdvancedRecovery] = useState(false);
-  const lastSavedTime = isSaving ? null : new Date();
-
+// ... (rest of the code remains the same)
   const updateExportHistory = useCallback((newHistory: any) => {
     setExportHistory(newHistory);
     localStorage.setItem('exportHistory', JSON.stringify(newHistory));
@@ -3299,9 +3187,130 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
 
   // tryRecoverData y advancedDataRecovery no son necesarios en v2
   // (los datos siempre están en tablas), pero los dejamos como stubs para compatibilidad con JSX
+  const [dataRecoveryMode, setDataRecoveryMode] = useState(false);
+  const [lastSavedTime, setLastSavedTime] = useState<Date | null>(null);
   const tryRecoverData = async () => showNotification("En v2 los datos se cargan automáticamente desde las tablas", "info");
   const advancedDataRecovery = async () => showNotification("En v2 los datos se cargan automáticamente desde las tablas", "info");
   const saveToSupabase = async (showSuccess = false) => { if (showSuccess) showNotification("Datos sincronizados", "success"); };
+
+  // Función de compatibilidad para el botón "Capturar Hoy"
+  const captureTodaySnapshot = () => {
+    const today = new Date().toISOString().split('T')[0];
+    captureDaySnapshotAsImage(today);
+  };
+
+  // Función Mejorada de Captura de Imagen - Vista Compacta Específica
+  const captureDaySnapshotAsImage = useCallback(async (date: string) => {
+    try {
+      console.log(`Iniciando captura de vista compacta: ${date}`);
+      
+      // Guardar la vista actual
+      const originalViewMode = view;
+      console.log('Vista original:', originalViewMode);
+      
+      // Forzar cambio a vista compacta
+      if (view !== 'compact') {
+        console.log('Cambiando a vista compacta para captura...');
+        setView('compact');
+        
+        // Esperar más tiempo y verificar que el elemento aparezca
+        console.log('Esperando a que se renderice la vista compacta...');
+        let attempts = 0;
+        let compactElement = null;
+        
+        while (attempts < 10 && !compactElement) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+          compactElement = document.querySelector('[data-compact-view="true"]');
+          console.log(`Intento ${attempts + 1}: Elemento compacta encontrado:`, !!compactElement);
+          attempts++;
+        }
+        
+        if (!compactElement) {
+          console.error('No se pudo encontrar la vista compacta después de 5 segundos');
+          showNotification('Error: No se pudo cargar la vista compacta', 'error');
+          setView(originalViewMode);
+          return;
+        }
+      }
+      
+      // Buscar específicamente la vista compacta
+      const targetElement = document.querySelector('[data-compact-view="true"]');
+      
+      if (!targetElement) {
+        console.error('No se encontró la vista compacta para capturar');
+        showNotification('Error: No se encontró la vista compacta', 'error');
+        setView(originalViewMode);
+        return;
+      }
+      
+      console.log('Vista compacta encontrada para captura:', targetElement.tagName, targetElement.className);
+      
+      if (window.html2canvas) {
+        // Captura de alta calidad de la vista compacta
+        console.log('Iniciando captura con html2canvas...');
+        const canvas = await window.html2canvas(targetElement, {
+          backgroundColor: '#ffffff',
+          scale: 2, // Alta resolución
+          logging: false,
+          useCORS: true,
+          allowTaint: true,
+          width: targetElement.scrollWidth,
+          height: targetElement.scrollHeight,
+          scrollX: 0,
+          scrollY: 0,
+          foreignObjectRendering: true,
+          imageTimeout: 15000
+        });
+        
+        // Descargar como PNG de alta calidad
+        canvas.toBlob((blob) => {
+          if (blob) {
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            const timeString = new Date().toTimeString().slice(0,5).replace(/:/g, 'h');
+            link.download = `CAPTURA_COMPACTA_${date.replace(/-/g, '_')}_${timeString}.png`;
+            link.click();
+            URL.revokeObjectURL(url);
+            
+            // Guardar registro de captura
+            localStorage.setItem(`lastCapture_${date}`, new Date().toISOString());
+            console.log(`Vista compacta guardada: ${date} - ${timeString}`);
+            showNotification(`Captura compacta guardada: ${date} - ${timeString}`, 'success');
+          }
+        }, 'image/png', 0.95); // 95% calidad
+        
+        // Restaurar vista original después de un momento
+        setTimeout(() => {
+          if (originalViewMode !== 'compact') {
+            console.log('Restaurando vista original:', originalViewMode);
+            setView(originalViewMode);
+          }
+        }, 1000);
+        
+      } else {
+        console.warn('html2canvas no disponible. Instálalo para capturas de imagen.');
+        showNotification(
+          'Para capturas de imagen, instala html2canvas',
+          { type: 'warning', duration: 5000 }
+        );
+        
+        // Restaurar vista original
+        if (originalViewMode !== 'compact') {
+          setView(originalViewMode);
+        }
+      }
+    } catch (error) {
+      console.error('Error en captura de vista compacta:', error);
+      showNotification(
+        'Error al capturar vista compacta. Intente manualmente.',
+        { type: 'error' }
+      );
+      
+      // Restaurar vista original en caso de error
+      setView(originalViewMode);
+    }
+  }, [view, setView]);
 
   const filteredTasks = useMemo(() => cleanedPlanning.standardTasks.filter(t => t.name.toLowerCase().includes(taskSearch.toLowerCase())), [cleanedPlanning.standardTasks, taskSearch]);
   const notifiedCount = (planning.notifications[planning.currentDate] || []).length;

@@ -329,7 +329,9 @@ const PlanningBoard: React.FC<PlanningBoardProps> = ({
             if (albaranB === 'Sin Albarán') return -1;
             
             // Orden numérico de albaranes
-            return albaranA.localeCompare(albaranB);
+            const numA = parseInt(albaranA, 10);
+            const numB = parseInt(albaranB, 10);
+            return numA - numB;  // ✅ Ordenamiento numérico correcto
           });
 
           return (
