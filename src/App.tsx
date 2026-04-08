@@ -1239,15 +1239,19 @@ const [planningFilter, setPlanningFilter] = useState('');
       updateExportHistory({ ...currentHistory, [exportKey]: { date: today, workerIds: Array.from(assignedWorkerIds), exportCount: (currentHistory[exportKey]?.exportCount || 0) + 1, lastExportTime: new Date().toISOString() } });
       XLSX.writeFile(wb, fileName);
       showNotification(isFirstExport ? `Listado completo exportado: ${fileName}` : `Nuevos operarios exportados: ${fileName}`, 'success');
+      
     } catch (error) {
-      showNotification('Error al exportar el listado', 'error');
+      console.error('Error al exportar listado de acceso:', error);
+      showNotification('Error al exportar listado de acceso', 'error');
     }
-  }, [planning, showNotification, updateExportHistory, exportHistory]);
+  }, [planning, exportHistory, showNotification, updateExportHistory]);
 
   // ── Alertas médicas ────────────────────────────────────────────────────────
   const calculateMedicalAlerts = useCallback((courses: MedicalCourse[], workers: Worker[]): MedicalAlert[] => {
     const today = new Date();
     const alerts: MedicalAlert[] = [];
+
+    // 1. Alertas existentes: certificados caducados o por caducar
     courses.forEach(course => {
       if (!course.expiryDate) return;
       const expiryDate = new Date(course.expiryDate);
@@ -1257,10 +1261,51 @@ const [planningFilter, setPlanningFilter] = useState('');
       course.assignedWorkerIds.forEach(workerId => {
         const worker = workers.find(w => w.id === workerId);
         if (worker) {
-          alerts.push({ id: `${course.id}-${workerId}`, workerId: worker.id, courseId: course.id, courseName: course.type === 'recognition' ? '🏥 Reconocimiento Médico' : course.name || '📚 Curso', workerName: worker.name, type: course.type, provider: course.provider, expiryDate: course.expiryDate!, daysUntilExpiry, alertLevel });
+          alerts.push({ 
+            id: `${course.id}-${workerId}`, 
+            workerId: worker.id, 
+            courseId: course.id, 
+            courseName: course.type === 'recognition' ? 'Reconocimiento Médico' : course.name || 'Curso', 
+            workerName: worker.name, 
+            type: course.type, 
+            provider: course.provider, 
+            expiryDate: course.expiryDate!, 
+            daysUntilExpiry, 
+            alertLevel 
+          });
         }
       });
     });
+
+    // 2. NUEVO: Alertas para trabajadores SIN certificado médico
+    const workersWithMedicalCourses = new Set<string>();
+    courses
+      .filter(course => course.type === 'recognition') // Solo reconocimientos médicos
+      .forEach(course => {
+        course.assignedWorkerIds.forEach(workerId => workersWithMedicalCourses.add(workerId));
+      });
+
+    // Encontrar trabajadores sin reconocimiento médico
+    workers
+      .filter(worker => !worker.isArchived) // Solo trabajadores activos
+      .forEach(worker => {
+        if (!workersWithMedicalCourses.has(worker.id)) {
+          // Este trabajador no tiene ningún reconocimiento médico
+          alerts.push({
+            id: `no-medical-${worker.id}`,
+            workerId: worker.id,
+            courseId: 'no-medical',
+            courseName: 'SIN RECONOCIMIENTO MÉDICO!',
+            workerName: worker.name,
+            type: 'recognition',
+            provider: 'N/A',
+            expiryDate: new Date(0).toISOString().split('T')[0], // Fecha antigua para mostrar primero
+            daysUntilExpiry: -9999, // Valor muy negativo para mostrar al principio
+            alertLevel: 'critical'
+          });
+        }
+      });
+
     return alerts.sort((a, b) => a.daysUntilExpiry - b.daysUntilExpiry);
   }, []);
 

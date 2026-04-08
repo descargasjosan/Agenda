@@ -222,44 +222,144 @@ export function useSupabaseData(): UseSupabaseDataReturn {
     loadAll();
   }, []);
 
-  // ─── Polling inteligente con timestamps ─────────────────────────────────────
+  // ── Sistema Híbrido de Refresco Inteligente ─────────────────────────────────────
+  const [isInBackground, setIsInBackground] = useState(false);
+  const [lastActiveTime, setLastActiveTime] = useState(Date.now());
+  const [userState, setUserState] = useState({
+    currentDate: planning.currentDate,
+    viewMode: planning.viewMode,
+    selectedDate: planning.selectedDate
+  });
+  
+  // Detectar cuando la app pasa a background/foreground
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      const nowHidden = document.hidden;
+      const currentVisibility = document.visibilityState;
+      
+      console.log('Visibility change detected:', {
+        hidden: nowHidden,
+        visibilityState: currentVisibility,
+        timestamp: new Date().toISOString()
+      });
+      
+      if (nowHidden || currentVisibility === 'hidden') {
+        // App pasa a background
+        console.log('App pasando a background - Cambiando a modo eficiente (5 minutos)');
+        setIsInBackground(true);
+        // Guardar estado actual del usuario
+        setUserState({
+          currentDate: planning.currentDate,
+          viewMode: planning.viewMode,
+          selectedDate: planning.selectedDate
+        });
+      } else {
+        // App vuelve a foreground
+        console.log('App volviendo a foreground - Cambiando a modo rápido (10 segundos)');
+        setIsInBackground(false);
+        setLastActiveTime(Date.now());
+      }
+    };
+    
+    // También detectar cuando la ventana pierde/gana foco
+    const handleFocusChange = () => {
+      const hasFocus = document.hasFocus();
+      console.log('Focus change detected:', {
+        hasFocus,
+        timestamp: new Date().toISOString()
+      });
+      
+      if (!hasFocus) {
+        console.log('Ventana perdió foco - Posible background');
+        setIsInBackground(true);
+      } else {
+        console.log('Ventana ganó foco - Foreground activo');
+        setIsInBackground(false);
+        setLastActiveTime(Date.now());
+      }
+    };
+    
+    // Agregar múltiples eventos para mejor detección
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocusChange);
+    window.addEventListener('blur', handleFocusChange);
+    
+    // Estado inicial
+    console.log('Estado inicial de visibilidad:', {
+      hidden: document.hidden,
+      visibilityState: document.visibilityState,
+      hasFocus: document.hasFocus(),
+      isInBackground: isInBackground
+    });
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocusChange);
+      window.removeEventListener('blur', handleFocusChange);
+    };
+  }, [planning.currentDate, planning.viewMode, planning.selectedDate, isInBackground]);
+  
+  // Polling híbrido: comportamiento diferente según background/foreground
   useEffect(() => {
     const interval = setInterval(async () => {
-      if (dbStatus === 'connected') {
-        try {
-          const now = new Date().toISOString();
-          const tenSecondsAgo = new Date(Date.now() - 10000).toISOString();
-          
-          console.log('🔄 Polling inteligente:', {
-            checkTime: tenSecondsAgo,
-            currentTime: now
-          });
-          
-          // Solo descargar registros modificados en los últimos 10 segundos
-          const [workersRes, clientsRes, jobsRes] = await Promise.all([
-            supabase.from('workers')
-              .select('id, data, updated_at')
-              .gt('updated_at', tenSecondsAgo),
-            supabase.from('clients')
-              .select('id, data, updated_at')
-              .gt('updated_at', tenSecondsAgo),
-            supabase.from('jobs')
-              .select('id, data, updated_at')
-              .gt('updated_at', tenSecondsAgo),
-          ]);
+      try {
+        const now = new Date().toISOString();
+        const timeThreshold = isInBackground ? 300000 : 10000; // 5min en background, 10s en foreground
+        const thresholdTime = new Date(Date.now() - timeThreshold).toISOString();
+        
+        console.log('🔄 Polling híbrido:', {
+          isInBackground,
+          checkTime: thresholdTime,
+          currentTime: now,
+          threshold: isInBackground ? '5 minutos' : '10 segundos'
+        });
+        
+        // Solo descargar registros modificados recientemente
+        const [workersRes, clientsRes, jobsRes] = await Promise.all([
+          supabase.from('workers')
+            .select('id, data, updated_at')
+            .gt('updated_at', thresholdTime),
+          supabase.from('clients')
+            .select('id, data, updated_at')
+            .gt('updated_at', thresholdTime),
+          supabase.from('jobs')
+            .select('id, data, updated_at')
+            .gt('updated_at', thresholdTime),
+        ]);
 
-          if (!workersRes.error && !clientsRes.error && !jobsRes.error) {
-            const workersChanges = extractRows<Worker>(workersRes.data);
-            const clientsChanges = extractRows<Client>(clientsRes.data);
-            const jobsChanges = extractRows<Job>(jobsRes.data);
+        if (!workersRes.error && !clientsRes.error && !jobsRes.error) {
+          const workersChanges = extractRows<Worker>(workersRes.data);
+          const clientsChanges = extractRows<Client>(clientsRes.data);
+          const jobsChanges = extractRows<Job>(jobsRes.data);
+          
+          const hasChanges = workersChanges.length > 0 || clientsChanges.length > 0 || jobsChanges.length > 0;
+          
+          if (hasChanges) {
+            // Si volvemos de background con muchos cambios, hacer refresco completo
+            const shouldFullRefresh = isInBackground && 
+              (workersChanges.length > 10 || clientsChanges.length > 10 || jobsChanges.length > 50);
             
-            const hasChanges = workersChanges.length > 0 || clientsChanges.length > 0 || jobsChanges.length > 0;
-            
-            if (hasChanges) {
+            if (shouldFullRefresh) {
+              console.log('🔄 Refresco completo necesario (muchos cambios desde background)');
+              // Cargar datos completos pero preservando estado del usuario
+              await loadInitialData();
+              
+              // Restaurar estado del usuario después del refresco completo
+              setTimeout(() => {
+                setPlanning(prev => ({
+                  ...prev,
+                  currentDate: userState.currentDate,
+                  viewMode: userState.viewMode,
+                  selectedDate: userState.selectedDate
+                }));
+                console.log('🔄 Estado del usuario restaurado:', userState);
+              }, 100);
+              
+            } else {
+              // Fusionar cambios incrementales
               setPlanning(prev => {
                 const newPlanning = { ...prev };
                 
-                // Fusionar cambios solo para los registros que se modificaron
                 if (workersChanges.length > 0) {
                   newPlanning.workers = mergeChanges(prev.workers, workersChanges);
                 }
@@ -272,25 +372,26 @@ export function useSupabaseData(): UseSupabaseDataReturn {
                 
                 return newPlanning;
               });
-              
-              console.log('🔄 Polling: Cambios detectados y aplicados:', {
-                workers: workersChanges.length,
-                clients: clientsChanges.length,
-                jobs: jobsChanges.length,
-                totalKB: estimateDataSize(workersChanges, clientsChanges, jobsChanges)
-              });
-            } else {
-              console.log('🔄 Polling: Sin cambios (0 KB descargados)');
             }
+            
+            console.log('🔄 Polling: Cambios detectados y aplicados:', {
+              workers: workersChanges.length,
+              clients: clientsChanges.length,
+              jobs: jobsChanges.length,
+              totalKB: estimateDataSize(workersChanges, clientsChanges, jobsChanges),
+              refreshType: shouldFullRefresh ? 'COMPLETO' : 'INCREMENTAL'
+            });
+          } else {
+            console.log('🔄 Polling: Sin cambios (0 KB descargados)');
           }
-        } catch (error) {
-          console.log('Error en polling inteligente:', error);
         }
+      } catch (error) {
+        console.log('Error en polling híbrido:', error);
       }
-    }, 5000); // 5 segundos
-
+    }, isInBackground ? 300000 : 10000); // 5min en background, 10s en foreground
+    
     return () => clearInterval(interval);
-  }, [dbStatus]);
+  }, [isInBackground, userState]);
 
   // ─── Realtime: suscripción por tabla ──────────────────────────────────
   useEffect(() => {
