@@ -1060,11 +1060,14 @@ const [planningFilter, setPlanningFilter] = useState('');
     }
   }, [planning, autoBackupEnabled, autoBackupSchedule]);
 
-  // ── Sistema de Backup Automático Simple y Robusto ─────────────────────
+  // ── Sistema de Backup Automático Simple y Robusto - DESACTIVADO (duplicado)
+  // NOTA: Ya existe un sistema de backup cada 3 horas en performAutoBackup
+  // Este sistema causaba múltiples archivos AUTO_BACKUP
+  /*
   useEffect(() => {
     if (!autoBackupEnabled) return;
     
-    console.log('🔄 Iniciando sistema de backup automático simple');
+    console.log('Iniciando sistema de backup automático simple');
     
     // Backup cada hora (3600000 ms = 1 hora)
     const hourlyBackup = setInterval(() => {
@@ -1080,9 +1083,9 @@ const [planningFilter, setPlanningFilter] = useState('');
         link.click();
         URL.revokeObjectURL(url);
         
-        console.log(`✅ Backup automático cada hora: ${timestamp}`);
+        console.log(`Backup automático cada hora: ${timestamp}`);
       } catch (error) {
-        console.error('❌ Error en backup automático:', error);
+        console.error('Error en backup automático:', error);
       }
     }, 3600000); // 1 hora
     
@@ -1100,7 +1103,8 @@ const [planningFilter, setPlanningFilter] = useState('');
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
-  }, [planning]);
+    //}, [planning]); // Comentado junto con el useEffect
+    */
 
 // ... (rest of the code remains the same)
   const updateExportHistory = useCallback((newHistory: any) => {

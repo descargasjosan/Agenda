@@ -109,42 +109,57 @@ const PlanningBoard: React.FC<PlanningBoardProps> = ({
       setContextMenu({ x: e.clientX, y: e.clientY, workerId });
   };
 
+  // Limpiar búsqueda cuando se abre el selector de operarios
+  useEffect(() => {
+    if (selectorJobId) {
+      setWorkerSearch('');
+    }
+  }, [selectorJobId]);
+
   // Filtrado robusto de trabajadores para el selector
   const filteredWorkers = planning.workers.filter(w => {
-    // Excluir operarios archivados
-    if (w.archived) return false;
+    // 1. Descartar archivados (IGUAL que en WorkerSidebar)
+    if (w.isArchived) return false;
     
+    // 2. Filtro de búsqueda (Nombre o Código)
     const matchesSearch = w.name.toLowerCase().includes(workerSearch.toLowerCase()) || w.code.includes(workerSearch);
     if (!matchesSearch) return false;
 
-    // Verificar disponibilidad real (considerando fechas de fin de baja/vacaciones)
+    // 3. Lógica de Estado - verificar disponibilidad para la fecha actual de planificación
     const currentDate = datesToShow.length > 0 ? datesToShow[0] : new Date().toISOString().split('T')[0];
     
-    // Si el estado es "NO DISPONIBLE", comprobar si ya ha expirado
+    // Función auxiliar para obtener estado del trabajador (similar a WorkerSidebar)
+    const getWorkerStatusForDate = (worker: Worker, date: string) => {
+      // Si tiene registros de estado, usarlos
+      if (worker.statusRecords && worker.statusRecords.length > 0) {
+        const targetDate = new Date(date);
+        
+        const activeRecord = worker.statusRecords.find(record => {
+          const startDate = new Date(record.startDate);
+          const endDate = record.endDate ? new Date(record.endDate) : new Date('9999-12-31');
+          
+          return targetDate >= startDate && targetDate <= endDate;
+        });
+
+        if (activeRecord) {
+          return activeRecord.status;
+        }
+      }
+      
+      // Si no hay registro activo, usar el estado actual del worker
+      return worker.status || WorkerStatus.DISPONIBLE;
+    };
+    
+    const statusForCurrentDate = getWorkerStatusForDate(w, currentDate);
     const isUnavailableStatus = [
       WorkerStatus.VACACIONES, 
       WorkerStatus.BAJA_MEDICA, 
-      WorkerStatus.BAJA_PATERNIDAD
-    ].includes(w.status);
+      WorkerStatus.BAJA_PATERNIDAD,
+      WorkerStatus.PERMISO_RETRIBUIDO
+    ].includes(statusForCurrentDate);
 
     if (isUnavailableStatus) {
-       // Si no tiene fecha fin, o la fecha fin es futura, no mostrar
-       if (!w.statusEndDate || w.statusEndDate >= currentDate) {
-          return false;
-       }
-       // Si la fecha fin ya pasó, se considera disponible
-    } else if (w.status !== WorkerStatus.DISPONIBLE) {
-       // Otros estados no disponibles
-       return false;
-    }
-
-    // Verificar bloqueos temporales específicos
-    if (w.statusStartDate && w.statusEndDate) {
-      const isInStatusPeriod = currentDate >= w.statusStartDate && currentDate <= w.statusEndDate;
-      // Si está en periodo de bloqueo y NO es uno de los estados que ya comprobamos arriba (que ya sabemos que expiró si llegamos aquí)
-      // En realidad, si llegamos aquí es porque o es DISPONIBLE o expiró el estado anterior.
-      // Pero si tiene un rango explícito de "bloqueo" siendo DISPONIBLE (caso raro), lo respetamos.
-      if (isInStatusPeriod && w.status === WorkerStatus.DISPONIBLE) return false;
+      return false; // Si está no disponible en la fecha actual, no mostrar
     }
 
     return true;
