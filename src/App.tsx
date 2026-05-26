@@ -2569,15 +2569,43 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
   }, [planning.workers, persistWorker]);
 
   const handleAddStatusRecord = useCallback(async () => {
-    console.log('🔍 handleAddStatusRecord llamado:', { editingWorker: !!editingWorker, editingStatusRecord });
+    console.log('🚀 VERSIÓN NUEVA DE handleAddStatusRecord EJECUTÁNDOSE');
+    console.log('🔍 handleAddStatusRecord llamado:', { 
+      editingWorker: !!editingWorker, 
+      editingStatusRecord,
+      editingStatusRecordStatus: editingStatusRecord?.status,
+      editingStatusRecordStart: editingStatusRecord?.startDate,
+      editingStatusRecordEnd: editingStatusRecord?.endDate
+    });
     
     if (!editingWorker) {
       console.log('❌ No hay editingWorker');
       return;
     }
     
+    // SIEMPRE verificar si editingStatusRecord es null y manejarlo
     if (!editingStatusRecord) {
-      console.log('❌ No hay editingStatusRecord');
+      console.log('⚠️ editingStatusRecord es null, inicializando con valores por defecto');
+      const today = new Date().toISOString().split('T')[0];
+      const defaultRecord = {
+        status: WorkerStatus.VACACIONES,
+        startDate: today,
+        endDate: today
+      };
+      console.log('🔍 Usando registro por defecto:', defaultRecord);
+      
+      // Usar directamente el registro por defecto
+      try {
+        const updatedWorker = addOrUpdateStatusRecord(editingWorker, defaultRecord.status, defaultRecord.startDate, defaultRecord.endDate, planning.customHolidays);
+        const currentStatus = getCurrentWorkerStatus(updatedWorker);
+        const finalWorker = { ...updatedWorker, status: currentStatus.status, statusStartDate: currentStatus.startDate, statusEndDate: currentStatus.endDate };
+        setEditingWorker(finalWorker);
+        await persistWorker(finalWorker);
+        setShowAddRecordForm(false);
+        showNotification("Registro de estado añadido", "success");
+      } catch (error) {
+        showNotification(error instanceof Error ? error.message : "Error al añadir registro de estado", "error");
+      }
       return;
     }
     
@@ -6208,12 +6236,20 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                 </div>
                 <button
                   onClick={() => {
-                    setEditingStatusRecord({
+                    const today = new Date().toISOString().split('T')[0];
+                    const newRecord = {
                       status: WorkerStatus.VACACIONES,
-                      startDate: new Date().toISOString().split('T')[0],
-                      endDate: new Date().toISOString().split('T')[0]
-                    });
+                      startDate: today,
+                      endDate: today
+                    };
+                    console.log('🔍 Inicializando editingStatusRecord:', newRecord);
+                    setEditingStatusRecord(newRecord);
                     setShowAddRecordForm(true);
+                    
+                    // Forzar una actualización del estado para asegurar que se guarde
+                    setTimeout(() => {
+                      console.log('🔍 Verificando editingStatusRecord después de timeout:', editingStatusRecord);
+                    }, 100);
                   }}
                   className="px-3 py-1 bg-blue-500 text-white rounded-lg text-[10px] font-black uppercase hover:bg-blue-600 transition-colors"
                 >

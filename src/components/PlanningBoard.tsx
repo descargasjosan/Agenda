@@ -398,22 +398,35 @@ const PlanningBoard: React.FC<PlanningBoardProps> = ({
             return groups;
           }, {});
 
-          // Ordenar grupos: albaranes numéricos primero, luego "Sin Albarán"
-          const sortedGroups = Object.entries(groupedJobs).sort(([keyA], [keyB]) => {
+          // Ordenar grupos: 
+          // 1. Sin albarán → ordenar por hora de inicio de la primera tarea
+          // 2. Con albarán → ordenar por número de albarán
+          const sortedGroups = Object.entries(groupedJobs).sort(([keyA, groupA], [keyB, groupB]) => {
             const albaranA = keyA.split(' - ')[0];
             const albaranB = keyB.split(' - ')[0];
             
-            // Si ambos son "Sin Albarán", mantener orden
-            if (albaranA === 'Sin Albarán' && albaranB === 'Sin Albarán') return 0;
+            // Caso 1: Ambos tienen albarán → ordenar por número de albarán
+            if (albaranA !== 'Sin Albarán' && albaranB !== 'Sin Albarán') {
+              const numA = parseInt(albaranA, 10);
+              const numB = parseInt(albaranB, 10);
+              return numA - numB;
+            }
             
-            // "Sin Albarán" va al final
-            if (albaranA === 'Sin Albarán') return 1;
-            if (albaranB === 'Sin Albarán') return -1;
+            // Caso 2: Uno tiene albarán y el otro no → el que tiene albarán va primero
+            if (albaranA !== 'Sin Albarán' && albaranB === 'Sin Albarán') return -1;
+            if (albaranA === 'Sin Albarán' && albaranB !== 'Sin Albarán') return 1;
             
-            // Orden numérico de albaranes
-            const numA = parseInt(albaranA, 10);
-            const numB = parseInt(albaranB, 10);
-            return numA - numB;  // ✅ Ordenamiento numérico correcto
+            // Caso 3: Ambos sin albarán → ordenar por hora de inicio de la primera tarea
+            const firstJobA = groupA.jobs[0];
+            const firstJobB = groupB.jobs[0];
+            
+            if (firstJobA?.startTime && firstJobB?.startTime) {
+              // Comparar horas de inicio
+              return firstJobA.startTime.localeCompare(firstJobB.startTime);
+            }
+            
+            // Si no hay horas, mantener orden original
+            return 0;
           });
 
           return (
