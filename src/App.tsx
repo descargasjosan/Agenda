@@ -1217,16 +1217,22 @@ const [planningFilter, setPlanningFilter] = useState('');
       
       console.log('🔍 Nombre final del archivo:', fileName);
       const wb = XLSX.utils.book_new();
-      // Operarios fijos siempre al principio
-      const fixedWorkers = [
-        { dni: '24371414Q', name: 'JOSE LUIS RUIZ TARREGA' },
-        { dni: '48581091P', name: 'VICENTE CARRATALA ANASTASIO' }
-      ];
-
-      // Combinar operarios fijos + resto (evitando duplicados)
-      const fixedDnis = new Set(fixedWorkers.map(w => w.dni));
-      const otherWorkers = finalWorkers.filter(w => !fixedDnis.has(w.dni));
-      const allWorkers = [...fixedWorkers, ...otherWorkers];
+      
+      // Solo incluir operarios fijos en la primera exportación
+      let allWorkers = finalWorkers;
+      
+      if (isFirstExport) {
+        // Operarios fijos solo en la primera exportación
+        const fixedWorkers = [
+          { dni: '24371414Q', name: 'JOSE LUIS RUIZ TARREGA' },
+          { dni: '48581091P', name: 'VICENTE CARRATALA ANASTASIO' }
+        ];
+        
+        // Combinar operarios fijos + resto (evitando duplicados)
+        const fixedDnis = new Set(fixedWorkers.map(w => w.dni));
+        const otherWorkers = finalWorkers.filter(w => !fixedDnis.has(w.dni));
+        allWorkers = [...fixedWorkers, ...otherWorkers];
+      }
 
       const excelData = [
         [`${fileName.replace('.xlsx', '')}`],
