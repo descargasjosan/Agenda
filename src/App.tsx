@@ -1220,7 +1220,7 @@ const [planningFilter, setPlanningFilter] = useState('');
       // Operarios fijos siempre al principio
       const fixedWorkers = [
         { dni: '24371414Q', name: 'JOSE LUIS RUIZ TARREGA' },
-        { dni: '44876073Z', name: 'ANGEL SANCHEZ MIGALLON' }
+        { dni: '48581091P', name: 'VICENTE CARRATALA ANASTASIO' }
       ];
 
       // Combinar operarios fijos + resto (evitando duplicados)

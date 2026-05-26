@@ -133,6 +133,12 @@ export function useSupabaseData(): UseSupabaseDataReturn {
         
         console.log('🚀 Iniciando carga inicial con verificación forzada...');
 
+// 🪟 DEBUG: Hacer supabase disponible globalmente para debugging
+if (typeof window !== 'undefined') {
+  (window as any).supabaseDebug = supabase;
+  console.log('🪟 [DEBUG] supabase disponible como window.supabaseDebug');
+}
+
         const [
           workersRes, clientsRes, jobsRes, tasksRes,
           vehiclesRes, assignmentsRes, fuelRes, notesRes,
@@ -151,7 +157,41 @@ export function useSupabaseData(): UseSupabaseDataReturn {
           supabase.from('custom_holidays').select('data'),
           supabase.from('courses').select('data'),
           supabase.from('app_settings').select('key, value'),
-          supabase.from('worker_control_data').select('data')
+          // Cargar worker_control_data con paginación para evitar límite de 1000
+(async () => {
+  let allData: any[] = [];
+  let page = 0;
+  const pageSize = 1000;
+  let hasMore = true;
+  
+  while (hasMore) {
+    const { data, error } = await supabase
+      .from('worker_control_data')
+      .select('data')
+      .range(page * pageSize, (page + 1) * pageSize - 1);
+    
+    if (error) {
+      console.error('Error cargando worker_control_data (página ' + page + '):', error);
+      break;
+    }
+    
+    if (data && data.length > 0) {
+      allData = allData.concat(data);
+      console.log(`📄 [PAGINATION] Cargada página ${page + 1}: ${data.length} registros`);
+      
+      if (data.length < pageSize) {
+        hasMore = false;
+      } else {
+        page++;
+      }
+    } else {
+      hasMore = false;
+    }
+  }
+  
+  console.log(`📊 [PAGINATION] Total cargado: ${allData.length} registros de worker_control_data`);
+  return { data: allData, error: null };
+})()
         ]);
 
         // Comprobar errores críticos
@@ -178,7 +218,24 @@ export function useSupabaseData(): UseSupabaseDataReturn {
           medicalCourses: extractMedicalCourses(medicalRes.data),
           customHolidays: extractRows<Holiday>(holidaysRes.data),
           courses: extractRows<Course>(coursesRes.data),
-          workerControls: extractRows<WorkerControl>(workerControlsRes.data)
+          workerControls: (() => {
+          console.log('🔍 [DIAGNOSTIC] worker_control_data response:', {
+            count: workerControlsRes.data?.length || 0,
+            data: workerControlsRes.data,
+            error: workerControlsRes.error,
+            firstRecord: workerControlsRes.data?.[0]
+          });
+          
+          // Verificar qué hace extractRows
+          const extracted = extractRows<WorkerControl>(workerControlsRes.data);
+          console.log('🔍 [EXTRACT] Resultado de extractRows:', {
+            inputCount: workerControlsRes.data?.length || 0,
+            outputCount: extracted.length,
+            firstExtracted: extracted[0]
+          });
+          
+          return extracted;
+        })()
         };
 
         console.log('✅ Datos cargados correctamente:', {
@@ -494,8 +551,13 @@ export function useSupabaseData(): UseSupabaseDataReturn {
   // ─── Helper genérico de upsert ────────────────────────────────────────
   const upsert = useCallback(async (table: string, id: string, data: any, extraFields?: Record<string, any>) => {
     setIsSaving(true);
-    const row: any = { id, data, ...extraFields };
-    console.log(`💾 Saving to ${table}:`, { id, data, extraFields });
+    
+    let row: any;
+    
+    // worker_control_data también usa columna 'data' JSON como las demás tablas
+    row = { id, data, ...extraFields };
+    console.log(`💾 Saving to ${table} (JSON data):`, { id, data, extraFields });
+    
     const { error } = await supabase.from(table).upsert(row);
     setIsSaving(false);
     if (error) {
@@ -728,13 +790,24 @@ export function useSupabaseData(): UseSupabaseDataReturn {
 
   // ─── Worker Control ───────────────────────────────────────────────────
   const saveWorkerControl = useCallback(async (control: WorkerControl) => {
+    console.log('🔍 [SAVE] Intentando guardar workerControl:', control);
+    
+    // Actualizar estado local primero
     setPlanning((prev) => ({
       ...prev,
       workerControls: prev.workerControls.some((c) => c.id === control.id)
         ? prev.workerControls.map((c) => (c.id === control.id ? control : c))
         : [...prev.workerControls, control],
     }));
-    await upsert('worker_control_data', control.id, control);
+    
+    try {
+      console.log('🔍 [SAVE] Enviando a Supabase...');
+      await upsert('worker_control_data', control.id, control);
+      console.log('✅ [SAVE] Guardado exitoso en Supabase');
+    } catch (error) {
+      console.error('❌ [SAVE] Error guardando en Supabase:', error);
+      throw error;
+    }
   }, [upsert]);
 
   const deleteWorkerControl = useCallback(async (id: string) => {
