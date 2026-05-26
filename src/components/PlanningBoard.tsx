@@ -17,6 +17,7 @@ interface PlanningBoardProps {
   highlightedWorker: string | null;
   draggedWorkerId: string | null;
   onDragStartFromBoard: (workerId: string, jobId: string) => void;
+  persistJob?: (job: Job) => Promise<void>;
   onReorderJob: (sourceJobId: string, targetJobId: string) => void;
   onReorderClient: (sourceClientId: string, targetClientId: string) => void;
   onEditNote: (workerId: string, date: string) => void;
@@ -37,6 +38,7 @@ const PlanningBoard: React.FC<PlanningBoardProps> = ({
   highlightedWorker,
   draggedWorkerId,
   onDragStartFromBoard,
+  persistJob,
   onReorderJob,
   onReorderClient,
   onEditNote,
@@ -48,6 +50,10 @@ const PlanningBoard: React.FC<PlanningBoardProps> = ({
   const [selectorJobId, setSelectorJobId] = useState<string | null>(null);
   const [workerSearch, setWorkerSearch] = useState('');
   
+  // ESTADO PARA EDICIÓN DE ALBARÁN
+  const [editingDeliveryNote, setEditingDeliveryNote] = useState<{ jobId: string, value: string } | null>(null);
+  const deliveryNoteInputRef = useRef<HTMLInputElement>(null);
+  
   // ESTADO PARA MENÚ CONTEXTUAL
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, workerId: string } | null>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
@@ -57,7 +63,68 @@ const PlanningBoard: React.FC<PlanningBoardProps> = ({
   const [newGroupTime, setNewGroupTime] = useState<string>('');
   const [reinforcementWorkerSearch, setReinforcementWorkerSearch] = useState<string>('');
   const [selectedWorkers, setSelectedWorkers] = useState<string[]>([]);
+
+  // FUNCIÓN PARA EDITAR ALBARÁN
+  const handleDeliveryNoteClick = (jobId: string, currentValue: string) => {
+    console.log('🔍 [CLICK] Click en albarán:', { jobId, currentValue });
+    setEditingDeliveryNote({ jobId, value: currentValue });
+    setTimeout(() => {
+      deliveryNoteInputRef.current?.focus();
+      deliveryNoteInputRef.current?.select();
+    }, 50);
+  };
+
+  const handleDeliveryNoteSave = (jobId: string, newValue: string) => {
+    const job = planning.jobs.find(j => j.id === jobId);
+    if (job) {
+      const updatedJob = { ...job, deliveryNote: newValue };
+      // Guardar directamente usando persistJob si está disponible
+      if (persistJob) {
+        persistJob(updatedJob);
+        showNotification('Albarán actualizado correctamente', 'success');
+      } else {
+        // Último recurso: usar onEditJob pero cerrar inmediatamente
+        onEditJob(updatedJob);
+        showNotification('Albarán actualizado correctamente', 'success');
+        // Cerrar cualquier modal que se abra
+        setTimeout(() => {
+          const modal = document.querySelector('[role="dialog"], .modal, [data-modal]') as HTMLElement;
+          if (modal) {
+            modal.style.display = 'none';
+            modal.setAttribute('aria-hidden', 'true');
+          }
+          const backdrop = document.querySelector('.modal-backdrop, [data-backdrop]') as HTMLElement;
+          if (backdrop) {
+            backdrop.style.display = 'none';
+          }
+        }, 50);
+      }
+    }
+    setEditingDeliveryNote(null);
+  };
+
+  const handleDeliveryNoteCancel = () => {
+    setEditingDeliveryNote(null);
+  };
+
+  const handleDeliveryNoteKeyDown = (e: React.KeyboardEvent, jobId: string, value: string) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+      e.nativeEvent.stopImmediatePropagation();
+      // Guardar y prevenir cualquier otro comportamiento
+      handleDeliveryNoteSave(jobId, value);
+      return false;
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      handleDeliveryNoteCancel();
+      return false;
+    }
+  };
+
   
+    
   // ESTADO PARA AÑADIR OPERARIOS A GRUPOS EXISTENTES
   const [addingToGroupId, setAddingToGroupId] = useState<string | null>(null);
   const [groupWorkerSearch, setGroupWorkerSearch] = useState<Record<string, string>>({});
@@ -475,12 +542,34 @@ const PlanningBoard: React.FC<PlanningBoardProps> = ({
                                   <div className="flex items-center gap-1.5 text-slate-400 mb-0.5">
                                     <FileText className="w-2.5 h-2.5" />
                                     <span className="text-[8px] font-black uppercase tracking-widest">ALB.</span>
-                                    {job.deliveryNote ? (
-                                      <span className="text-[10px] font-black text-black bg-gray-200 px-1 py-0.5 rounded border border-gray-300 truncate">
-                                        {job.deliveryNote}
-                                      </span>
+                                    {editingDeliveryNote?.jobId === job.id ? (
+                                      <input
+                                        ref={deliveryNoteInputRef}
+                                        type="text"
+                                        value={editingDeliveryNote.value}
+                                        onChange={e => setEditingDeliveryNote({ ...editingDeliveryNote, value: e.target.value })}
+                                        onKeyDown={e => handleDeliveryNoteKeyDown(e, job.id, editingDeliveryNote.value)}
+                                        onBlur={() => handleDeliveryNoteSave(job.id, editingDeliveryNote.value)}
+                                        onClick={(e) => e.stopPropagation()}
+                                        onMouseDown={(e) => e.stopPropagation()}
+                                        className="text-[10px] font-black text-black bg-white border border-blue-300 px-1 py-0.5 rounded outline-none focus:ring-1 focus:ring-blue-400 w-full"
+                                        placeholder="Albarán..."
+                                      />
                                     ) : (
-                                      <span className="text-[10px] text-slate-300 italic">-</span>
+                                      <span 
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleDeliveryNoteClick(job.id, job.deliveryNote || '');
+                                        }}
+                                        className={`text-[10px] font-black px-1 py-0.5 rounded border truncate cursor-pointer transition-colors ${
+                                          job.deliveryNote 
+                                            ? 'text-black bg-gray-200 border-gray-300 hover:bg-gray-100 hover:border-gray-400' 
+                                            : 'text-slate-300 bg-transparent border-transparent hover:bg-gray-100 hover:border-gray-300'
+                                        }`}
+                                        title="Click para editar albarán"
+                                      >
+                                        {job.deliveryNote || '-'}
+                                      </span>
                                     )}
                                   </div>
                                 </div>
