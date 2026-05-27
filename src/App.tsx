@@ -1194,9 +1194,6 @@ const [planningFilter, setPlanningFilter] = useState('');
       const [year, month, day] = date.split('-');
       const formattedDate = `${day}-${month}-${year}`;
       
-      // Depuración para ver el nombre del cliente
-      console.log('🔍 Nombre del cliente:', client?.name);
-      console.log('🔍 Nombre del centro:', center?.name);
       
       // Limpiar el nombre del cliente: quitar guiones bajos, espacios extra y caracteres especiales
       let cleanClientName = (client?.name || 'EMPRESA')
@@ -1204,8 +1201,6 @@ const [planningFilter, setPlanningFilter] = useState('');
         .replace(/\s+/g, ' ')        // Reemplazar múltiples espacios con uno solo
         .trim();                      // Quitar espacios al inicio y final
       
-      console.log('🔍 Nombre limpio:', `"${cleanClientName}"`);
-      console.log('🔍 Caracteres del nombre:', Array.from(cleanClientName).map(c => `${c} (${c.charCodeAt(0)})`));
       
       // Obtener número de exportación para el sufijo
       const exportCount = (currentHistory[exportKey]?.exportCount || 0) + 1;
@@ -1215,7 +1210,6 @@ const [planningFilter, setPlanningFilter] = useState('');
         ? `LISTADO ACCESO "${cleanClientName}" ${formattedDate}${suffix}.xlsx` 
         : `NUEVOS ACCESO "${cleanClientName}" ${formattedDate}${suffix}.xlsx`;
       
-      console.log('🔍 Nombre final del archivo:', fileName);
       const wb = XLSX.utils.book_new();
       
       // Solo incluir operarios fijos en la primera exportación
@@ -1344,34 +1338,27 @@ const [planningFilter, setPlanningFilter] = useState('');
   }, [persistMedicalCourse, showNotification]);
 
   const updateMedicalCourseHandler = useCallback(async (course: MedicalCourse) => {
-    console.log('🔍 updateMedicalCourseHandler llamado con:', course);
-    console.log('🔍 course.id:', course.id);
-    console.log('🔍 course.assignedWorkerIds:', course.assignedWorkerIds);
-    
     if (!course.id) {
-      console.error('❌ course.id es undefined - cancelando operación');
+      console.error('course.id es undefined - cancelando operación');
       showNotification('Error: ID del registro no válido', 'error');
       return;
     }
     
     const existing = planning.medicalCourses.find((c) => c.id === course.id);
-    console.log('🔍 existing encontrado:', existing ? { id: existing.id, provider: existing.provider } : null);
     
     if (!existing) {
-      console.error('❌ No se encontró el registro con ID:', course.id);
+      console.error('No se encontró el registro con ID:', course.id);
       showNotification('Error: Registro no encontrado', 'error');
       return;
     }
     
     const updated = { ...existing, ...course, updatedAt: new Date().toISOString() };
-    console.log('🔍 updated course:', { id: updated.id, provider: updated.provider });
     
     await persistMedicalCourse(updated);
     showNotification('Registro médico actualizado', 'success');
   }, [persistMedicalCourse, showNotification]);
 
   const deleteMedicalCourseHandler = useCallback(async (id: string) => {
-    console.log('🔍 deleteMedicalCourseHandler llamado con ID:', id);
     
     // Si el ID es undefined, no hacer nada para evitar eliminar todos los registros
     if (!id) {
@@ -1380,23 +1367,19 @@ const [planningFilter, setPlanningFilter] = useState('');
       return;
     }
     
-    console.log('🔍 medicalCourses ANTES de eliminar:', planning.medicalCourses.map(c => ({ id: c.id, provider: c.provider })));
     
     const existing = planning.medicalCourses.find((c) => c.id === id);
-    console.log('🔍 existing a eliminar:', existing ? { id: existing.id, provider: existing.provider } : null);
     
     if (!existing) {
-      console.error('❌ No se encontró el registro con ID:', id);
+      console.error('No se encontró el registro con ID:', id);
       showNotification('Error: Registro no encontrado', 'error');
       return;
     }
     
     // Eliminar del estado local primero
     const remaining = planning.medicalCourses.filter((c) => c.id !== id);
-    console.log('🔍 remaining DESPUÉS de filter:', remaining.map(c => ({ id: c.id, provider: c.provider })));
     
     setPlanning(prev => ({ ...prev, medicalCourses: remaining }));
-    console.log('🔍 medicalCourses DESPUÉS de setPlanning:', remaining.map(c => ({ id: c.id, workerIds: c.assignedWorkerIds })));
     
     // Eliminar de la base de datos
     await persistDeleteMedicalCourse(id);
@@ -1474,12 +1457,10 @@ const [planningFilter, setPlanningFilter] = useState('');
     console.log('🔄 About to save jobs:', updatedJobs.length);
     try {
       await Promise.all(updatedJobs.map(job => {
-        console.log('💾 Saving job:', job.id);
-        return persistJob(job);
+          return persistJob(job);
       }));
-      console.log('✅ All jobs saved successfully');
     } catch (error) {
-      console.error('❌ Error saving jobs:', error);
+      console.error('Error saving jobs:', error);
     }
     if (!validation.warning) showNotification("Mozo asignado", "success");
   }, [planning, persistJob, showNotification]);
@@ -1585,7 +1566,6 @@ const [planningFilter, setPlanningFilter] = useState('');
     try {
       showNotification('Iniciando migración de datos...', 'info');
       
-      console.log('🚀 Enviando petición a /api/migrate');
       
       const response = await fetch('/api/migrate', {
         method: 'POST',
@@ -1614,7 +1594,6 @@ const [planningFilter, setPlanningFilter] = useState('');
       }
 
       const result = await response.json();
-      console.log('✅ Response data:', result);
 
       showNotification('✅ Migración completada exitosamente', 'success');
       
@@ -1656,14 +1635,6 @@ const [planningFilter, setPlanningFilter] = useState('');
   const handleDuplicateJob = useCallback(async () => {
     if (!duplicatingJob || !duplicationDate) return;
     
-    console.log('🔍 Iniciando duplicación de tarea:', {
-      originalJob: duplicatingJob.id,
-      originalDate: duplicatingJob.date,
-      newDate: duplicationDate,
-      keepWorkers: keepWorkersOnDuplicate,
-      keepDeliveryNote: keepDeliveryNoteOnDuplicate
-    });
-    
     // Extraer solo las propiedades que queremos copiar explícitamente
     const { 
       id, 
@@ -1673,11 +1644,11 @@ const [planningFilter, setPlanningFilter] = useState('');
       deliveryNote, 
       reinforcementGroups, // 🚨 NO queremos copiar los grupos de refuerzo
       workerTimes, // 🚨 Tampoco queremos copiar los tiempos personalizados
-      ...jobData 
+      ...restOfJob 
     } = duplicatingJob;
     
     const newJob: Job = { 
-      ...jobData, // Copiar todo excepto las propiedades excluidas arriba
+      ...restOfJob, // Copiar todo excepto las propiedades excluidas arriba
       id: `j-${Date.now()}`, 
       date: duplicationDate, 
       assignedWorkerIds: keepWorkersOnDuplicate ? duplicatingJob.assignedWorkerIds : [],
@@ -1687,19 +1658,16 @@ const [planningFilter, setPlanningFilter] = useState('');
       workerTimes: {} // 🛡️ FORZAR: Siempre vacío en duplicación
     };
     
-    console.log('🔍 Nueva tarea creada:', newJob);
     
     try {
       await persistJob(newJob);
-      console.log('🔍 Tarea duplicada y guardada correctamente');
       
       setDuplicatingJob(null);
       setKeepDeliveryNoteOnDuplicate(false); // Resetear estado
       showNotification("Tarea duplicada", "success");
       
-      console.log('🔍 Estados reseteados después de duplicar');
     } catch (error) {
-      console.error('❌ Error al duplicar tarea:', error);
+      console.error('Error al duplicar tarea:', error);
       showNotification("Error al duplicar tarea", "error");
     }
   }, [duplicatingJob, duplicationDate, keepWorkersOnDuplicate, keepDeliveryNoteOnDuplicate, persistJob, showNotification]);
@@ -2569,34 +2537,52 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
   }, [planning.workers, persistWorker]);
 
   const handleAddStatusRecord = useCallback(async () => {
-    console.log('🚀 VERSIÓN NUEVA DE handleAddStatusRecord EJECUTÁNDOSE');
-    console.log('🔍 handleAddStatusRecord llamado:', { 
-      editingWorker: !!editingWorker, 
-      editingStatusRecord,
-      editingStatusRecordStatus: editingStatusRecord?.status,
-      editingStatusRecordStart: editingStatusRecord?.startDate,
-      editingStatusRecordEnd: editingStatusRecord?.endDate
-    });
-    
     if (!editingWorker) {
-      console.log('❌ No hay editingWorker');
       return;
     }
     
     // SIEMPRE verificar si editingStatusRecord es null y manejarlo
     if (!editingStatusRecord) {
-      console.log('⚠️ editingStatusRecord es null, inicializando con valores por defecto');
-      const today = new Date().toISOString().split('T')[0];
-      const defaultRecord = {
-        status: WorkerStatus.VACACIONES,
-        startDate: today,
-        endDate: today
-      };
-      console.log('🔍 Usando registro por defecto:', defaultRecord);
+      // Leer los valores directamente de los inputs del formulario con selectores más específicos
+      // Buscar el formulario de registro de estado específico
+      const statusForm = Array.from(document.querySelectorAll('.bg-slate-50.rounded-xl')).find(form => {
+        const label = form.querySelector('label');
+        return label?.textContent?.includes('Estado');
+      }) as HTMLElement;
       
-      // Usar directamente el registro por defecto
+      if (!statusForm) {
+        return;
+      }
+      
+      const statusSelect = statusForm.querySelector('select') as HTMLSelectElement;
+      const dateInputs = statusForm.querySelectorAll('input[type="date"]');
+      const startDateInput = dateInputs[0] as HTMLInputElement;
+      const endDateInput = dateInputs[1] as HTMLInputElement;
+      
+      const status = statusSelect?.value as WorkerStatus || WorkerStatus.VACACIONES;
+      const startDate = startDateInput?.value || '';
+      let endDate = endDateInput?.value || startDate;
+      
+      // Verificar si está marcado como IND. (solo si el botón está presionado)
+      const indButton = statusForm.querySelector('button[aria-pressed="true"]') as HTMLButtonElement;
+      if (indButton && indButton.textContent?.includes('IND.')) {
+        endDate = 'IND.';
+      }
+      
+      // Validar que las fechas no estén vacías
+      if (!startDate || startDate === '') {
+        showNotification("Debes seleccionar una fecha de inicio", "error");
+        return;
+      }
+      
+      if (!endDate || endDate === '') {
+        showNotification("Debes seleccionar una fecha de fin", "error");
+        return;
+      }
+      
+      // Usar los valores del formulario
       try {
-        const updatedWorker = addOrUpdateStatusRecord(editingWorker, defaultRecord.status, defaultRecord.startDate, defaultRecord.endDate, planning.customHolidays);
+        const updatedWorker = addOrUpdateStatusRecord(editingWorker, status, startDate, endDate, planning.customHolidays);
         const currentStatus = getCurrentWorkerStatus(updatedWorker);
         const finalWorker = { ...updatedWorker, status: currentStatus.status, statusStartDate: currentStatus.startDate, statusEndDate: currentStatus.endDate };
         setEditingWorker(finalWorker);
@@ -2619,7 +2605,6 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
       return; 
     }
     
-    console.log('✅ Validaciones pasadas, procesando registro:', editingStatusRecord);
     
     try {
       const updatedWorker = addOrUpdateStatusRecord(editingWorker, editingStatusRecord.status, editingStatusRecord.startDate, editingStatusRecord.endDate, planning.customHolidays);
@@ -2879,7 +2864,6 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
   }, [planning.notifications, setPlanning]);
 
   const handleCopyList = (list: Worker[], type: 'altas' | 'bajas') => {
-    console.log('🔍 handleCopyList llamado con:', { type, listLength: list.length, list: list.slice(0, 3) });
     
     // Obtener fecha actual en formato DD-MM-YYYY
     const today = new Date();
@@ -2930,10 +2914,9 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
     };
     
     copyToClipboard(text).then(() => {
-      console.log('✅ Texto copiado al clipboard');
       showNotification(`Lista de ${type} copiada`, 'success');
     }).catch((error) => {
-      console.error('❌ Error copiando al clipboard:', error);
+      console.error('Error copiando al clipboard:', error);
       showNotification('Error al copiar', 'error');
     });
   };
@@ -3160,10 +3143,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
   };
 
   const copyWorkerListToClipboard = (clientId: string, centerId: string, date: string) => {
-    console.log('🔍 copyWorkerListToClipboard llamado con:', { clientId, centerId, date });
     const text = generateWorkerListText(clientId, centerId, date);
-    console.log('📝 Texto generado:', text);
-    console.log('📱 Navigator.clipboard disponible:', !!navigator.clipboard);
     
     if (!navigator.clipboard) {
       console.error('❌ Navigator.clipboard no disponible, usando fallback');
@@ -3180,10 +3160,9 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
     }
     
     navigator.clipboard.writeText(text).then(() => {
-      console.log('✅ Texto copiado al clipboard');
       showNotification('Listado copiado al portapapeles', 'success');
     }).catch((error) => {
-      console.error('❌ Error copiando al clipboard:', error);
+      console.error('Error copiando al clipboard:', error);
       // Fallback
       const textarea = document.createElement('textarea');
       textarea.value = text; 
@@ -3235,25 +3214,30 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
   const filteredWorkersTable = useMemo(() => {
     let workers = cleanedPlanning.workers.filter(w => !showArchivedWorkers ? !w.isArchived : true);
     workers = workers.filter(w => w.name.toLowerCase().includes(workerTableSearch.toLowerCase()) || (w.apodo && w.apodo.toLowerCase().includes(workerTableSearch.toLowerCase())));
+    
     // Ordenar por código numérico
     workers = workers.sort((a, b) => {
       const numA = parseInt(a.code.replace(/\D/g, ''), 10);
       const numB = parseInt(b.code.replace(/\D/g, ''), 10);
       return numA - numB;
     });
+    
     if (workerAvailabilityFilter !== 'all') {
       const todayJobs = cleanedPlanning.jobs.filter(job => job.date === cleanedPlanning.currentDate && !job.isCancelled);
       const assignedIds = new Set(todayJobs.flatMap(j => j.assignedWorkerIds));
       if (workerAvailabilityFilter === 'free') workers = workers.filter(w => !assignedIds.has(w.id));
       else if (workerAvailabilityFilter === 'assigned') workers = workers.filter(w => assignedIds.has(w.id));
     }
+    
     if (workerContractFilter !== 'all') {
       if (workerContractFilter === 'fixedDiscontinuous') workers = workers.filter(w => w.contractType === ContractType.FIJO_DISCONTINUO);
       else workers = workers.filter(w => w.contractType === ContractType.FIJO_CONTINUO);
     }
+    
     const activeStatusFilters = Object.keys(workerStatusFilter).filter(k => workerStatusFilter[k]);
     const statusMapping: {[k: string]: string} = { 'DISPONIBLE': 'Disponible', 'VACACIONES': 'Vacaciones', 'BAJA_MEDICA': 'Baja Médica', 'BAJA_PATERNIDAD': 'Baja Paternidad', 'PERMISO_RETRIBUIDO': 'Permiso Retribuido' };
     if (activeStatusFilters.length > 0) workers = workers.filter(w => activeStatusFilters.some(k => getCorrectWorkerStatus(w) === statusMapping[k]));
+    
     return workers;
   }, [cleanedPlanning.workers, workerTableSearch, showArchivedWorkers, workerAvailabilityFilter, workerContractFilter, workerStatusFilter, cleanedPlanning.jobs, cleanedPlanning.currentDate]);
 
@@ -4398,9 +4382,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                         </td>
                         <td className="px-6 py-3 text-right">
                            <button onClick={() => {
-                             console.log('🔍 Editando worker:', worker);
-                             console.log('🔍 Estado actual editingWorker:', editingWorker);
-                             setEditingWorker(worker);
+                                                    setEditingWorker(worker);
                            }} className="p-2 hover:bg-blue-50 text-slate-400 hover:text-blue-600 rounded-xl transition-colors">
                               <Edit2 className="w-4 h-4" />
                            </button>
@@ -4582,14 +4564,6 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                       // Crear una copia del curso con ID válido
                       const courseWithId = { ...course, id: courseId };
                       
-                      console.log('🔍 Renderizando course:', { 
-                        id: courseId, 
-                        provider: course.provider, 
-                        hasId: !!courseId,
-                        idType: typeof courseId,
-                        fullCourse: course
-                      });
-                      
                       return (
                         <div key={courseId} className="grid gap-2 p-3 border-b border-slate-100 hover:bg-slate-50 items-center" style={{ gridTemplateColumns: '16.67% 11.67% 38.33% 11.67% 11.67% 10%' }}>
                           <div className="text-sm font-medium text-slate-900 truncate border-r border-slate-100 pr-2">
@@ -4610,7 +4584,6 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                           <div className="flex gap-1 justify-center items-center">
                             <button 
                               onClick={() => {
-                                console.log('🔍 Botón editar presionado, course.id:', courseId);
                                 setPlanning(prev => ({ ...prev, editingMedicalCourse: courseWithId }));
                               }}
                               className="p-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
@@ -4620,7 +4593,6 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                             </button>
                             <button 
                               onClick={() => {
-                                console.log('🔍 Botón eliminar presionado, course.id:', courseId);
                                 if (confirm('¿Eliminar este registro médico?')) {
                                   deleteMedicalCourseHandler(courseId);
                                 }
@@ -5126,7 +5098,6 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                                     worker.name.toLowerCase().includes(workerFilter.toLowerCase()) || 
                                     worker.code.toLowerCase().includes(workerFilter.toLowerCase());
                                  if (!matchesSearch && workerFilter) {
-                                    console.log(`🔍 Worker filtrado por búsqueda: ${worker.name} (${worker.code}) - Filtro: ${workerFilter}`);
                                  }
                                  return matchesSearch;
                               });
@@ -6242,13 +6213,11 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                       startDate: today,
                       endDate: today
                     };
-                    console.log('🔍 Inicializando editingStatusRecord:', newRecord);
                     setEditingStatusRecord(newRecord);
                     setShowAddRecordForm(true);
                     
                     // Forzar una actualización del estado para asegurar que se guarde
                     setTimeout(() => {
-                      console.log('🔍 Verificando editingStatusRecord después de timeout:', editingStatusRecord);
                     }, 100);
                   }}
                   className="px-3 py-1 bg-blue-500 text-white rounded-lg text-[10px] font-black uppercase hover:bg-blue-600 transition-colors"
@@ -7578,16 +7547,8 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                   type="date"
                   value={planning.editingMedicalCourse.issueDate || ''}
                   onChange={(e) => {
-                    console.log('🔍 Estado actual editingMedicalCourse:', planning.editingMedicalCourse);
                     const issueDate = e.target.value;
                     const currentExpiryDate = planning.editingMedicalCourse?.expiryDate || '';
-                    
-                    console.log('🔍 Auto-cálculo fecha caducidad:', {
-                      issueDate,
-                      currentExpiryDate,
-                      hasExpiryDate: !!currentExpiryDate,
-                      shouldCalculate: !currentExpiryDate && issueDate
-                    });
                     
                     // Auto-calcular fecha de caducidad (1 año después) siempre que haya fecha de realización
                     let expiryDate = currentExpiryDate;
@@ -7595,10 +7556,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                       const issue = new Date(issueDate);
                       issue.setFullYear(issue.getFullYear() + 1);
                       expiryDate = issue.toISOString().split('T')[0];
-                      console.log('🔍 Fecha calculada:', expiryDate);
                     }
-                    
-                    console.log('🔍 Actualizando estado:', { issueDate, expiryDate });
                     
                     setPlanning(prev => ({ 
                       ...prev, 
@@ -7613,12 +7571,14 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                 />
               </div>
               <div>
-                <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-2">
-                  Fecha de Caducidad
+                <div className="flex items-center gap-2 mb-2">
+                  <label className="block text-xs font-black text-slate-700 uppercase tracking-wider">
+                    Fecha de Caducidad
+                  </label>
                   {planning.editingMedicalCourse.issueDate && (
-                    <span className="ml-2 text-xs text-blue-600 font-normal">(auto: +1 año)</span>
+                    <span className="text-xs text-blue-600 font-normal">(auto: +1 año)</span>
                   )}
-                </label>
+                </div>
                 <input
                   type="date"
                   value={planning.editingMedicalCourse.expiryDate || ''}
@@ -7692,12 +7652,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                 if (!planning.editingMedicalCourse) return;
                 
                 // Verificar si es un registro nuevo (No existe en la lista)
-                console.log('🔍 editingMedicalCourse completo:', planning.editingMedicalCourse);
-                console.log('🔍 editingMedicalCourse.id:', planning.editingMedicalCourse?.id);
-                console.log('🔍 medicalCourses existentes:', planning.medicalCourses.map(c => c.id));
-                
                 const isNewRecord = !planning.medicalCourses.some(c => c.id === planning.editingMedicalCourse!.id);
-                console.log('🔍 ¿Es nuevo registro?', isNewRecord);
                 
                 if (isNewRecord) {
                   // Es un nuevo registro
