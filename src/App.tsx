@@ -5071,7 +5071,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                            <th className="p-1 text-xs font-black text-slate-700 uppercase text-center border-r border-slate-200 min-w-[120px]">
                               <div className="flex flex-col gap-1">
                                  <span>Operario</span>
-                                 <div className="flex gap-1 items-center">
+                                 <div className="flex gap-3 items-center">
                                     <input 
                                        type="text"
                                        placeholder=""
