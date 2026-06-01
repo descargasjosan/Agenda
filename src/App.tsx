@@ -194,6 +194,12 @@ const [selectedMonth, setSelectedMonth] = useState(() => {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 });
+
+// Estado para el mes de exportación de fijos discontinuos
+const [fdExportMonth, setFdExportMonth] = useState(() => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+});
 const [workerControlData, setWorkerControlData] = useState<{[month: string]: {[workerId: string]: {[day: string]: string}}}>({});
 const [selectedCell, setSelectedCell] = useState<{workerId: string, day: number} | null>(null);
 const [workerFilter, setWorkerFilter] = useState('');
@@ -1930,7 +1936,7 @@ const [planningFilter, setPlanningFilter] = useState('');
   const exportAllFDDaysToExcel = () => {
     try {
       const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-      const [year, month] = selectedMonth.split('-').map(Number);
+      const [year, month] = fdExportMonth.split('-').map(Number);
       const monthName = monthNames[month - 1];
       
       // Filtrar solo FIJOS DISCONTINUOS
@@ -1955,7 +1961,7 @@ const [planningFilter, setPlanningFilter] = useState('');
       
       // Datos de todos los operarios FD
       fdWorkers.forEach(worker => {
-        const calculationResult = calculateWorkerDays(worker.id, selectedMonth);
+        const calculationResult = calculateWorkerDays(worker.id, fdExportMonth);
         
         const row = [
           worker.code || '',
@@ -1982,7 +1988,7 @@ const [planningFilter, setPlanningFilter] = useState('');
       let totalNominas = 0;
       
       fdWorkers.forEach(worker => {
-        const result = calculateWorkerDays(worker.id, selectedMonth);
+        const result = calculateWorkerDays(worker.id, fdExportMonth);
         totalWorked += result.workedCount;
         totalWeekend += result.weekendCount;
         totalDays += result.totalCount;
@@ -2488,7 +2494,7 @@ const [planningFilter, setPlanningFilter] = useState('');
 
   // Función para calcular días trabajados por fijos discontinuos
 const calculateFDDaysStats = useCallback(() => {
-  const currentMonth = selectedMonth;
+  const currentMonth = fdExportMonth;
   
   // Filtrar solo FIJOS DISCONTINUOS no archivados
   const fdWorkers = planning.workers.filter(w => w.contractType === ContractType.FIJO_DISCONTINUO && !w.isArchived);
@@ -2524,7 +2530,7 @@ const calculateFDDaysStats = useCallback(() => {
     weekendDays: totalWeekendDays,
     totalDays: totalLaborableDays + totalWeekendDays
   };
-}, [planning.workers, planning.jobs, selectedMonth, calculateWorkerDays]);
+}, [planning.workers, planning.jobs, fdExportMonth, calculateWorkerDays]);
 
 const fdDaysStats = calculateFDDaysStats();
 
@@ -4247,6 +4253,29 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                         </span>
                         <span className="text-green-600 font-bold flex items-center gap-2">
                           <strong>Total:</strong> {fdDaysStats.totalDays}
+                          <select 
+                            value={fdExportMonth}
+                            onChange={(e) => setFdExportMonth(e.target.value)}
+                            className="text-xs px-2 py-1 border border-green-300 rounded bg-white text-green-700 focus:outline-none focus:ring-2 focus:ring-green-500"
+                            title="Seleccionar mes para exportar"
+                          >
+                            {(() => {
+                              const months = [];
+                              const currentDate = new Date();
+                              for (let i = 0; i < 12; i++) {
+                                const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
+                                const monthStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                                const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+                                const monthName = monthNames[date.getMonth()];
+                                months.push(
+                                  <option key={monthStr} value={monthStr}>
+                                    {monthName} {date.getFullYear()}
+                                  </option>
+                                );
+                              }
+                              return months;
+                            })()}
+                          </select>
                           <button 
                             onClick={exportAllFDDaysToExcel}
                             className="p-1 hover:bg-green-100 text-green-600 hover:text-green-700 rounded transition-colors"
@@ -5040,15 +5069,52 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                      <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
                         <tr>
                            <th className="p-1 text-xs font-black text-slate-700 uppercase text-center border-r border-slate-200 min-w-[80px]">
-                              <div className="flex items-center gap-1">
+                              <div className="flex flex-col gap-1">
                                  <span>Operario</span>
-                                 <input 
-                                    type="text"
-                                    placeholder=""
-                                    value={workerFilter}
-                                    onChange={(e) => setWorkerFilter(e.target.value)}
-                                    className="w-16 px-1 py-0.5 text-[8px] border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                 />
+                                 <div className="flex gap-1">
+                                    <input 
+                                       type="text"
+                                       placeholder=""
+                                       value={workerFilter}
+                                       onChange={(e) => setWorkerFilter(e.target.value)}
+                                       className="flex-1 px-1 py-0.5 text-[8px] border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                    />
+                                    <div className="flex gap-1">
+                                       <button
+                                          onClick={() => setWorkerContractFilter('all')}
+                                          className={`px-1 py-0.5 text-[7px] rounded transition-colors ${
+                                             workerContractFilter === 'all' 
+                                                ? 'bg-blue-600 text-white' 
+                                                : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
+                                          }`}
+                                          title="Todos los operarios"
+                                       >
+                                          Todos
+                                       </button>
+                                       <button
+                                          onClick={() => setWorkerContractFilter('fixedDiscontinuous')}
+                                          className={`px-1 py-0.5 text-[7px] rounded transition-colors ${
+                                             workerContractFilter === 'fixedDiscontinuous' 
+                                                ? 'bg-red-600 text-white' 
+                                                : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
+                                          }`}
+                                          title="Fijos Discontinuos"
+                                       >
+                                          FD
+                                       </button>
+                                       <button
+                                          onClick={() => setWorkerContractFilter('others')}
+                                          className={`px-1 py-0.5 text-[7px] rounded transition-colors ${
+                                             workerContractFilter === 'others' 
+                                                ? 'bg-green-600 text-white' 
+                                                : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
+                                          }`}
+                                          title="Resto de operarios"
+                                       >
+                                          Resto
+                                       </button>
+                                    </div>
+                                 </div>
                               </div>
                            </th>
                            {/* Días del mes - dinámico según el mes seleccionado */}
@@ -5097,9 +5163,12 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                                  const matchesSearch = !workerFilter || 
                                     worker.name.toLowerCase().includes(workerFilter.toLowerCase()) || 
                                     worker.code.toLowerCase().includes(workerFilter.toLowerCase());
-                                 if (!matchesSearch && workerFilter) {
-                                 }
-                                 return matchesSearch;
+                                 
+                                 const matchesContract = workerContractFilter === 'all' || 
+                                    (workerContractFilter === 'fixedDiscontinuous' && worker.contractType === ContractType.FIJO_DISCONTINUO) ||
+                                    (workerContractFilter === 'others' && worker.contractType !== ContractType.FIJO_DISCONTINUO);
+                                 
+                                 return matchesSearch && matchesContract;
                               });
                            
                            return activeWorkers.map(worker => {
