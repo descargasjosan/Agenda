@@ -5068,52 +5068,50 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                      {/* Header con días del mes */}
                      <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
                         <tr>
-                           <th className="p-1 text-xs font-black text-slate-700 uppercase text-center border-r border-slate-200 min-w-[80px]">
+                           <th className="p-1 text-xs font-black text-slate-700 uppercase text-center border-r border-slate-200 min-w-[120px]">
                               <div className="flex flex-col gap-1">
                                  <span>Operario</span>
-                                 <div className="flex gap-1">
+                                 <div className="flex gap-1 items-center">
                                     <input 
                                        type="text"
                                        placeholder=""
                                        value={workerFilter}
                                        onChange={(e) => setWorkerFilter(e.target.value)}
-                                       className="flex-1 px-1 py-0.5 text-[8px] border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                       className="w-20 px-1 py-0.5 text-[8px] border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                                     />
-                                    <div className="flex gap-1">
-                                       <button
-                                          onClick={() => setWorkerContractFilter('all')}
-                                          className={`px-1 py-0.5 text-[7px] rounded transition-colors ${
-                                             workerContractFilter === 'all' 
-                                                ? 'bg-blue-600 text-white' 
-                                                : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
-                                          }`}
-                                          title="Todos los operarios"
-                                       >
-                                          Todos
-                                       </button>
-                                       <button
-                                          onClick={() => setWorkerContractFilter('fixedDiscontinuous')}
-                                          className={`px-1 py-0.5 text-[7px] rounded transition-colors ${
-                                             workerContractFilter === 'fixedDiscontinuous' 
-                                                ? 'bg-red-600 text-white' 
-                                                : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
-                                          }`}
-                                          title="Fijos Discontinuos"
-                                       >
-                                          FD
-                                       </button>
-                                       <button
-                                          onClick={() => setWorkerContractFilter('others')}
-                                          className={`px-1 py-0.5 text-[7px] rounded transition-colors ${
-                                             workerContractFilter === 'others' 
+                                    <button
+                                       onClick={() => setWorkerContractFilter('all')}
+                                       className={`px-1 py-0.5 text-[7px] rounded transition-colors ${
+                                          workerContractFilter === 'all' 
+                                             ? 'bg-blue-600 text-white' 
+                                             : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
+                                       }`}
+                                       title="Todos los operarios"
+                                    >
+                                       Todos
+                                    </button>
+                                    <button
+                                       onClick={() => setWorkerContractFilter('fixedDiscontinuous')}
+                                       className={`px-1 py-0.5 text-[7px] rounded transition-colors ${
+                                          workerContractFilter === 'fixedDiscontinuous' 
+                                             ? 'bg-red-600 text-white' 
+                                             : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
+                                       }`}
+                                       title="Fijos Discontinuos"
+                                    >
+                                       FD
+                                    </button>
+                                    <button
+                                       onClick={() => setWorkerContractFilter('others')}
+                                       className={`px-1 py-0.5 text-[7px] rounded transition-colors ${
+                                          workerContractFilter === 'others' 
                                                 ? 'bg-green-600 text-white' 
                                                 : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
-                                          }`}
-                                          title="Resto de operarios"
-                                       >
-                                          Resto
-                                       </button>
-                                    </div>
+                                       }`}
+                                       title="Resto de operarios"
+                                    >
+                                       Resto
+                                    </button>
                                  </div>
                               </div>
                            </th>
