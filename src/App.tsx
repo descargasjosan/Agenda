@@ -5075,7 +5075,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                                        placeholder=""
                                        value={workerFilter}
                                        onChange={(e) => setWorkerFilter(e.target.value)}
-                                       className="w-20 px-1 py-0.5 text-[8px] border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                       className="w-20 px-1 py-0.5 text-[8px] text-slate-700 border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                                     />
                                     <button
                                        onClick={() => setWorkerContractFilter('all')}
