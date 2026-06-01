@@ -5066,12 +5066,10 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                <div className="bg-white rounded-xl border border-slate-200 overflow-x-auto max-h-[91vh] overflow-y-auto">
                   <table className="w-full min-w-[800px] text-xs">
                      {/* Header con días del mes */}
-                     <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
+                     <thead className="bg-slate-700 border-b border-slate-800 sticky top-0 z-10">
                         <tr>
-                           <th className="p-1 text-xs font-black text-slate-700 uppercase text-center border-r border-slate-200 min-w-[120px]">
-                              <div className="flex flex-col gap-1">
-                                 <span>Operario</span>
-                                 <div className="flex gap-3 items-center">
+                           <th className="p-1 text-xs font-black text-white uppercase text-center border-r border-slate-600 min-w-[120px]">
+                              <div className="flex gap-3 items-center ml-8">
                                     <input 
                                        type="text"
                                        placeholder=""
@@ -5113,7 +5111,6 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                                        Resto
                                     </button>
                                  </div>
-                              </div>
                            </th>
                            {/* Días del mes - dinámico según el mes seleccionado */}
                            {(() => {
@@ -5123,11 +5120,11 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                                  const dayOfWeek = getDayOfWeek(year, month, day);
                                  const isCurrentDay = day === getCurrentDay() && month === new Date().getMonth() + 1 && year === new Date().getFullYear();
                                  return (
-                                    <th key={day} className={`p-1 text-center border-r border-slate-200 min-w-[25px] ${isCurrentDay ? 'bg-green-300' : ''}`}>
-                                       <div className="text-xs font-black text-slate-700">
+                                    <th key={day} className={`p-1 text-center border-r border-slate-600 min-w-[25px] ${isCurrentDay ? 'bg-green-600' : ''}`}>
+                                       <div className="text-xs font-black text-white">
                                           {day}
                                        </div>
-                                       <div className="text-[7px] text-slate-500">
+                                       <div className="text-[7px] text-slate-300">
                                           {['D', 'L', 'M', 'X', 'J', 'V', 'S'][dayOfWeek]}
                                        </div>
                                     </th>
@@ -5135,15 +5132,15 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                               });
                            })()}
                            {/* Columnas de totales */}
-                           <th className="p-1 text-xs font-black text-slate-700 uppercase text-center border-l border-slate-200 min-w-[35px]">Faltas</th>
-                           <th className="p-1 text-xs font-black text-slate-700 uppercase text-center border-l border-slate-200 min-w-[40px]">Horas</th>
-                           <th className="p-1 text-xs font-black text-slate-700 uppercase text-center border-r border-slate-200 min-w-[35px]">Baja</th>
-                           <th className="p-1 text-xs font-black text-slate-700 uppercase text-center border-r border-slate-200 min-w-[35px]">Reposo</th>
-                           <th className="p-1 text-xs font-black text-slate-700 uppercase text-center border-r border-slate-200 min-w-[35px]">Vac. Mes</th>
-                           <th className="p-1 text-xs font-black text-slate-700 uppercase text-center border-r border-slate-200 min-w-[40px]">Saldo Vac.</th>
-                           <th className="p-1 text-xs font-black text-slate-700 uppercase text-center border-r border-slate-200 min-w-[35px]">Anticipo</th>
-                           <th className="p-1 text-xs font-black text-slate-700 uppercase text-center border-r border-slate-200 min-w-[45px]">S. Bruto</th>
-                           <th className="p-1 text-xs font-black text-slate-700 uppercase text-center min-w-[45px]">S. Neto</th>
+                           <th className="p-1 text-xs font-black text-white uppercase text-center border-l border-slate-600 min-w-[35px]">Faltas</th>
+                           <th className="p-1 text-xs font-black text-white uppercase text-center border-l border-slate-600 min-w-[40px]">Horas</th>
+                           <th className="p-1 text-xs font-black text-white uppercase text-center border-r border-slate-600 min-w-[35px]">Baja</th>
+                           <th className="p-1 text-xs font-black text-white uppercase text-center border-r border-slate-600 min-w-[35px]">Reposo</th>
+                           <th className="p-1 text-xs font-black text-white uppercase text-center border-r border-slate-600 min-w-[35px]">Vac. Mes</th>
+                           <th className="p-1 text-xs font-black text-white uppercase text-center border-r border-slate-600 min-w-[40px]">Saldo Vac.</th>
+                           <th className="p-1 text-xs font-black text-white uppercase text-center border-r border-slate-600 min-w-[35px]">Anticipo</th>
+                           <th className="p-1 text-xs font-black text-white uppercase text-center border-r border-slate-600 min-w-[45px]">S. Bruto</th>
+                           <th className="p-1 text-xs font-black text-white uppercase text-center min-w-[45px]">S. Neto</th>
                         </tr>
                      </thead>
                      
