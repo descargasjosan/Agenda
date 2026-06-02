@@ -867,16 +867,45 @@ const isHoursSettled = (workerId: string): boolean => {
 
 const toggleHoursSettled = async (workerId: string) => {
    const settledId = `${workerId}-${selectedMonth}-settled`;
+   
    if (isHoursSettled(workerId)) {
       await deleteWorkerControl(settledId);
    } else {
-      await saveWorkerControl({
-         id: settledId,
-         worker_id: workerId,
-         date: `${selectedMonth}-01`,
-         value: 'L',
-         month: selectedMonth
-      });
+      try {
+         await saveWorkerControl({
+            id: settledId,
+            worker_id: workerId,
+            date: `${selectedMonth}-31`, // Usar día 31 para evitar conflicto con días reales
+            value: 'L',
+            month: selectedMonth
+         });
+      } catch (error: any) {
+         // Si es error de duplicado, eliminar directamente y crear nuevo registro
+         if (error.message?.includes('duplicate key') || error.code === '23505') {
+            try {
+               // Eliminación directa sin pasar por el estado local
+               await supabase
+                  .from('worker_control_data')
+                  .delete()
+                  .eq('id', settledId);
+               
+               // Esperar un momento y crear el nuevo registro
+               await new Promise(resolve => setTimeout(resolve, 500));
+               
+               await saveWorkerControl({
+                  id: settledId,
+                  worker_id: workerId,
+                  date: `${selectedMonth}-31`, // Usar día 31 para evitar conflicto con días reales
+                  value: 'L',
+                  month: selectedMonth
+               });
+            } catch (directError: any) {
+               throw directError;
+            }
+         } else {
+            throw error;
+         }
+      }
    }
 };
 
