@@ -192,8 +192,9 @@ const PlanningBoard: React.FC<PlanningBoardProps> = ({
     const matchesSearch = w.name.toLowerCase().includes(workerSearch.toLowerCase()) || w.code.includes(workerSearch);
     if (!matchesSearch) return false;
 
-    // 3. Lógica de Estado - verificar disponibilidad para la fecha actual de planificación
-    const currentDate = datesToShow.length > 0 ? datesToShow[0] : new Date().toISOString().split('T')[0];
+    // 3. Lógica de Estado - verificar disponibilidad para la fecha de la tarea específica
+    const targetJob = planning.jobs.find(j => j.id === selectorJobId);
+    const currentDate = targetJob ? targetJob.date : (datesToShow.length > 0 ? datesToShow[0] : new Date().toISOString().split('T')[0]);
     
     // Función auxiliar para obtener estado del trabajador (similar a WorkerSidebar)
     const getWorkerStatusForDate = (worker: Worker, date: string) => {
@@ -222,7 +223,9 @@ const PlanningBoard: React.FC<PlanningBoardProps> = ({
       WorkerStatus.VACACIONES, 
       WorkerStatus.BAJA_MEDICA, 
       WorkerStatus.BAJA_PATERNIDAD,
-      WorkerStatus.PERMISO_RETRIBUIDO
+      WorkerStatus.PERMISO_RETRIBUIDO,
+      WorkerStatus.FALTA,
+      WorkerStatus.REPOSO
     ].includes(statusForCurrentDate);
 
     if (isUnavailableStatus) {

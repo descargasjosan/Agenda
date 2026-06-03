@@ -184,7 +184,7 @@ const App: React.FC = () => {
   const [workerAvailabilityFilter, setWorkerAvailabilityFilter] = useState<'all' | 'free' | 'assigned'>('all');
   const [workerContractFilter, setWorkerContractFilter] = useState<'all' | 'fixedDiscontinuous' | 'others'>('all');
   const [workerStatusFilter, setWorkerStatusFilter] = useState<{[key: string]: boolean}>({
-    'DISPONIBLE': true, 'VACACIONES': true, 'BAJA_MEDICA': true, 'BAJA_PATERNIDAD': true, 'PERMISO_RETRIBUIDO': true
+    'DISPONIBLE': true, 'VACACIONES': true, 'BAJA_MEDICA': true, 'BAJA_PATERNIDAD': true, 'PERMISO_RETRIBUIDO': true, 'FALTA': true, 'REPOSO': true
   });
   const [itemToDelete, setItemToDelete] = useState<{ id: string, type: 'job' | 'worker' | 'client' | 'task' | 'course', name: string } | null>(null);
   const [confirmDeleteCourse, setConfirmDeleteCourse] = useState<string | null>(null);
@@ -335,16 +335,17 @@ const updateCellValue = async (workerId: string, day: number, value: string) => 
    
    // Permitir B (baja médica) y P (paternidad) en festivos/fin de semana
    // Permitir V (vacaciones) solo en fines de semana, NO en festivos
-   // Bloquear F (faltas), D (?), R (reposo) y horas (números) en festivos/fin de semana
+   // Permitir horas (números) en festivos/fin de semana
+   // Bloquear F (faltas), D (permiso), R (reposo) en festivos/fin de semana
    const isAllowedValue = value === 'B' || value === 'P' || (value === 'V' && isWeekend && !isHolidayDay);
    
-   // Solo bloquear si realmente es fin de semana O festivo
-   const isBlockedValue = (isWeekend || isHolidayDay) && ((value && !isNaN(Number(value))) || ['F', 'D', 'R'].includes(value) || (value === 'V' && isHolidayDay));
+   // Solo bloquear si realmente es fin de semana O festivo, pero permitir horas
+   const isBlockedValue = (isWeekend || isHolidayDay) && (['F', 'D', 'R'].includes(value) || (value === 'V' && isHolidayDay));
    
    // Impedir guardar valores bloqueados en festivos o fines de semana
    if (isBlockedValue) {
       const context = isHolidayDay ? 'días festivos' : 'fines de semana';
-      const reason = value === 'F' ? 'faltas' : value === 'V' ? 'vacaciones' : value === 'R' ? 'reposos' : 'horas';
+      const reason = value === 'F' ? 'faltas' : value === 'V' ? 'vacaciones' : value === 'R' ? 'reposos' : value === 'D' ? 'permisos' : 'estados';
       showNotification(
          `No se pueden registrar ${reason} en ${context}`, 
          'warning'
@@ -419,6 +420,10 @@ const syncFromStatusRecords = useCallback(async (showSummary: boolean = false) =
                case 'Baja Paternidad': statusCode = 'P'; break;
                case 'PERMISO_RETRIBUIDO':
                case 'Permiso Retribuido': statusCode = 'D'; break;
+               case 'FALTA':
+               case 'Falta': statusCode = 'F'; break;
+               case 'REPOSO':
+               case 'Reposo': statusCode = 'R'; break;
                default: statusCode = ''; break;
             }
             newWorkerData[day] = statusCode;
@@ -507,13 +512,18 @@ const syncToStatusRecords = useCallback(async (workerId: string, day: number, va
          };
       });
       
-      // Solo procesar como estado si es V, B, P, D
+      // Guardar el valor original para la lógica de eliminación de tareas
+      const originalValue = value;
+      
+      // Solo procesar como estado si es V, B, P, D, F, R
       let statusType: WorkerStatus | null = null;
       switch(value) {
          case 'V': statusType = WorkerStatus.VACACIONES; break;
          case 'B': statusType = WorkerStatus.BAJA_MEDICA; break;
          case 'P': statusType = WorkerStatus.BAJA_PATERNIDAD; break;
          case 'D': statusType = WorkerStatus.PERMISO_RETRIBUIDO; break;
+         case 'F': statusType = WorkerStatus.FALTA; break;
+         case 'R': statusType = WorkerStatus.REPOSO; break;
          default: statusType = null; break;
       }
       
@@ -532,7 +542,9 @@ const syncToStatusRecords = useCallback(async (workerId: string, day: number, va
             const sCode = s.status === WorkerStatus.VACACIONES ? 'V' :
                           s.status === WorkerStatus.BAJA_MEDICA ? 'B' :
                           s.status === WorkerStatus.BAJA_PATERNIDAD ? 'P' :
-                          s.status === WorkerStatus.PERMISO_RETRIBUIDO ? 'D' : '';
+                          s.status === WorkerStatus.PERMISO_RETRIBUIDO ? 'D' :
+                          s.status === WorkerStatus.FALTA ? 'F' :
+                          s.status === WorkerStatus.REPOSO ? 'R' : '';
             if (sCode === value) sameStatusDays.push(d);
          });
 
@@ -569,6 +581,50 @@ const syncToStatusRecords = useCallback(async (workerId: string, day: number, va
          };
 
          await persistWorker(finalWorker);
+
+         // Si es F, R, D, eliminar de tareas de todos los días afectados por el estado
+         if (['F', 'R', 'D'].includes(originalValue)) {
+            let updatedJobs = 0;
+            
+            // Eliminar de tareas de todos los días en el rango
+            for (const range of ranges) {
+               const start = new Date(range.start);
+               const end = new Date(range.end);
+               
+               // Recorrer cada día del rango
+               for (let date = start; date <= end; date.setDate(date.getDate() + 1)) {
+                  const dateStr = date.toISOString().split('T')[0];
+                  const jobsForDay = planning.jobs.filter(job => job.date === dateStr && !job.isCancelled);
+                  
+                  for (const job of jobsForDay) {
+                     if (job.assignedWorkerIds.includes(workerId)) {
+                        // Eliminar operario de la tarea
+                        const updatedJob = {
+                           ...job,
+                           assignedWorkerIds: job.assignedWorkerIds.filter(id => id !== workerId)
+                        };
+                        
+                        // Actualizar en el estado local
+                        setPlanning(prev => ({
+                           ...prev,
+                           jobs: prev.jobs.map(j => j.id === job.id ? updatedJob : j)
+                        }));
+                        
+                        // Guardar en Supabase
+                        await persistJob(updatedJob);
+                        updatedJobs++;
+                     }
+                  }
+               }
+            }
+            
+            if (updatedJobs > 0) {
+               const daysAffected = ranges.length === 1 
+                  ? `del día ${formatDateDMY(ranges[0].start)}`
+                  : `de ${ranges.length} días afectados`;
+               showNotification(`${worker.name} eliminado de ${updatedJobs} tarea(s) ${daysAffected}`, 'info');
+            }
+         }
 
          if (ranges.length === 1) {
             showNotification(`Estado "${statusType}" registrado del ${formatDateDMY(ranges[0].start)} al ${formatDateDMY(ranges[0].end)} para ${worker.name}`, 'success');
@@ -3270,7 +3326,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
     }
     
     const activeStatusFilters = Object.keys(workerStatusFilter).filter(k => workerStatusFilter[k]);
-    const statusMapping: {[k: string]: string} = { 'DISPONIBLE': 'Disponible', 'VACACIONES': 'Vacaciones', 'BAJA_MEDICA': 'Baja Médica', 'BAJA_PATERNIDAD': 'Baja Paternidad', 'PERMISO_RETRIBUIDO': 'Permiso Retribuido' };
+    const statusMapping: {[k: string]: string} = { 'DISPONIBLE': 'Disponible', 'VACACIONES': 'Vacaciones', 'BAJA_MEDICA': 'Baja Médica', 'BAJA_PATERNIDAD': 'Baja Paternidad', 'PERMISO_RETRIBUIDO': 'Permiso Retribuido', 'FALTA': 'Falta', 'REPOSO': 'Reposo' };
     if (activeStatusFilters.length > 0) workers = workers.filter(w => activeStatusFilters.some(k => getCorrectWorkerStatus(w) === statusMapping[k]));
     
     return workers;
@@ -4122,7 +4178,9 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                             'VACACIONES': false,
                             'BAJA_MEDICA': false,
                             'BAJA_PATERNIDAD': false,
-                            'PERMISO_RETRIBUIDO': false
+                            'PERMISO_RETRIBUIDO': false,
+                            'FALTA': false,
+                            'REPOSO': false
                           });
                         } else {
                           // Si no todos están activos, activar todos
@@ -4131,7 +4189,9 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                             'VACACIONES': true,
                             'BAJA_MEDICA': true,
                             'BAJA_PATERNIDAD': true,
-                            'PERMISO_RETRIBUIDO': true
+                            'PERMISO_RETRIBUIDO': true,
+                            'FALTA': true,
+                            'REPOSO': true
                           });
                         }
                       }}
@@ -4153,7 +4213,10 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                           ...(allActive ? {
                             'VACACIONES': false,
                             'BAJA_MEDICA': false,
-                            'BAJA_PATERNIDAD': false
+                            'BAJA_PATERNIDAD': false,
+                            'PERMISO_RETRIBUIDO': false,
+                            'FALTA': false,
+                            'REPOSO': false
                           } : {})
                         }));
                       }}
@@ -4175,7 +4238,10 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                           ...(allActive ? {
                             'DISPONIBLE': false,
                             'BAJA_MEDICA': false,
-                            'BAJA_PATERNIDAD': false
+                            'BAJA_PATERNIDAD': false,
+                            'PERMISO_RETRIBUIDO': false,
+                            'FALTA': false,
+                            'REPOSO': false
                           } : {})
                         }));
                       }}
@@ -4197,7 +4263,10 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                           ...(allActive ? {
                             'DISPONIBLE': false,
                             'VACACIONES': false,
-                            'BAJA_PATERNIDAD': false
+                            'BAJA_PATERNIDAD': false,
+                            'PERMISO_RETRIBUIDO': false,
+                            'FALTA': false,
+                            'REPOSO': false
                           } : {})
                         }));
                       }}
@@ -4219,7 +4288,10 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                           ...(allActive ? {
                             'DISPONIBLE': false,
                             'VACACIONES': false,
-                            'BAJA_MEDICA': false
+                            'BAJA_MEDICA': false,
+                            'PERMISO_RETRIBUIDO': false,
+                            'FALTA': false,
+                            'REPOSO': false
                           } : {})
                         }));
                       }}
@@ -4242,7 +4314,9 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                             'DISPONIBLE': false,
                             'VACACIONES': false,
                             'BAJA_MEDICA': false,
-                            'BAJA_PATERNIDAD': false
+                            'BAJA_PATERNIDAD': false,
+                            'FALTA': false,
+                            'REPOSO': false
                           } : {})
                         }));
                       }}
@@ -4253,6 +4327,56 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                       }`}
                     >
                       Permiso Retribuido
+                    </button>
+                    <button
+                      onClick={() => {
+                        const allActive = Object.values(workerStatusFilter).every(v => v);
+                        setWorkerStatusFilter((prev: Record<string, boolean>) => ({
+                          ...prev, 
+                          'FALTA': !prev['FALTA'],
+                          // Si todos estaban activos, desactivar los demás al cambiar este
+                          ...(allActive ? {
+                            'DISPONIBLE': false,
+                            'VACACIONES': false,
+                            'BAJA_MEDICA': false,
+                            'BAJA_PATERNIDAD': false,
+                            'PERMISO_RETRIBUIDO': false,
+                            'REPOSO': false
+                          } : {})
+                        }));
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all ${
+                        workerStatusFilter['FALTA'] 
+                          ? 'bg-rose-500 text-white shadow-sm' 
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      Falta
+                    </button>
+                    <button
+                      onClick={() => {
+                        const allActive = Object.values(workerStatusFilter).every(v => v);
+                        setWorkerStatusFilter((prev: Record<string, boolean>) => ({
+                          ...prev, 
+                          'REPOSO': !prev['REPOSO'],
+                          // Si todos estaban activos, desactivar los demás al cambiar este
+                          ...(allActive ? {
+                            'DISPONIBLE': false,
+                            'VACACIONES': false,
+                            'BAJA_MEDICA': false,
+                            'BAJA_PATERNIDAD': false,
+                            'PERMISO_RETRIBUIDO': false,
+                            'FALTA': false
+                          } : {})
+                        }));
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all ${
+                        workerStatusFilter['REPOSO'] 
+                          ? 'bg-indigo-500 text-white shadow-sm' 
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      Reposo
                     </button>
                   </div>
 

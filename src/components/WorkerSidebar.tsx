@@ -122,7 +122,9 @@ const WorkerSidebar: React.FC<WorkerSidebarProps> = ({
       WorkerStatus.VACACIONES, 
       WorkerStatus.BAJA_MEDICA, 
       WorkerStatus.BAJA_PATERNIDAD,
-      WorkerStatus.PERMISO_RETRIBUIDO
+      WorkerStatus.PERMISO_RETRIBUIDO,
+      WorkerStatus.FALTA,
+      WorkerStatus.REPOSO
     ].includes(statusForCurrentDate);
 
     if (isUnavailableStatus) {
