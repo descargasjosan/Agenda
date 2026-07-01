@@ -554,7 +554,7 @@ const PlanningBoard: React.FC<PlanningBoardProps> = ({
                                 </div>
 
                                 {/* Columna ALBARÁN */}
-                                <div className="lg:w-28 px-4 py-2 border-b lg:border-b-0 lg:border-r border-slate-100 shrink-0">
+                                <div className="lg:w-36 px-4 py-2 border-b lg:border-b-0 lg:border-r border-slate-100 shrink-0">
                                   <div className="flex items-center gap-1.5 text-slate-400 mb-0.5">
                                     <FileText className="w-2.5 h-2.5" />
                                     <span className="text-[8px] font-black uppercase tracking-widest">ALB.</span>
@@ -568,7 +568,7 @@ const PlanningBoard: React.FC<PlanningBoardProps> = ({
                                         onBlur={() => handleDeliveryNoteSave(job.id, editingDeliveryNote.value)}
                                         onClick={(e) => e.stopPropagation()}
                                         onMouseDown={(e) => e.stopPropagation()}
-                                        className="text-[10px] font-black text-black bg-white border border-blue-300 px-1 py-0.5 rounded outline-none focus:ring-1 focus:ring-blue-400 w-full"
+                                        className="text-[10px] font-black text-black bg-white border border-blue-300 px-1.5 py-0.75 rounded outline-none focus:ring-1 focus:ring-blue-400 w-full"
                                         placeholder="Albarán..."
                                       />
                                     ) : (
@@ -577,7 +577,7 @@ const PlanningBoard: React.FC<PlanningBoardProps> = ({
                                           e.stopPropagation();
                                           handleDeliveryNoteClick(job.id, job.deliveryNote || '');
                                         }}
-                                        className={`text-[10px] font-black px-1 py-0.5 rounded border truncate cursor-pointer transition-colors ${
+                                        className={`text-[10px] font-black px-1.5 py-0.75 rounded border cursor-pointer transition-colors ${
                                           job.deliveryNote 
                                             ? 'text-black bg-gray-200 border-gray-300 hover:bg-gray-100 hover:border-gray-400' 
                                             : 'text-slate-300 bg-transparent border-transparent hover:bg-gray-100 hover:border-gray-300'

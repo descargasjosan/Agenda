@@ -147,7 +147,42 @@ if (typeof window !== 'undefined') {
         ] = await Promise.all([
           supabase.from('workers').select('data'),
           supabase.from('clients').select('data'),
-          supabase.from('jobs').select('data').order('updated_at', { ascending: false }),
+          // Cargar jobs con paginación para evitar límite de 1000
+          (async () => {
+            let allData: any[] = [];
+            let page = 0;
+            const pageSize = 1000;
+            let hasMore = true;
+            
+            while (hasMore) {
+              const { data, error } = await supabase
+                .from('jobs')
+                .select('data')
+                .order('updated_at', { ascending: false })
+                .range(page * pageSize, (page + 1) * pageSize - 1);
+              
+              if (error) {
+                console.error('Error cargando jobs (página ' + page + '):', error);
+                break;
+              }
+              
+              if (data && data.length > 0) {
+                allData = allData.concat(data);
+                console.log(`📄 [PAGINATION] Cargada página ${page + 1}: ${data.length} registros de jobs`);
+                
+                if (data.length < pageSize) {
+                  hasMore = false;
+                } else {
+                  page++;
+                }
+              } else {
+                hasMore = false;
+              }
+            }
+            
+            console.log(`📊 [PAGINATION] Total cargado: ${allData.length} registros de jobs`);
+            return { data: allData, error: null };
+          })(),
           supabase.from('standard_tasks').select('data'),
           supabase.from('vehicles').select('data'),
           supabase.from('vehicle_assignments').select('data'),
