@@ -186,6 +186,7 @@ const App: React.FC = () => {
   const [workerStatusFilter, setWorkerStatusFilter] = useState<{[key: string]: boolean}>({
     'DISPONIBLE': true, 'VACACIONES': true, 'BAJA_MEDICA': true, 'BAJA_PATERNIDAD': true, 'PERMISO_RETRIBUIDO': true, 'FALTA': true, 'REPOSO': true
   });
+  const [medicalWorkerSearch, setMedicalWorkerSearch] = useState('');
   const [itemToDelete, setItemToDelete] = useState<{ id: string, type: 'job' | 'worker' | 'client' | 'task' | 'course', name: string } | null>(null);
   const [confirmDeleteCourse, setConfirmDeleteCourse] = useState<string | null>(null);
   const [editingJob, setEditingJob] = useState<Job | null>(null);
@@ -1346,39 +1347,50 @@ const [planningFilter, setPlanningFilter] = useState('');
     const today = new Date();
     const alerts: MedicalAlert[] = [];
 
-    // 1. Alertas existentes: certificados caducados o por caducar
-    courses.forEach(course => {
+    // 1. Para cada trabajador, encontrar el reconocimiento médico MÁS RECIENTE
+    const latestMedicalCourses = new Map<string, MedicalCourse>();
+    
+    courses
+      .filter(course => course.type === 'recognition' && course.issueDate) // Solo reconocimientos médicos con fecha de realización
+      .forEach(course => {
+        course.assignedWorkerIds.forEach(workerId => {
+          const existingCourse = latestMedicalCourses.get(workerId);
+          const currentIssueDate = new Date(course.issueDate);
+          const existingIssueDate = existingCourse ? new Date(existingCourse.issueDate || '') : new Date(0);
+          
+          // Si este reconocimiento es más reciente que el existente, reemplazarlo
+          if (!existingCourse || currentIssueDate > existingIssueDate) {
+            latestMedicalCourses.set(workerId, course);
+          }
+        });
+      });
+
+    // 2. Generar alertas basadas en el reconocimiento más reciente de cada trabajador
+    latestMedicalCourses.forEach((course, workerId) => {
       if (!course.expiryDate) return;
       const expiryDate = new Date(course.expiryDate);
       const daysUntilExpiry = Math.ceil((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-      if (daysUntilExpiry > 30) return;
+      if (daysUntilExpiry > 30) return; // Solo alertar si caduca en 30 días o menos
       const alertLevel: 'critical' | 'warning' = daysUntilExpiry < 0 ? 'critical' : 'warning';
-      course.assignedWorkerIds.forEach(workerId => {
-        const worker = workers.find(w => w.id === workerId);
-        if (worker) {
-          alerts.push({ 
-            id: `${course.id}-${workerId}`, 
-            workerId: worker.id, 
-            courseId: course.id, 
-            courseName: course.type === 'recognition' ? 'Reconocimiento Médico' : course.name || 'Curso', 
-            workerName: worker.name, 
-            type: course.type, 
-            provider: course.provider, 
-            expiryDate: course.expiryDate!, 
-            daysUntilExpiry, 
-            alertLevel 
-          });
-        }
-      });
+      const worker = workers.find(w => w.id === workerId);
+      if (worker) {
+        alerts.push({ 
+          id: `${course.id}-${workerId}`, 
+          workerId: worker.id, 
+          courseId: course.id, 
+          courseName: course.type === 'recognition' ? 'Reconocimiento Médico' : course.name || 'Curso', 
+          workerName: worker.name, 
+          type: course.type, 
+          provider: course.provider, 
+          expiryDate: course.expiryDate!, 
+          daysUntilExpiry, 
+          alertLevel 
+        });
+      }
     });
 
-    // 2. NUEVO: Alertas para trabajadores SIN certificado médico
-    const workersWithMedicalCourses = new Set<string>();
-    courses
-      .filter(course => course.type === 'recognition') // Solo reconocimientos médicos
-      .forEach(course => {
-        course.assignedWorkerIds.forEach(workerId => workersWithMedicalCourses.add(workerId));
-      });
+    // 3. Alertas para trabajadores SIN certificado médico
+    const workersWithMedicalCourses = new Set<string>(latestMedicalCourses.keys());
 
     // Encontrar trabajadores sin reconocimiento médico
     workers
@@ -4875,7 +4887,22 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
              {/* Operarios */}
             {planning.selectedMedicalTab === 'workers' && (
                <div className="space-y-4">
-                 {planning.workers.filter(worker => !worker.isArchived).sort((a, b) => {
+                 {/* Buscador de operarios */}
+                 <div className="relative">
+                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                   <input
+                     type="text"
+                     placeholder="Buscar operario por nombre o código..."
+                     className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-blue-100 outline-none"
+                     value={medicalWorkerSearch}
+                     onChange={(e) => setMedicalWorkerSearch(e.target.value)}
+                   />
+                 </div>
+                 {planning.workers.filter(worker => !worker.isArchived && (
+                   medicalWorkerSearch === '' || 
+                   worker.name.toLowerCase().includes(medicalWorkerSearch.toLowerCase()) || 
+                   worker.code.toLowerCase().includes(medicalWorkerSearch.toLowerCase())
+                 )).sort((a, b) => {
                     // Extraer números del código (ej: X001 -> 001, 002, etc.)
                     const numA = parseInt(a.code.replace(/\D/g, ''), 10);
                     const numB = parseInt(b.code.replace(/\D/g, ''), 10);
