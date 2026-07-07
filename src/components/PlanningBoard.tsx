@@ -196,6 +196,8 @@ const PlanningBoard: React.FC<PlanningBoardProps> = ({
     const targetJob = planning.jobs.find(j => j.id === selectorJobId);
     const currentDate = targetJob ? targetJob.date : (datesToShow.length > 0 ? datesToShow[0] : new Date().toISOString().split('T')[0]);
     
+    console.log('🔍 [SELECTOR FILTER] Worker:', w.name, 'Code:', w.code, 'Target Date:', currentDate, 'SelectorJobId:', selectorJobId);
+    
     // Función auxiliar para obtener estado del trabajador (similar a WorkerSidebar)
     const getWorkerStatusForDate = (worker: Worker, date: string) => {
       // Si tiene registros de estado, usarlos
@@ -210,12 +212,16 @@ const PlanningBoard: React.FC<PlanningBoardProps> = ({
         });
 
         if (activeRecord) {
+          console.log('  📋 Status Record Found:', activeRecord.status, 'Start:', activeRecord.startDate, 'End:', activeRecord.endDate);
           return activeRecord.status;
         }
       }
       
-      // Si no hay registro activo, usar el estado actual del worker
-      return worker.status || WorkerStatus.DISPONIBLE;
+      // Si no hay registro activo para la fecha específica, asumir Disponible
+      // Ignoramos worker.status porque representa el estado más reciente, no el estado para esta fecha
+      const defaultStatus = WorkerStatus.DISPONIBLE;
+      console.log('  📋 Default Status:', defaultStatus);
+      return defaultStatus;
     };
     
     const statusForCurrentDate = getWorkerStatusForDate(w, currentDate);
@@ -227,6 +233,8 @@ const PlanningBoard: React.FC<PlanningBoardProps> = ({
       WorkerStatus.FALTA,
       WorkerStatus.REPOSO
     ].includes(statusForCurrentDate);
+
+    console.log('  🎯 Final Status:', statusForCurrentDate, 'Available:', !isUnavailableStatus);
 
     if (isUnavailableStatus) {
       return false; // Si está no disponible en la fecha actual, no mostrar
