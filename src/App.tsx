@@ -788,7 +788,7 @@ useEffect(() => {
             const now = Date.now();
             const lastBackgroundTime = parseInt(localStorage.getItem('lastBackgroundTime') || '0');
             
-            if (now - lastBackgroundTime > 30000) { // 30 segundos
+            if (now - lastBackgroundTime > 90000) { // 90 segundos
                console.log('🔄 [FORCE] Tiempo en background > 30s, forzando recarga completa');
                window.location.reload(); // Recarga completa como último recurso
             }

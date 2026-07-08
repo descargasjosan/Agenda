@@ -314,96 +314,21 @@ if (typeof window !== 'undefined') {
     loadAll();
   }, []);
 
-  // ── Sistema Híbrido de Refresco Inteligente ─────────────────────────────────────
-  const [isInBackground, setIsInBackground] = useState(false);
-  const [lastActiveTime, setLastActiveTime] = useState(Date.now());
-  const [userState, setUserState] = useState({
-    currentDate: planning.currentDate,
-    viewMode: planning.viewMode,
-    selectedDate: planning.selectedDate
-  });
+  // ── Sistema Simplificado de Polling para Sincronización ───────────────────────────────
+  // Polling constante para sincronización multi-usuario (sin detección de background)
+  // Supabase Realtime ya maneja la mayoría de cambios en tiempo real, este es un backup
   
-  // Detectar cuando la app pasa a background/foreground
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      const nowHidden = document.hidden;
-      const currentVisibility = document.visibilityState;
-      
-      console.log('Visibility change detected:', {
-        hidden: nowHidden,
-        visibilityState: currentVisibility,
-        timestamp: new Date().toISOString()
-      });
-      
-      if (nowHidden || currentVisibility === 'hidden') {
-        // App pasa a background
-        console.log('App pasando a background - Cambiando a modo eficiente (5 minutos)');
-        setIsInBackground(true);
-        // Guardar estado actual del usuario
-        setUserState({
-          currentDate: planning.currentDate,
-          viewMode: planning.viewMode,
-          selectedDate: planning.selectedDate
-        });
-      } else {
-        // App vuelve a foreground
-        console.log('App volviendo a foreground - Cambiando a modo rápido (10 segundos)');
-        setIsInBackground(false);
-        setLastActiveTime(Date.now());
-      }
-    };
-    
-    // También detectar cuando la ventana pierde/gana foco
-    const handleFocusChange = () => {
-      const hasFocus = document.hasFocus();
-      console.log('Focus change detected:', {
-        hasFocus,
-        timestamp: new Date().toISOString()
-      });
-      
-      if (!hasFocus) {
-        console.log('Ventana perdió foco - Posible background');
-        setIsInBackground(true);
-      } else {
-        console.log('Ventana ganó foco - Foreground activo');
-        setIsInBackground(false);
-        setLastActiveTime(Date.now());
-      }
-    };
-    
-    // Agregar múltiples eventos para mejor detección
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('focus', handleFocusChange);
-    window.addEventListener('blur', handleFocusChange);
-    
-    // Estado inicial
-    console.log('Estado inicial de visibilidad:', {
-      hidden: document.hidden,
-      visibilityState: document.visibilityState,
-      hasFocus: document.hasFocus(),
-      isInBackground: isInBackground
-    });
-    
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('focus', handleFocusChange);
-      window.removeEventListener('blur', handleFocusChange);
-    };
-  }, [planning.currentDate, planning.viewMode, planning.selectedDate, isInBackground]);
-  
-  // Polling híbrido: comportamiento diferente según background/foreground
   useEffect(() => {
     const interval = setInterval(async () => {
       try {
         const now = new Date().toISOString();
-        const timeThreshold = isInBackground ? 300000 : 10000; // 5min en background, 10s en foreground
+        const timeThreshold = 15000; // 15 segundos constante
         const thresholdTime = new Date(Date.now() - timeThreshold).toISOString();
         
-        console.log('🔄 Polling híbrido:', {
-          isInBackground,
+        console.log('🔄 Polling de sincronización:', {
           checkTime: thresholdTime,
           currentTime: now,
-          threshold: isInBackground ? '5 minutos' : '10 segundos'
+          threshold: '15 segundos'
         });
         
         // Solo descargar registros modificados recientemente
@@ -427,63 +352,40 @@ if (typeof window !== 'undefined') {
           const hasChanges = workersChanges.length > 0 || clientsChanges.length > 0 || jobsChanges.length > 0;
           
           if (hasChanges) {
-            // Si volvemos de background con muchos cambios, hacer refresco completo
-            const shouldFullRefresh = isInBackground && 
-              (workersChanges.length > 10 || clientsChanges.length > 10 || jobsChanges.length > 50);
-            
-            if (shouldFullRefresh) {
-              console.log('🔄 Refresco completo necesario (muchos cambios desde background)');
-              // Cargar datos completos pero preservando estado del usuario
-              await loadInitialData();
+            // Solo fusionar cambios incrementales (sin refresco completo)
+            setPlanning(prev => {
+              const newPlanning = { ...prev };
               
-              // Restaurar estado del usuario después del refresco completo
-              setTimeout(() => {
-                setPlanning(prev => ({
-                  ...prev,
-                  currentDate: userState.currentDate,
-                  viewMode: userState.viewMode,
-                  selectedDate: userState.selectedDate
-                }));
-                console.log('🔄 Estado del usuario restaurado:', userState);
-              }, 100);
+              if (workersChanges.length > 0) {
+                newPlanning.workers = mergeChanges(prev.workers, workersChanges);
+              }
+              if (clientsChanges.length > 0) {
+                newPlanning.clients = mergeChanges(prev.clients, clientsChanges);
+              }
+              if (jobsChanges.length > 0) {
+                newPlanning.jobs = mergeChanges(prev.jobs, jobsChanges);
+              }
               
-            } else {
-              // Fusionar cambios incrementales
-              setPlanning(prev => {
-                const newPlanning = { ...prev };
-                
-                if (workersChanges.length > 0) {
-                  newPlanning.workers = mergeChanges(prev.workers, workersChanges);
-                }
-                if (clientsChanges.length > 0) {
-                  newPlanning.clients = mergeChanges(prev.clients, clientsChanges);
-                }
-                if (jobsChanges.length > 0) {
-                  newPlanning.jobs = mergeChanges(prev.jobs, jobsChanges);
-                }
-                
-                return newPlanning;
-              });
-            }
+              return newPlanning;
+            });
             
             console.log('🔄 Polling: Cambios detectados y aplicados:', {
               workers: workersChanges.length,
               clients: clientsChanges.length,
               jobs: jobsChanges.length,
-              totalKB: estimateDataSize(workersChanges, clientsChanges, jobsChanges),
-              refreshType: shouldFullRefresh ? 'COMPLETO' : 'INCREMENTAL'
+              totalKB: estimateDataSize(workersChanges, clientsChanges, jobsChanges)
             });
           } else {
             console.log('🔄 Polling: Sin cambios (0 KB descargados)');
           }
         }
       } catch (error) {
-        console.log('Error en polling híbrido:', error);
+        console.log('Error en polling de sincronización:', error);
       }
-    }, isInBackground ? 300000 : 10000); // 5min en background, 10s en foreground
+    }, 15000); // 15 segundos constante
     
     return () => clearInterval(interval);
-  }, [isInBackground, userState]);
+  }, []); // Sin dependencias - solo al montar
 
   // ─── Realtime: suscripción por tabla ──────────────────────────────────
   useEffect(() => {
