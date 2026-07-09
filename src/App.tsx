@@ -203,6 +203,7 @@ const [fdExportMonth, setFdExportMonth] = useState(() => {
 });
 const [workerControlData, setWorkerControlData] = useState<{[month: string]: {[workerId: string]: {[day: string]: string}}}>({});
 const [selectedCell, setSelectedCell] = useState<{workerId: string, day: number} | null>(null);
+const [selectedColumn, setSelectedColumn] = useState<number | null>(null);
 const [workerFilter, setWorkerFilter] = useState('');
 const [isSyncingFromGrid, setIsSyncingFromGrid] = useState(false);
 const [vacationModal, setVacationModal] = useState<{workerId: string} | null>(null);
@@ -5299,8 +5300,16 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                               return days.map(day => {
                                  const dayOfWeek = getDayOfWeek(year, month, day);
                                  const isCurrentDay = day === getCurrentDay() && month === new Date().getMonth() + 1 && year === new Date().getFullYear();
+                                 const isSelectedColumn = selectedColumn === day;
                                  return (
-                                    <th key={day} className={`p-1 text-center border-r border-slate-600 min-w-[25px] ${isCurrentDay ? 'bg-green-600' : ''}`}>
+                                    <th 
+                                       key={day} 
+                                       className={`p-1 text-center border-r border-slate-600 min-w-[25px] cursor-pointer hover:bg-orange-500 transition-colors ${
+                                          isCurrentDay ? 'bg-green-600' : 
+                                          isSelectedColumn ? 'bg-orange-500' : ''
+                                       }`}
+                                       onClick={() => setSelectedColumn(selectedColumn === day ? null : day)}
+                                    >
                                        <div className="text-xs font-black text-white">
                                           {day}
                                        </div>
@@ -5387,7 +5396,8 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                                                 className={`p-1 text-center cursor-pointer hover:bg-blue-50 transition-colors border-r border-slate-200 ${
                                                    isHolidayDay ? 'bg-red-50' : 
                                                    isWeekend ? 'bg-slate-100' : 
-                                                   isCurrentDay ? 'bg-green-300' : 'bg-white'
+                                                   isCurrentDay ? 'bg-green-300' : 
+                                                   selectedColumn === day ? 'bg-orange-200' : 'bg-white'
                                                 }`}
                                                 onClick={() => {
                                                    // Permitir clic en festivos/fin de semana para poder registrar B (baja) o P (paternidad)
