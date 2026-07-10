@@ -653,6 +653,14 @@ if (typeof window !== 'undefined') {
 
   // ─── Daily Notes ──────────────────────────────────────────────────────
   const saveDailyNote = useCallback(async (note: DailyNote) => {
+    if (!note.id || !note.workerId || !note.date || !note.type || typeof note.text !== 'string') {
+      showNotification('Error: nota diaria incompleta', 'error');
+      throw new Error('DailyNote inválida');
+    }
+    if (!['info', 'time', 'medical'].includes(note.type)) {
+      showNotification('Error: tipo de nota no válido', 'error');
+      throw new Error('Tipo de nota inválido');
+    }
     setPlanning((prev) => ({
       ...prev,
       dailyNotes: prev.dailyNotes.some((n) => n.id === note.id)
@@ -660,7 +668,7 @@ if (typeof window !== 'undefined') {
         : [...prev.dailyNotes, note],
     }));
     await upsert('daily_notes', note.id, note);
-  }, [upsert]);
+  }, [upsert, showNotification]);
 
   const deleteDailyNote = useCallback(async (id: string) => {
     setPlanning((prev) => ({ ...prev, dailyNotes: prev.dailyNotes.filter((n) => n.id !== id) }));

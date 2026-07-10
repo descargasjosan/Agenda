@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Clock, MapPin, Users, Plus, Edit2, X, AlertCircle, Search, Move, AlertTriangle, Euro, ArrowRightLeft, CheckCircle2, MoreHorizontal, CalendarPlus, Ban, Flag, Briefcase, Award, TrendingUp, UserCheck, StickyNote, Stethoscope, FileText, List, FileSpreadsheet } from 'lucide-react';
 import { Job, PlanningState, Worker, WorkerStatus, ContractType, ReinforcementGroup } from '../lib/types';
 import { isTimeOverlap, checkContinuityRisk, formatDateDMY, getWorkerDisplayName } from '../lib/utils';
+import { GENERAL_NOTE_WORKER_ID } from '../lib/constants';
 
 interface PlanningBoardProps {
   planning: PlanningState;
@@ -21,6 +22,7 @@ interface PlanningBoardProps {
   onReorderJob: (sourceJobId: string, targetJobId: string) => void;
   onReorderClient: (sourceClientId: string, targetClientId: string) => void;
   onEditNote: (workerId: string, date: string) => void;
+  onOpenGeneralNote: (date: string) => void;
   onUpdateJobReinforcementGroups: (jobId: string, groups: ReinforcementGroup[]) => void;
   showNotification: (message: string, type: 'error' | 'success' | 'warning' | 'info') => void;
 }
@@ -42,6 +44,7 @@ const PlanningBoard: React.FC<PlanningBoardProps> = ({
   onReorderJob,
   onReorderClient,
   onEditNote,
+  onOpenGeneralNote,
   onUpdateJobReinforcementGroups,
   showNotification
 }) => {
@@ -55,7 +58,7 @@ const PlanningBoard: React.FC<PlanningBoardProps> = ({
   const deliveryNoteInputRef = useRef<HTMLInputElement>(null);
   
   // ESTADO PARA MENÚ CONTEXTUAL
-  const [contextMenu, setContextMenu] = useState<{ x: number, y: number, workerId: string } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number, y: number, workerId: string, date: string } | null>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   
   // ESTADO PARA MODAL DE GRUPOS DE REFUERZO
@@ -171,9 +174,9 @@ const PlanningBoard: React.FC<PlanningBoardProps> = ({
     }
   };
 
-  const handleContextMenu = (e: React.MouseEvent, workerId: string) => {
+  const handleContextMenu = (e: React.MouseEvent, workerId: string, date: string) => {
       e.preventDefault();
-      setContextMenu({ x: e.clientX, y: e.clientY, workerId });
+      setContextMenu({ x: e.clientX, y: e.clientY, workerId, date });
   };
 
   // Limpiar búsqueda cuando se abre el selector de operarios
@@ -287,7 +290,7 @@ const PlanningBoard: React.FC<PlanningBoardProps> = ({
             style={{ top: contextMenu.y, left: contextMenu.x }}
           >
              <button 
-                onClick={() => { onEditNote(contextMenu.workerId); setContextMenu(null); }}
+                onClick={() => { onEditNote(contextMenu.workerId, contextMenu.date); setContextMenu(null); }}
                 className="w-full text-left px-4 py-3 hover:bg-slate-50 text-xs font-black uppercase tracking-wide text-slate-700 flex items-center gap-2 transition-colors"
              >
                 <StickyNote className="w-4 h-4 text-blue-500" /> Gestionar Nota
@@ -369,14 +372,30 @@ const PlanningBoard: React.FC<PlanningBoardProps> = ({
                  <div><p className="text-lg font-black text-red-600 leading-none">{stats.discontinuos}</p><p className="text-[8px] font-bold text-slate-400 uppercase tracking-tight">Fijos Disc.</p></div>
               </div>
            </div>
-           <button
-              onClick={() => onAddJob('', datesToShow[0])}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-black text-xs uppercase tracking-widest transition-colors shadow-sm hover:shadow-md hover:-translate-y-0.5"
-              title="Crear nueva tarea sin cliente preseleccionado"
-           >
-              <Plus className="w-3.5 h-3.5" />
-              NUEVA TAREA
-           </button>
+           {(() => {
+              const targetDate = datesToShow[0] || '';
+              const generalNote = planning.dailyNotes?.find(n => n.workerId === GENERAL_NOTE_WORKER_ID && n.date === targetDate);
+              return (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => onOpenGeneralNote(targetDate)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-black text-xs uppercase tracking-widest transition-colors shadow-sm hover:shadow-md hover:-translate-y-0.5 ${generalNote ? 'bg-amber-100 text-amber-700 ring-2 ring-amber-300 hover:bg-amber-200' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                    title={generalNote ? 'Ver nota del día' : 'Añadir nota del día'}
+                  >
+                    <StickyNote className="w-3.5 h-3.5" />
+                    {generalNote ? 'VER NOTA' : 'NOTA DÍA'}
+                  </button>
+                  <button
+                    onClick={() => onAddJob('', targetDate)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-black text-xs uppercase tracking-widest transition-colors shadow-sm hover:shadow-md hover:-translate-y-0.5"
+                    title="Crear nueva tarea sin cliente preseleccionado"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    NUEVA TAREA
+                  </button>
+                </div>
+              );
+           })()}
         </div>
       )}
 
@@ -752,7 +771,7 @@ const PlanningBoard: React.FC<PlanningBoardProps> = ({
                                                        e.stopPropagation(); 
                                                        if (!isCancelled) onDragStartFromBoard(worker.id, job.id);
                                                     }}
-                                                    onContextMenu={(e) => handleContextMenu(e, worker.id)}
+                                                    onContextMenu={(e) => handleContextMenu(e, worker.id, date)}
                                                     title={dailyNote ? dailyNote.text : undefined}
                                                     className={`flex items-center gap-1.5 pl-1.5 pr-0.5 py-0.5 rounded-lg border transition-all shadow-sm text-[10px] font-black uppercase relative ${!isCancelled ? 'cursor-grab active:cursor-grabbing' : ''} ${
                                                       highlightedWorker === worker.id ? 'bg-orange-500 border-orange-600 text-white ring-2 ring-orange-400 shadow-orange-300 shadow-lg' :

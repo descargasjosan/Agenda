@@ -12,7 +12,7 @@ import CompactPlanningView from './components/CompactPlanningView';
 import FleetManager from './components/FleetManager';
 import { PlanningState, Worker, Client, Job, Holiday, Vehicle, FuelRecord, DailyNote, MedicalCourse, Course, StandardTask, VehicleAssignment, ContractType, WorkerStatus, WorkerStatusRecord, ViewType, JobType, NoteType, WorkerControlData, WorkerControl } from './lib/types';
 import { formatDateDMY, isHoliday, getWorkerDisplayName, getCurrentWorkerStatus, getCurrentWorkerStatusForDate, getNextStatusChange, addOrUpdateStatusRecord, removeStatusRecord, validateAssignment, getWorkerSSFormat } from './lib/utils';
-import { WORKER_ROLES } from './lib/constants';
+import { WORKER_ROLES, GENERAL_NOTE_WORKER_ID } from './lib/constants';
 
 // Funciones para Supabase (Opción B - JSONB) - ELIMINADAS
 // Ahora usamos el hook useSupabaseData
@@ -1079,6 +1079,7 @@ const saveVacationConfig = async () => {
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
   const [taskSearch, setTaskSearch] = useState('');
   const [editingDailyNote, setEditingDailyNote] = useState<DailyNote | null>(null);
+  const [editingGeneralDailyNote, setEditingGeneralDailyNote] = useState<DailyNote | null>(null);
   const [workerNoteFilters, setWorkerNoteFilters] = useState<{[key: string]: boolean}>({
     'info': true, 'time': true, 'medical': true
   });
@@ -1776,9 +1777,17 @@ const [planningFilter, setPlanningFilter] = useState('');
     }
   }, [duplicatingJob, duplicationDate, keepWorkersOnDuplicate, keepDeliveryNoteOnDuplicate, persistJob, showNotification]);
 
-  const handleOpenNote = (workerId: string) => {
-    const existing = planning.dailyNotes?.find(n => n.workerId === workerId && n.date === planning.currentDate);
-    setEditingDailyNote(existing || { id: `note-${Date.now()}`, workerId, date: planning.currentDate, text: '', type: 'info' });
+  const handleOpenNote = (workerId: string, date: string) => {
+    if (!workerId || !date) return;
+    const targetDate = date || planning.currentDate;
+    const existing = planning.dailyNotes?.find(n => n.workerId === workerId && n.date === targetDate);
+    setEditingDailyNote(existing || { id: `note-${Date.now()}`, workerId, date: targetDate, text: '', type: 'info' });
+  };
+
+  const handleOpenGeneralNote = (date: string) => {
+    if (!date) return;
+    const existing = planning.dailyNotes?.find(n => n.workerId === GENERAL_NOTE_WORKER_ID && n.date === date);
+    setEditingGeneralDailyNote(existing || { id: `general-note-${date}`, workerId: GENERAL_NOTE_WORKER_ID, date, text: '', type: 'info' });
   };
 
   // ── Cálculo de días trabajados para FIJOS DISCONTINUOS ───────────────────────
@@ -2872,15 +2881,39 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
   const saveDailyNote = useCallback(async () => {
     if (!editingDailyNote) return;
     if (!editingDailyNote.text.trim()) { await persistDeleteDailyNote(editingDailyNote.id); setEditingDailyNote(null); return; }
+    if (!editingDailyNote.workerId || !editingDailyNote.date || !editingDailyNote.type) {
+      showNotification("Datos de nota incompletos", "error");
+      return;
+    }
     await persistDailyNote(editingDailyNote);
     setEditingDailyNote(null);
     showNotification("Nota guardada", "success");
   }, [editingDailyNote, persistDailyNote, persistDeleteDailyNote, showNotification]);
 
   const deleteDailyNote = useCallback(async (id: string) => {
+    if (!id) return;
     await persistDeleteDailyNote(id);
     setEditingDailyNote(null);
     showNotification("Nota eliminada", "success");
+  }, [persistDeleteDailyNote, showNotification]);
+
+  const saveGeneralDailyNote = useCallback(async () => {
+    if (!editingGeneralDailyNote) return;
+    if (!editingGeneralDailyNote.text.trim()) { await persistDeleteDailyNote(editingGeneralDailyNote.id); setEditingGeneralDailyNote(null); return; }
+    if (editingGeneralDailyNote.workerId !== GENERAL_NOTE_WORKER_ID || !editingGeneralDailyNote.date || !editingGeneralDailyNote.type) {
+      showNotification("Datos de nota del día incompletos", "error");
+      return;
+    }
+    await persistDailyNote(editingGeneralDailyNote);
+    setEditingGeneralDailyNote(null);
+    showNotification("Nota del día guardada", "success");
+  }, [editingGeneralDailyNote, persistDailyNote, persistDeleteDailyNote, showNotification]);
+
+  const deleteGeneralDailyNote = useCallback(async (id: string) => {
+    if (!id) return;
+    await persistDeleteDailyNote(id);
+    setEditingGeneralDailyNote(null);
+    showNotification("Nota del día eliminada", "success");
   }, [persistDeleteDailyNote, showNotification]);
 
   // ── CRUD: Vehicles ─────────────────────────────────────────────────────────
@@ -3812,7 +3845,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                       </button>
                    </div>
                 </header>
-                <PlanningBoard planning={filteredPlanning} datesToShow={datesToShow} onDropWorker={handleAssignWorker} onRemoveWorker={handleRemoveWorker} onAddJob={handleOpenNewJob} onEditJob={setEditingJob} onDuplicateJob={handleOpenDuplicate} onShowWorkerList={handleShowWorkerList} onExportAccessList={exportWorkerAccessList} highlightedWorker={highlightedWorker} onDragStartFromBoard={(wId) => setDraggedWorkerId(wId)} onReorderJob={handleReorderJobs} onReorderClient={handleReorderClients} onEditNote={handleOpenNote} onUpdateJobReinforcementGroups={handleUpdateJobReinforcementGroups} draggedWorkerId={draggedWorkerId} showNotification={showNotification} persistJob={persistJob} />
+                <PlanningBoard planning={filteredPlanning} datesToShow={datesToShow} onDropWorker={handleAssignWorker} onRemoveWorker={handleRemoveWorker} onAddJob={handleOpenNewJob} onEditJob={setEditingJob} onDuplicateJob={handleOpenDuplicate} onShowWorkerList={handleShowWorkerList} onExportAccessList={exportWorkerAccessList} highlightedWorker={highlightedWorker} onDragStartFromBoard={(wId) => setDraggedWorkerId(wId)} onReorderJob={handleReorderJobs} onReorderClient={handleReorderClients} onEditNote={handleOpenNote} onOpenGeneralNote={handleOpenGeneralNote} onUpdateJobReinforcementGroups={handleUpdateJobReinforcementGroups} draggedWorkerId={draggedWorkerId} showNotification={showNotification} persistJob={persistJob} />
              </div>
          )}
          {view === 'compact' && <CompactPlanningView planning={planning} />}
@@ -6245,6 +6278,48 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
         </div>
       )}
       
+      {editingGeneralDailyNote && (
+        <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4" onClick={() => setEditingGeneralDailyNote(null)}>
+          <div className="bg-white w-full max-w-md rounded-[40px] p-8 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h2 className="text-xl font-black text-slate-900 italic uppercase tracking-tighter">Nota del día</h2>
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">{formatDateDMY(editingGeneralDailyNote.date)}</p>
+              </div>
+              <button onClick={() => setEditingGeneralDailyNote(null)} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><X className="w-5 h-5 text-slate-400" /></button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Texto de la nota</label>
+                <textarea
+                  className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none resize-none h-40 text-sm"
+                  placeholder="Escribe aquí la nota del día"
+                  value={editingGeneralDailyNote.text}
+                  onChange={e => setEditingGeneralDailyNote({...editingGeneralDailyNote, text: e.target.value})}
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-6 mt-6 border-t border-slate-100">
+              <button
+                onClick={() => deleteGeneralDailyNote(editingGeneralDailyNote.id)}
+                className="flex items-center gap-2 px-4 py-3 rounded-xl font-bold text-red-500 hover:bg-red-50 transition-colors text-xs uppercase tracking-widest group"
+              >
+                <Trash2 className="w-4 h-4 group-hover:scale-110 transition-transform" /> Eliminar
+              </button>
+
+              <div className="flex gap-3">
+                <button onClick={() => setEditingGeneralDailyNote(null)} className="px-6 py-3 rounded-xl font-bold text-slate-500 hover:bg-slate-100 text-sm transition-colors">Cancelar</button>
+                <button onClick={saveGeneralDailyNote} className="px-8 py-3 bg-slate-900 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg shadow-slate-200 hover:shadow-xl hover:-translate-y-0.5 flex items-center gap-2">
+                  <Save className="w-4 h-4" /> Guardar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {editingWorker && (() => {
         console.log('🎨 Renderizando modal de edición para:', editingWorker);
         return (

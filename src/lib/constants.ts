@@ -3,6 +3,8 @@ import { WorkerStatus, JobType, Worker, Client, Job, ContractType, Holiday, Stan
 
 const today = new Date().toISOString().split('T')[0];
 
+export const GENERAL_NOTE_WORKER_ID = '__GENERAL_NOTE__';
+
 export const WORKER_ROLES = [
   'Mozo Almacén',
   'Jefe Equipo',
