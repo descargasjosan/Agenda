@@ -170,6 +170,10 @@ const App: React.FC = () => {
     showNotification, notification,
   } = useSupabaseData();
 
+  // Ref para acceder al planning actual desde efectos sin dependencias dinámicas
+  const planningRef = useRef(planning);
+  planningRef.current = planning;
+
   // ── Estado de UI ───────────────────────────────────────────────────────────
   const [view, setView] = useState<ViewType>('planning');
   const [viewMode, setViewMode] = useState<'day' | 'range'>('day');
@@ -1072,6 +1076,7 @@ const saveVacationConfig = async () => {
   const [fechaInicio, setFechaInicio] = useState('');
   const [fechaFin, setFechaFin] = useState('');
   const [kilometrosPagados, setKilometrosPagados] = useState(0);
+  const [kilometrosRecorridos, setKilometrosRecorridos] = useState(0);
   const [detallesKilometros, setDetallesKilometros] = useState([]);
   const [calculandoKilometros, setCalculandoKilometros] = useState(false);
   const [dbTab, setDbTab] = useState<'tasks' | 'courses'>('tasks');
@@ -1115,58 +1120,26 @@ const [planningFilter, setPlanningFilter] = useState('');
   const [highlightedWorker, setHighlightedWorker] = useState<string | null>(null);
   const [highlightTimeout, setHighlightTimeout] = useState<NodeJS.Timeout | null>(null);
   const APP_VERSION = 'v2.0.0';
-  // Stubs de compatibilidad con UI (en v2 el guardado es granular, no hay "auto-backup" separado)
   const [autoBackupEnabled, setAutoBackupEnabled] = useState(true);
   const [lastAutoBackupTime, setLastAutoBackupTime] = useState<Date | null>(null);
-  const [autoBackupSchedule, setAutoBackupSchedule] = useState(false); // DESACTIVADO TEMPORALMENTE - Causaba bucle infinito
 
-  // ── Backup automático cada 3 horas (6:00-21:00) ─────────────────────
-  const performAutoBackup = useCallback(() => {
-    if (!autoBackupEnabled || !autoBackupSchedule) return;
-    
-    console.log('🔄 Auto-backup desactivado temporalmente para evitar bucle infinito');
-    return; // SALIDA TEMPRANA PARA EVITAR BUCLE
-    
-    try {
-      const dataStr = JSON.stringify(planning, null, 2);
-      const blob = new Blob([dataStr], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      const now = new Date();
-      const timestamp = now.toISOString().split('T')[0] + '_' + now.toTimeString().split(' ')[0].replace(/:/g, '-');
-      link.download = `AUTO_BACKUP_${timestamp}.json`;
-      link.click();
-      URL.revokeObjectURL(url);
-      
-      setLastAutoBackupTime(now);
-      console.log(`🔄 Auto-backup realizado: ${timestamp}`);
-      
-      // Guardar historial de backups automáticos
-      const backupHistory = JSON.parse(localStorage.getItem('autoBackupHistory') || '[]');
-      backupHistory.push({ timestamp: timestamp, size: Math.round(dataStr.length / 1024) });
-      // Mantener solo últimos 50 backups
-      if (backupHistory.length > 50) backupHistory.shift();
-      localStorage.setItem('autoBackupHistory', JSON.stringify(backupHistory));
-      
-    } catch (error) {
-      console.error('❌ Error en auto-backup:', error);
-    }
-  }, [planning, autoBackupEnabled, autoBackupSchedule]);
-
-  // ── Sistema de Backup Automático Simple y Robusto - DESACTIVADO (duplicado)
-  // NOTA: Ya existe un sistema de backup cada 3 horas en performAutoBackup
-  // Este sistema causaba múltiples archivos AUTO_BACKUP
-  /*
+  // ── Backup automático diario a las 08:00 ───────────────────────────────────
   useEffect(() => {
-    if (!autoBackupEnabled) return;
-    
-    console.log('Iniciando sistema de backup automático simple');
-    
-    // Backup cada hora (3600000 ms = 1 hora)
-    const hourlyBackup = setInterval(() => {
+    if (!autoBackupEnabled || !session) return;
+
+    const getNext8AM = () => {
+      const now = new Date();
+      const target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 8, 0, 0, 0);
+      if (now >= target) {
+        target.setDate(target.getDate() + 1);
+      }
+      return target.getTime() - now.getTime();
+    };
+
+    const runBackup = () => {
       try {
-        const dataStr = JSON.stringify(planning, null, 2);
+        const currentPlanning = planningRef.current;
+        const dataStr = JSON.stringify(currentPlanning, null, 2);
         const blob = new Blob([dataStr], { type: "application/json" });
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
@@ -1176,31 +1149,33 @@ const [planningFilter, setPlanningFilter] = useState('');
         link.download = `AUTO_BACKUP_${timestamp}.json`;
         link.click();
         URL.revokeObjectURL(url);
-        
-        console.log(`Backup automático cada hora: ${timestamp}`);
-      } catch (error) {
-        console.error('Error en backup automático:', error);
-      }
-    }, 3600000); // 1 hora
-    
-    // Backup al cerrar página
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      try {
-        const dataStr = JSON.stringify(planning, null, 2);
-      } catch (error) {
-        console.error('Error al capturar antes de cerrar:', error);
-      }
-    };
-    
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-    };
-    //}, [planning]); // Comentado junto con el useEffect
-    */
 
-// ... (rest of the code remains the same)
+        setLastAutoBackupTime(now);
+        showNotification(`Backup automático realizado: ${Math.round(dataStr.length / 1024)}KB`, 'success');
+        console.log(`🔄 Auto-backup diario realizado: ${timestamp}`);
+
+        const backupHistory = JSON.parse(localStorage.getItem('autoBackupHistory') || '[]');
+        backupHistory.push({ timestamp: timestamp, size: Math.round(dataStr.length / 1024) });
+        if (backupHistory.length > 50) backupHistory.shift();
+        localStorage.setItem('autoBackupHistory', JSON.stringify(backupHistory));
+      } catch (error) {
+        console.error('❌ Error en auto-backup diario:', error);
+        showNotification('Error en backup automático', 'error');
+      }
+    };
+
+    const initialDelay = getNext8AM();
+    let intervalId: NodeJS.Timeout | null = null;
+    const timeoutId = setTimeout(() => {
+      runBackup();
+      intervalId = setInterval(runBackup, 24 * 60 * 60 * 1000);
+    }, initialDelay);
+
+    return () => {
+      clearTimeout(timeoutId);
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [autoBackupEnabled, session]);
   const updateExportHistory = useCallback((newHistory: any) => {
     setExportHistory(newHistory);
     localStorage.setItem('exportHistory', JSON.stringify(newHistory));
@@ -2287,6 +2262,7 @@ const [planningFilter, setPlanningFilter] = useState('');
     
     try {
       let totalKm = 0;
+      let totalKmRecorridos = 0;
       const detalles = [];
       
       const dias = obtenerDiasRango(fechaInicio, fechaFin);
@@ -2297,14 +2273,19 @@ const [planningFilter, setPlanningFilter] = useState('');
         if (tareasDia.length === 0) continue;
         
         let kmDia = 0;
+        let kmRecorridosDia = 0;
         const detallesDia = {
           fecha,
           tareas: tareasDia.length,
           kmPrimero: { valor: 0, paga: false, destino: '' },
+          kmRecorridosPrimero: 0,
           kmIntermedios: 0,
+          kmRecorridosIntermedios: 0,
           intermediosDetalles: [],
           kmUltimo: { valor: 0, paga: false, origen: '' },
+          kmRecorridosUltimo: 0,
           kmTotal: 0,
+          kmTotalRecorrido: 0,
           sedesTrabajadas: [],
           sedesConColores: []
         };
@@ -2315,8 +2296,10 @@ const [planningFilter, setPlanningFilter] = useState('');
         const pagaPrimero = kmPrimero >= 17;
         
         detallesDia.kmPrimero = { valor: kmPrimero, paga: pagaPrimero, destino: primerDestinoInfo.nombre };
+        detallesDia.kmRecorridosPrimero = kmPrimero;
         detallesDia.sedesTrabajadas.push(primerDestinoInfo.nombre);
         detallesDia.sedesConColores.push(primerDestinoInfo);
+        kmRecorridosDia += kmPrimero;
         
         if (pagaPrimero) {
           kmDia += kmPrimero;
@@ -2346,8 +2329,10 @@ const [planningFilter, setPlanningFilter] = useState('');
         }
         
         detallesDia.kmIntermedios = kmIntermedios;
+        detallesDia.kmRecorridosIntermedios = kmIntermedios;
         detallesDia.intermediosDetalles = intermediosDetalles;
         kmDia += kmIntermedios; // SIEMPRE se añaden
+        kmRecorridosDia += kmIntermedios;
         
         // Último trayecto: última sede → OFICINA
         const ultimaTarea = tareasDia[tareasDia.length-1];
@@ -2356,20 +2341,25 @@ const [planningFilter, setPlanningFilter] = useState('');
         const pagaUltimo = kmUltimo >= 17;
         
         detallesDia.kmUltimo = { valor: kmUltimo, paga: pagaUltimo, origen: ultimoOrigenInfo.nombre };
+        detallesDia.kmRecorridosUltimo = kmUltimo;
+        kmRecorridosDia += kmUltimo;
         
         if (pagaUltimo) {
           kmDia += kmUltimo;
         }
         
         detallesDia.kmTotal = kmDia;
+        detallesDia.kmTotalRecorrido = kmRecorridosDia;
         totalKm += kmDia;
+        totalKmRecorridos += kmRecorridosDia;
         detalles.push(detallesDia);
       }
       
       setKilometrosPagados(totalKm);
+      setKilometrosRecorridos(totalKmRecorridos);
       setDetallesKilometros(detalles);
       
-      showNotification(`Cálculo completado: ${totalKm.toFixed(1)} km pagados`, 'success');
+      showNotification(`Cálculo completado: ${totalKm.toFixed(1)} km pagados · ${totalKmRecorridos.toFixed(1)} km recorridos`, 'success');
       
     } catch (error) {
       console.error('Error calculando kilómetros:', error);
@@ -2382,7 +2372,7 @@ const [planningFilter, setPlanningFilter] = useState('');
   // ── Exportar Kilómetros Pagados a Excel ───────────────────────────────────
   const exportKilometrosPagados = () => {
     try {
-      if (kilometrosPagados === 0 || detallesKilometros.length === 0) {
+      if (detallesKilometros.length === 0) {
         showNotification("No hay datos para exportar", "info");
         return;
       }
@@ -2401,8 +2391,10 @@ const [planningFilter, setPlanningFilter] = useState('');
       // Resumen general
       excelData.push(['RESUMEN GENERAL']);
       excelData.push(['Total Kilómetros Pagados:', kilometrosPagados.toFixed(1), 'km']);
+      excelData.push(['Total Kilómetros Recorridos:', kilometrosRecorridos.toFixed(1), 'km']);
       excelData.push(['Días Trabajados:', detallesKilometros.length]);
-      excelData.push(['Media Diaria:', (kilometrosPagados / detallesKilometros.length).toFixed(1), 'km']);
+      excelData.push(['Media Diaria Pagada:', (kilometrosPagados / detallesKilometros.length).toFixed(1), 'km']);
+      excelData.push(['Media Diaria Recorrida:', (kilometrosRecorridos / detallesKilometros.length).toFixed(1), 'km']);
       excelData.push([]);
       
       // Cabeceras de tabla detallada
@@ -2410,13 +2402,17 @@ const [planningFilter, setPlanningFilter] = useState('');
         'Fecha',
         'Sedes Trabajadas',
         'Primer Trayecto (OFICINA → Sede)',
-        'Km Primer Trayecto',
+        'Km Primer Recorrido',
+        'Km Primer Pagado',
         'Paga Primer Trayecto',
         'Trayectos Intermedios',
-        'Km Intermedios',
+        'Km Intermedios Recorridos',
+        'Km Intermedios Pagados',
         'Último Trayecto (Sede → OFICINA)',
-        'Km Último Trayecto',
+        'Km Último Recorrido',
+        'Km Último Pagado',
         'Paga Último Trayecto',
+        'Total Km Recorridos Día',
         'Total Km Pagados Día'
       ];
       excelData.push(headers);
@@ -2428,18 +2424,25 @@ const [planningFilter, setPlanningFilter] = useState('');
         const intermediosStr = dia.intermediosDetalles
           .map(d => `${d.origen} → ${d.destino} (${d.km}km)`)
           .join(' | ');
+        const kmPrimeroPagado = dia.kmPrimero.paga ? dia.kmPrimero.valor : 0;
+        const kmUltimoPagado = dia.kmUltimo.paga ? dia.kmUltimo.valor : 0;
+        const kmIntermediosPagados = dia.kmIntermedios;
         
         const row = [
           formatDateDMY(dia.fecha),
           sedesStr,
           `OFICINA → ${dia.kmPrimero.destino}`,
-          dia.kmPrimero.valor.toFixed(1),
+          dia.kmRecorridosPrimero.toFixed(1),
+          kmPrimeroPagado.toFixed(1),
           dia.kmPrimero.paga ? 'SÍ' : 'NO',
           intermediosStr || 'Sin intermedios',
-          dia.kmIntermedios.toFixed(1),
+          dia.kmRecorridosIntermedios.toFixed(1),
+          kmIntermediosPagados.toFixed(1),
           `${dia.kmUltimo.origen} → OFICINA`,
-          dia.kmUltimo.valor.toFixed(1),
+          dia.kmRecorridosUltimo.toFixed(1),
+          kmUltimoPagado.toFixed(1),
           dia.kmUltimo.paga ? 'SÍ' : 'NO',
+          dia.kmTotalRecorrido.toFixed(1),
           dia.kmTotal.toFixed(1)
         ];
         
@@ -2451,7 +2454,8 @@ const [planningFilter, setPlanningFilter] = useState('');
       excelData.push(['ESTADÍSTICAS ADICIONALES']);
       excelData.push(['Primeros trayectos pagados:', detallesKilometros.filter(d => d.kmPrimero.paga).length, 'de', detallesKilometros.length]);
       excelData.push(['Últimos trayectos pagados:', detallesKilometros.filter(d => d.kmUltimo.paga).length, 'de', detallesKilometros.length]);
-      excelData.push(['Total km intermedios:', detallesKilometros.reduce((sum, d) => sum + d.kmIntermedios, 0).toFixed(1), 'km']);
+      excelData.push(['Total km intermedios pagados:', detallesKilometros.reduce((sum, d) => sum + d.kmIntermedios, 0).toFixed(1), 'km']);
+      excelData.push(['Total km intermedios recorridos:', detallesKilometros.reduce((sum, d) => sum + d.kmRecorridosIntermedios, 0).toFixed(1), 'km']);
       
       // Crear archivo Excel
       const wb = XLSX.utils.book_new();
@@ -2462,14 +2466,18 @@ const [planningFilter, setPlanningFilter] = useState('');
         { wch: 12 }, // Fecha
         { wch: 40 }, // Sedes Trabajadas
         { wch: 30 }, // Primer Trayecto
-        { wch: 15 }, // Km Primer Trayecto
-        { wch: 15 }, // Paga Primer Trayecto
+        { wch: 18 }, // Km Primer Recorrido
+        { wch: 18 }, // Km Primer Pagado
+        { wch: 18 }, // Paga Primer Trayecto
         { wch: 50 }, // Trayectos Intermedios
-        { wch: 15 }, // Km Intermedios
+        { wch: 22 }, // Km Intermedios Recorridos
+        { wch: 20 }, // Km Intermedios Pagados
         { wch: 30 }, // Último Trayecto
-        { wch: 15 }, // Km Último Trayecto
-        { wch: 15 }, // Paga Último Trayecto
-        { wch: 18 }  // Total Km Pagados Día
+        { wch: 18 }, // Km Último Recorrido
+        { wch: 18 }, // Km Último Pagado
+        { wch: 18 }, // Paga Último Trayecto
+        { wch: 22 }, // Total Km Recorridos Día
+        { wch: 20 }  // Total Km Pagados Día
       ];
       
       // Combinar celdas de título
@@ -3721,8 +3729,9 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
         </div>
       )}
 
-      <div 
-        className={`fixed bottom-4 left-4 z-[400] px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-2 border shadow-sm transition-all cursor-pointer ${
+      <button
+        type="button"
+        className={`fixed bottom-4 left-4 z-[400] w-8 h-8 rounded-full flex items-center justify-center border shadow-sm transition-all cursor-pointer ${
           dbStatus === 'connected' ? 'bg-green-50 text-green-600 border-green-100 hover:bg-green-100' : 
           dbStatus === 'saving' ? 'bg-blue-50 text-blue-600 border-blue-100' : 
           dbStatus === 'loading' ? 'bg-amber-50 text-amber-600 border-amber-100' : 
@@ -3734,19 +3743,21 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
             saveToSupabase(true);
           }
         }}
-        title={dbStatus === 'connected' || dbStatus === 'error' ? 'Clic para guardar manualmente' : undefined}
+        title={dbStatus === 'connected' ? (lastSavedTime ? `Conectado - Guardado ${lastSavedTime.toLocaleTimeString()} (clic para guardar)` : 'Conectado (clic para guardar)') : dbStatus === 'saving' ? 'Guardando en Supabase...' : dbStatus === 'loading' ? 'Cargando datos...' : dbStatus === 'saved' ? 'Datos guardados' : 'Sin conexión (clic para reintentar)'}
       >
-         {dbStatus === 'connected' && <><Cloud className="w-3 h-3" /> {lastSavedTime ? `Guardado ${lastSavedTime.toLocaleTimeString()}` : 'Conectado'}</>}
-         {dbStatus === 'saving' && <><RotateCcw className="w-3 h-3 animate-spin" /> Guardando...</>}
-         {dbStatus === 'loading' && <><Loader2 className="w-3 h-3 animate-spin" /> Cargando...</>}
-         {dbStatus === 'saved' && <><CheckCircle2 className="w-3 h-3" /> Guardado</>}
-         {dbStatus === 'error' && <><CloudOff className="w-3 h-3" /> Sin conexión (Clic para reintentar)</>}
-      </div>
-      {/* Indicador de Backup Automático - Arriba */}
+         {dbStatus === 'connected' && <Cloud className="w-4 h-4" />}
+         {dbStatus === 'saving' && <RotateCcw className="w-4 h-4 animate-spin" />}
+         {dbStatus === 'loading' && <Loader2 className="w-4 h-4 animate-spin" />}
+         {dbStatus === 'saved' && <CheckCircle2 className="w-4 h-4" />}
+         {dbStatus === 'error' && <CloudOff className="w-4 h-4" />}
+      </button>
+
       {autoBackupEnabled && (
-        <div className="fixed bottom-16 left-4 z-[400] px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-2 border shadow-sm transition-all bg-amber-50 text-amber-600 border-amber-100">
-          <DownloadCloud className="w-3 h-3" />
-          Backup Activo
+        <div
+          className="fixed bottom-14 left-4 z-[400] w-8 h-8 rounded-full flex items-center justify-center border shadow-sm transition-all bg-amber-50 text-amber-600 border-amber-100 cursor-help"
+          title="Backup automático activo: todos los días a las 08:00"
+        >
+          <DownloadCloud className="w-4 h-4" />
         </div>
       )}
 
@@ -3940,14 +3951,24 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                   {kilometrosPagados > 0 && (
                     <div className="bg-slate-50 p-6 rounded-xl border border-slate-200">
                       {/* Resumen completo en una sola línea */}
-                      <div className="flex items-center justify-center gap-8 mb-6">
-                        {/* Total kilómetros */}
+                      <div className="flex items-center justify-center gap-8 mb-6 flex-wrap">
+                        {/* Total kilómetros pagados */}
                         <div className="flex items-center gap-2">
                           <h4 className="text-3xl font-black text-slate-800">
                             {kilometrosPagados.toFixed(1)} km
                           </h4>
                           <p className="text-lg text-slate-600 font-bold uppercase tracking-widest">
                             Total Kilómetros Pagados
+                          </p>
+                        </div>
+
+                        {/* Total kilómetros recorridos */}
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-3xl font-black text-blue-700">
+                            {kilometrosRecorridos.toFixed(1)} km
+                          </h4>
+                          <p className="text-lg text-blue-600 font-bold uppercase tracking-widest">
+                            Total Kilómetros Recorridos
                           </p>
                         </div>
                         
@@ -3984,10 +4005,13 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                             <tr className="border-b border-slate-300">
                               <th className="text-left py-2 w-28 pr-4">Fecha</th>
                               <th className="text-left py-2 flex-1">Sedes Trabajadas</th>
-                              <th className="text-center py-2 w-20 pl-4">Primer</th>
-                              <th className="text-center py-2 w-20 pl-4">Intermedios</th>
-                              <th className="text-center py-2 w-20 pl-4">Último</th>
-                              <th className="text-right py-2 w-20 pr-4">Total</th>
+                              <th className="text-center py-2 w-24 pl-4">Primer Recorrido</th>
+                              <th className="text-center py-2 w-24 pl-4">Primer Pagado</th>
+                              <th className="text-center py-2 w-24 pl-4">Intermedios</th>
+                              <th className="text-center py-2 w-24 pl-4">Último Recorrido</th>
+                              <th className="text-center py-2 w-24 pl-4">Último Pagado</th>
+                              <th className="text-right py-2 w-24 pr-4">Total Recorrido</th>
+                              <th className="text-right py-2 w-24 pr-4">Total Pagado</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -4008,8 +4032,15 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                                 </td>
                                 <td className="text-center py-2 pl-4">
                                   <div>
+                                    <span className="text-slate-700">
+                                      {dia.kmRecorridosPrimero.toFixed(1)}km
+                                    </span>
+                                  </div>
+                                </td>
+                                <td className="text-center py-2 pl-4">
+                                  <div>
                                     <span className={dia.kmPrimero.paga ? 'text-green-600' : 'text-red-600'}>
-                                      {dia.kmPrimero.valor.toFixed(1)}km
+                                      {(dia.kmPrimero.paga ? dia.kmPrimero.valor : 0).toFixed(1)}km
                                     </span>
                                     {dia.kmPrimero.paga && (
                                       <div className="text-xs text-green-500">✓</div>
@@ -4028,15 +4059,25 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                                 </td>
                                 <td className="text-center py-2 pl-4">
                                   <div>
+                                    <span className="text-slate-700">
+                                      {dia.kmRecorridosUltimo.toFixed(1)}km
+                                    </span>
+                                  </div>
+                                </td>
+                                <td className="text-center py-2 pl-4">
+                                  <div>
                                     <span className={dia.kmUltimo.paga ? 'text-green-600' : 'text-red-600'}>
-                                      {dia.kmUltimo.valor.toFixed(1)}km
+                                      {(dia.kmUltimo.paga ? dia.kmUltimo.valor : 0).toFixed(1)}km
                                     </span>
                                     {dia.kmUltimo.paga && (
                                       <div className="text-xs text-green-500">✓</div>
                                     )}
                                   </div>
                                 </td>
-                                <td className="text-right py-2 font-bold text-slate-800 pr-4">
+                                <td className="text-right py-2 font-bold text-blue-700 pr-4">
+                                  {dia.kmTotalRecorrido.toFixed(1)}km
+                                </td>
+                                <td className="text-right py-2 font-bold text-green-700 pr-4">
                                   {dia.kmTotal.toFixed(1)}km
                                 </td>
                               </tr>
@@ -5873,7 +5914,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                      </div>
                      <p className="text-[10px] text-amber-700">
                         {autoBackupEnabled 
-                           ? '✅ Activo: Cada hora + al cerrar página' 
+                           ? '✅ Activo: Cada día a las 08:00' 
                            : '❌ Inactivo: Sin backups automáticos'
                         }
                      </p>
