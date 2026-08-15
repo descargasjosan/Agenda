@@ -170,6 +170,10 @@ const App: React.FC = () => {
     showNotification, notification,
   } = useSupabaseData();
 
+  // Ref para acceder al planning actual desde efectos sin dependencias dinámicas
+  const planningRef = useRef(planning);
+  planningRef.current = planning;
+
   // ── Estado de UI ───────────────────────────────────────────────────────────
   const [view, setView] = useState<ViewType>('planning');
   const [viewMode, setViewMode] = useState<'day' | 'range'>('day');
@@ -1116,58 +1120,26 @@ const [planningFilter, setPlanningFilter] = useState('');
   const [highlightedWorker, setHighlightedWorker] = useState<string | null>(null);
   const [highlightTimeout, setHighlightTimeout] = useState<NodeJS.Timeout | null>(null);
   const APP_VERSION = 'v2.0.0';
-  // Stubs de compatibilidad con UI (en v2 el guardado es granular, no hay "auto-backup" separado)
   const [autoBackupEnabled, setAutoBackupEnabled] = useState(true);
   const [lastAutoBackupTime, setLastAutoBackupTime] = useState<Date | null>(null);
-  const [autoBackupSchedule, setAutoBackupSchedule] = useState(false); // DESACTIVADO TEMPORALMENTE - Causaba bucle infinito
 
-  // ── Backup automático cada 3 horas (6:00-21:00) ─────────────────────
-  const performAutoBackup = useCallback(() => {
-    if (!autoBackupEnabled || !autoBackupSchedule) return;
-    
-    console.log('🔄 Auto-backup desactivado temporalmente para evitar bucle infinito');
-    return; // SALIDA TEMPRANA PARA EVITAR BUCLE
-    
-    try {
-      const dataStr = JSON.stringify(planning, null, 2);
-      const blob = new Blob([dataStr], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      const now = new Date();
-      const timestamp = now.toISOString().split('T')[0] + '_' + now.toTimeString().split(' ')[0].replace(/:/g, '-');
-      link.download = `AUTO_BACKUP_${timestamp}.json`;
-      link.click();
-      URL.revokeObjectURL(url);
-      
-      setLastAutoBackupTime(now);
-      console.log(`🔄 Auto-backup realizado: ${timestamp}`);
-      
-      // Guardar historial de backups automáticos
-      const backupHistory = JSON.parse(localStorage.getItem('autoBackupHistory') || '[]');
-      backupHistory.push({ timestamp: timestamp, size: Math.round(dataStr.length / 1024) });
-      // Mantener solo últimos 50 backups
-      if (backupHistory.length > 50) backupHistory.shift();
-      localStorage.setItem('autoBackupHistory', JSON.stringify(backupHistory));
-      
-    } catch (error) {
-      console.error('❌ Error en auto-backup:', error);
-    }
-  }, [planning, autoBackupEnabled, autoBackupSchedule]);
-
-  // ── Sistema de Backup Automático Simple y Robusto - DESACTIVADO (duplicado)
-  // NOTA: Ya existe un sistema de backup cada 3 horas en performAutoBackup
-  // Este sistema causaba múltiples archivos AUTO_BACKUP
-  /*
+  // ── Backup automático diario a las 08:00 ───────────────────────────────────
   useEffect(() => {
-    if (!autoBackupEnabled) return;
-    
-    console.log('Iniciando sistema de backup automático simple');
-    
-    // Backup cada hora (3600000 ms = 1 hora)
-    const hourlyBackup = setInterval(() => {
+    if (!autoBackupEnabled || !session) return;
+
+    const getNext8AM = () => {
+      const now = new Date();
+      const target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 8, 0, 0, 0);
+      if (now >= target) {
+        target.setDate(target.getDate() + 1);
+      }
+      return target.getTime() - now.getTime();
+    };
+
+    const runBackup = () => {
       try {
-        const dataStr = JSON.stringify(planning, null, 2);
+        const currentPlanning = planningRef.current;
+        const dataStr = JSON.stringify(currentPlanning, null, 2);
         const blob = new Blob([dataStr], { type: "application/json" });
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
@@ -1177,31 +1149,33 @@ const [planningFilter, setPlanningFilter] = useState('');
         link.download = `AUTO_BACKUP_${timestamp}.json`;
         link.click();
         URL.revokeObjectURL(url);
-        
-        console.log(`Backup automático cada hora: ${timestamp}`);
-      } catch (error) {
-        console.error('Error en backup automático:', error);
-      }
-    }, 3600000); // 1 hora
-    
-    // Backup al cerrar página
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      try {
-        const dataStr = JSON.stringify(planning, null, 2);
-      } catch (error) {
-        console.error('Error al capturar antes de cerrar:', error);
-      }
-    };
-    
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-    };
-    //}, [planning]); // Comentado junto con el useEffect
-    */
 
-// ... (rest of the code remains the same)
+        setLastAutoBackupTime(now);
+        showNotification(`Backup automático realizado: ${Math.round(dataStr.length / 1024)}KB`, 'success');
+        console.log(`🔄 Auto-backup diario realizado: ${timestamp}`);
+
+        const backupHistory = JSON.parse(localStorage.getItem('autoBackupHistory') || '[]');
+        backupHistory.push({ timestamp: timestamp, size: Math.round(dataStr.length / 1024) });
+        if (backupHistory.length > 50) backupHistory.shift();
+        localStorage.setItem('autoBackupHistory', JSON.stringify(backupHistory));
+      } catch (error) {
+        console.error('❌ Error en auto-backup diario:', error);
+        showNotification('Error en backup automático', 'error');
+      }
+    };
+
+    const initialDelay = getNext8AM();
+    let intervalId: NodeJS.Timeout | null = null;
+    const timeoutId = setTimeout(() => {
+      runBackup();
+      intervalId = setInterval(runBackup, 24 * 60 * 60 * 1000);
+    }, initialDelay);
+
+    return () => {
+      clearTimeout(timeoutId);
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [autoBackupEnabled, session]);
   const updateExportHistory = useCallback((newHistory: any) => {
     setExportHistory(newHistory);
     localStorage.setItem('exportHistory', JSON.stringify(newHistory));
@@ -3755,8 +3729,9 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
         </div>
       )}
 
-      <div 
-        className={`fixed bottom-4 left-4 z-[400] px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-2 border shadow-sm transition-all cursor-pointer ${
+      <button
+        type="button"
+        className={`fixed bottom-4 left-4 z-[400] w-8 h-8 rounded-full flex items-center justify-center border shadow-sm transition-all cursor-pointer ${
           dbStatus === 'connected' ? 'bg-green-50 text-green-600 border-green-100 hover:bg-green-100' : 
           dbStatus === 'saving' ? 'bg-blue-50 text-blue-600 border-blue-100' : 
           dbStatus === 'loading' ? 'bg-amber-50 text-amber-600 border-amber-100' : 
@@ -3768,19 +3743,21 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
             saveToSupabase(true);
           }
         }}
-        title={dbStatus === 'connected' || dbStatus === 'error' ? 'Clic para guardar manualmente' : undefined}
+        title={dbStatus === 'connected' ? (lastSavedTime ? `Conectado - Guardado ${lastSavedTime.toLocaleTimeString()} (clic para guardar)` : 'Conectado (clic para guardar)') : dbStatus === 'saving' ? 'Guardando en Supabase...' : dbStatus === 'loading' ? 'Cargando datos...' : dbStatus === 'saved' ? 'Datos guardados' : 'Sin conexión (clic para reintentar)'}
       >
-         {dbStatus === 'connected' && <><Cloud className="w-3 h-3" /> {lastSavedTime ? `Guardado ${lastSavedTime.toLocaleTimeString()}` : 'Conectado'}</>}
-         {dbStatus === 'saving' && <><RotateCcw className="w-3 h-3 animate-spin" /> Guardando...</>}
-         {dbStatus === 'loading' && <><Loader2 className="w-3 h-3 animate-spin" /> Cargando...</>}
-         {dbStatus === 'saved' && <><CheckCircle2 className="w-3 h-3" /> Guardado</>}
-         {dbStatus === 'error' && <><CloudOff className="w-3 h-3" /> Sin conexión (Clic para reintentar)</>}
-      </div>
-      {/* Indicador de Backup Automático - Arriba */}
+         {dbStatus === 'connected' && <Cloud className="w-4 h-4" />}
+         {dbStatus === 'saving' && <RotateCcw className="w-4 h-4 animate-spin" />}
+         {dbStatus === 'loading' && <Loader2 className="w-4 h-4 animate-spin" />}
+         {dbStatus === 'saved' && <CheckCircle2 className="w-4 h-4" />}
+         {dbStatus === 'error' && <CloudOff className="w-4 h-4" />}
+      </button>
+
       {autoBackupEnabled && (
-        <div className="fixed bottom-16 left-4 z-[400] px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-2 border shadow-sm transition-all bg-amber-50 text-amber-600 border-amber-100">
-          <DownloadCloud className="w-3 h-3" />
-          Backup Activo
+        <div
+          className="fixed bottom-14 left-4 z-[400] w-8 h-8 rounded-full flex items-center justify-center border shadow-sm transition-all bg-amber-50 text-amber-600 border-amber-100 cursor-help"
+          title="Backup automático activo: todos los días a las 08:00"
+        >
+          <DownloadCloud className="w-4 h-4" />
         </div>
       )}
 
@@ -5937,7 +5914,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                      </div>
                      <p className="text-[10px] text-amber-700">
                         {autoBackupEnabled 
-                           ? '✅ Activo: Cada hora + al cerrar página' 
+                           ? '✅ Activo: Cada día a las 08:00' 
                            : '❌ Inactivo: Sin backups automáticos'
                         }
                      </p>
