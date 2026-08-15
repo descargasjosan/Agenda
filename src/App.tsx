@@ -1072,6 +1072,7 @@ const saveVacationConfig = async () => {
   const [fechaInicio, setFechaInicio] = useState('');
   const [fechaFin, setFechaFin] = useState('');
   const [kilometrosPagados, setKilometrosPagados] = useState(0);
+  const [kilometrosRecorridos, setKilometrosRecorridos] = useState(0);
   const [detallesKilometros, setDetallesKilometros] = useState([]);
   const [calculandoKilometros, setCalculandoKilometros] = useState(false);
   const [dbTab, setDbTab] = useState<'tasks' | 'courses'>('tasks');
@@ -2287,6 +2288,7 @@ const [planningFilter, setPlanningFilter] = useState('');
     
     try {
       let totalKm = 0;
+      let totalKmRecorridos = 0;
       const detalles = [];
       
       const dias = obtenerDiasRango(fechaInicio, fechaFin);
@@ -2297,14 +2299,19 @@ const [planningFilter, setPlanningFilter] = useState('');
         if (tareasDia.length === 0) continue;
         
         let kmDia = 0;
+        let kmRecorridosDia = 0;
         const detallesDia = {
           fecha,
           tareas: tareasDia.length,
           kmPrimero: { valor: 0, paga: false, destino: '' },
+          kmRecorridosPrimero: 0,
           kmIntermedios: 0,
+          kmRecorridosIntermedios: 0,
           intermediosDetalles: [],
           kmUltimo: { valor: 0, paga: false, origen: '' },
+          kmRecorridosUltimo: 0,
           kmTotal: 0,
+          kmTotalRecorrido: 0,
           sedesTrabajadas: [],
           sedesConColores: []
         };
@@ -2315,8 +2322,10 @@ const [planningFilter, setPlanningFilter] = useState('');
         const pagaPrimero = kmPrimero >= 17;
         
         detallesDia.kmPrimero = { valor: kmPrimero, paga: pagaPrimero, destino: primerDestinoInfo.nombre };
+        detallesDia.kmRecorridosPrimero = kmPrimero;
         detallesDia.sedesTrabajadas.push(primerDestinoInfo.nombre);
         detallesDia.sedesConColores.push(primerDestinoInfo);
+        kmRecorridosDia += kmPrimero;
         
         if (pagaPrimero) {
           kmDia += kmPrimero;
@@ -2346,8 +2355,10 @@ const [planningFilter, setPlanningFilter] = useState('');
         }
         
         detallesDia.kmIntermedios = kmIntermedios;
+        detallesDia.kmRecorridosIntermedios = kmIntermedios;
         detallesDia.intermediosDetalles = intermediosDetalles;
         kmDia += kmIntermedios; // SIEMPRE se añaden
+        kmRecorridosDia += kmIntermedios;
         
         // Último trayecto: última sede → OFICINA
         const ultimaTarea = tareasDia[tareasDia.length-1];
@@ -2356,20 +2367,25 @@ const [planningFilter, setPlanningFilter] = useState('');
         const pagaUltimo = kmUltimo >= 17;
         
         detallesDia.kmUltimo = { valor: kmUltimo, paga: pagaUltimo, origen: ultimoOrigenInfo.nombre };
+        detallesDia.kmRecorridosUltimo = kmUltimo;
+        kmRecorridosDia += kmUltimo;
         
         if (pagaUltimo) {
           kmDia += kmUltimo;
         }
         
         detallesDia.kmTotal = kmDia;
+        detallesDia.kmTotalRecorrido = kmRecorridosDia;
         totalKm += kmDia;
+        totalKmRecorridos += kmRecorridosDia;
         detalles.push(detallesDia);
       }
       
       setKilometrosPagados(totalKm);
+      setKilometrosRecorridos(totalKmRecorridos);
       setDetallesKilometros(detalles);
       
-      showNotification(`Cálculo completado: ${totalKm.toFixed(1)} km pagados`, 'success');
+      showNotification(`Cálculo completado: ${totalKm.toFixed(1)} km pagados · ${totalKmRecorridos.toFixed(1)} km recorridos`, 'success');
       
     } catch (error) {
       console.error('Error calculando kilómetros:', error);
@@ -2382,7 +2398,7 @@ const [planningFilter, setPlanningFilter] = useState('');
   // ── Exportar Kilómetros Pagados a Excel ───────────────────────────────────
   const exportKilometrosPagados = () => {
     try {
-      if (kilometrosPagados === 0 || detallesKilometros.length === 0) {
+      if (detallesKilometros.length === 0) {
         showNotification("No hay datos para exportar", "info");
         return;
       }
@@ -2401,8 +2417,10 @@ const [planningFilter, setPlanningFilter] = useState('');
       // Resumen general
       excelData.push(['RESUMEN GENERAL']);
       excelData.push(['Total Kilómetros Pagados:', kilometrosPagados.toFixed(1), 'km']);
+      excelData.push(['Total Kilómetros Recorridos:', kilometrosRecorridos.toFixed(1), 'km']);
       excelData.push(['Días Trabajados:', detallesKilometros.length]);
-      excelData.push(['Media Diaria:', (kilometrosPagados / detallesKilometros.length).toFixed(1), 'km']);
+      excelData.push(['Media Diaria Pagada:', (kilometrosPagados / detallesKilometros.length).toFixed(1), 'km']);
+      excelData.push(['Media Diaria Recorrida:', (kilometrosRecorridos / detallesKilometros.length).toFixed(1), 'km']);
       excelData.push([]);
       
       // Cabeceras de tabla detallada
@@ -2410,13 +2428,17 @@ const [planningFilter, setPlanningFilter] = useState('');
         'Fecha',
         'Sedes Trabajadas',
         'Primer Trayecto (OFICINA → Sede)',
-        'Km Primer Trayecto',
+        'Km Primer Recorrido',
+        'Km Primer Pagado',
         'Paga Primer Trayecto',
         'Trayectos Intermedios',
-        'Km Intermedios',
+        'Km Intermedios Recorridos',
+        'Km Intermedios Pagados',
         'Último Trayecto (Sede → OFICINA)',
-        'Km Último Trayecto',
+        'Km Último Recorrido',
+        'Km Último Pagado',
         'Paga Último Trayecto',
+        'Total Km Recorridos Día',
         'Total Km Pagados Día'
       ];
       excelData.push(headers);
@@ -2428,18 +2450,25 @@ const [planningFilter, setPlanningFilter] = useState('');
         const intermediosStr = dia.intermediosDetalles
           .map(d => `${d.origen} → ${d.destino} (${d.km}km)`)
           .join(' | ');
+        const kmPrimeroPagado = dia.kmPrimero.paga ? dia.kmPrimero.valor : 0;
+        const kmUltimoPagado = dia.kmUltimo.paga ? dia.kmUltimo.valor : 0;
+        const kmIntermediosPagados = dia.kmIntermedios;
         
         const row = [
           formatDateDMY(dia.fecha),
           sedesStr,
           `OFICINA → ${dia.kmPrimero.destino}`,
-          dia.kmPrimero.valor.toFixed(1),
+          dia.kmRecorridosPrimero.toFixed(1),
+          kmPrimeroPagado.toFixed(1),
           dia.kmPrimero.paga ? 'SÍ' : 'NO',
           intermediosStr || 'Sin intermedios',
-          dia.kmIntermedios.toFixed(1),
+          dia.kmRecorridosIntermedios.toFixed(1),
+          kmIntermediosPagados.toFixed(1),
           `${dia.kmUltimo.origen} → OFICINA`,
-          dia.kmUltimo.valor.toFixed(1),
+          dia.kmRecorridosUltimo.toFixed(1),
+          kmUltimoPagado.toFixed(1),
           dia.kmUltimo.paga ? 'SÍ' : 'NO',
+          dia.kmTotalRecorrido.toFixed(1),
           dia.kmTotal.toFixed(1)
         ];
         
@@ -2451,7 +2480,8 @@ const [planningFilter, setPlanningFilter] = useState('');
       excelData.push(['ESTADÍSTICAS ADICIONALES']);
       excelData.push(['Primeros trayectos pagados:', detallesKilometros.filter(d => d.kmPrimero.paga).length, 'de', detallesKilometros.length]);
       excelData.push(['Últimos trayectos pagados:', detallesKilometros.filter(d => d.kmUltimo.paga).length, 'de', detallesKilometros.length]);
-      excelData.push(['Total km intermedios:', detallesKilometros.reduce((sum, d) => sum + d.kmIntermedios, 0).toFixed(1), 'km']);
+      excelData.push(['Total km intermedios pagados:', detallesKilometros.reduce((sum, d) => sum + d.kmIntermedios, 0).toFixed(1), 'km']);
+      excelData.push(['Total km intermedios recorridos:', detallesKilometros.reduce((sum, d) => sum + d.kmRecorridosIntermedios, 0).toFixed(1), 'km']);
       
       // Crear archivo Excel
       const wb = XLSX.utils.book_new();
@@ -2462,14 +2492,18 @@ const [planningFilter, setPlanningFilter] = useState('');
         { wch: 12 }, // Fecha
         { wch: 40 }, // Sedes Trabajadas
         { wch: 30 }, // Primer Trayecto
-        { wch: 15 }, // Km Primer Trayecto
-        { wch: 15 }, // Paga Primer Trayecto
+        { wch: 18 }, // Km Primer Recorrido
+        { wch: 18 }, // Km Primer Pagado
+        { wch: 18 }, // Paga Primer Trayecto
         { wch: 50 }, // Trayectos Intermedios
-        { wch: 15 }, // Km Intermedios
+        { wch: 22 }, // Km Intermedios Recorridos
+        { wch: 20 }, // Km Intermedios Pagados
         { wch: 30 }, // Último Trayecto
-        { wch: 15 }, // Km Último Trayecto
-        { wch: 15 }, // Paga Último Trayecto
-        { wch: 18 }  // Total Km Pagados Día
+        { wch: 18 }, // Km Último Recorrido
+        { wch: 18 }, // Km Último Pagado
+        { wch: 18 }, // Paga Último Trayecto
+        { wch: 22 }, // Total Km Recorridos Día
+        { wch: 20 }  // Total Km Pagados Día
       ];
       
       // Combinar celdas de título
@@ -3940,14 +3974,24 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                   {kilometrosPagados > 0 && (
                     <div className="bg-slate-50 p-6 rounded-xl border border-slate-200">
                       {/* Resumen completo en una sola línea */}
-                      <div className="flex items-center justify-center gap-8 mb-6">
-                        {/* Total kilómetros */}
+                      <div className="flex items-center justify-center gap-8 mb-6 flex-wrap">
+                        {/* Total kilómetros pagados */}
                         <div className="flex items-center gap-2">
                           <h4 className="text-3xl font-black text-slate-800">
                             {kilometrosPagados.toFixed(1)} km
                           </h4>
                           <p className="text-lg text-slate-600 font-bold uppercase tracking-widest">
                             Total Kilómetros Pagados
+                          </p>
+                        </div>
+
+                        {/* Total kilómetros recorridos */}
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-3xl font-black text-blue-700">
+                            {kilometrosRecorridos.toFixed(1)} km
+                          </h4>
+                          <p className="text-lg text-blue-600 font-bold uppercase tracking-widest">
+                            Total Kilómetros Recorridos
                           </p>
                         </div>
                         
@@ -3984,10 +4028,13 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                             <tr className="border-b border-slate-300">
                               <th className="text-left py-2 w-28 pr-4">Fecha</th>
                               <th className="text-left py-2 flex-1">Sedes Trabajadas</th>
-                              <th className="text-center py-2 w-20 pl-4">Primer</th>
-                              <th className="text-center py-2 w-20 pl-4">Intermedios</th>
-                              <th className="text-center py-2 w-20 pl-4">Último</th>
-                              <th className="text-right py-2 w-20 pr-4">Total</th>
+                              <th className="text-center py-2 w-24 pl-4">Primer Recorrido</th>
+                              <th className="text-center py-2 w-24 pl-4">Primer Pagado</th>
+                              <th className="text-center py-2 w-24 pl-4">Intermedios</th>
+                              <th className="text-center py-2 w-24 pl-4">Último Recorrido</th>
+                              <th className="text-center py-2 w-24 pl-4">Último Pagado</th>
+                              <th className="text-right py-2 w-24 pr-4">Total Recorrido</th>
+                              <th className="text-right py-2 w-24 pr-4">Total Pagado</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -4008,8 +4055,15 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                                 </td>
                                 <td className="text-center py-2 pl-4">
                                   <div>
+                                    <span className="text-slate-700">
+                                      {dia.kmRecorridosPrimero.toFixed(1)}km
+                                    </span>
+                                  </div>
+                                </td>
+                                <td className="text-center py-2 pl-4">
+                                  <div>
                                     <span className={dia.kmPrimero.paga ? 'text-green-600' : 'text-red-600'}>
-                                      {dia.kmPrimero.valor.toFixed(1)}km
+                                      {(dia.kmPrimero.paga ? dia.kmPrimero.valor : 0).toFixed(1)}km
                                     </span>
                                     {dia.kmPrimero.paga && (
                                       <div className="text-xs text-green-500">✓</div>
@@ -4028,15 +4082,25 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                                 </td>
                                 <td className="text-center py-2 pl-4">
                                   <div>
+                                    <span className="text-slate-700">
+                                      {dia.kmRecorridosUltimo.toFixed(1)}km
+                                    </span>
+                                  </div>
+                                </td>
+                                <td className="text-center py-2 pl-4">
+                                  <div>
                                     <span className={dia.kmUltimo.paga ? 'text-green-600' : 'text-red-600'}>
-                                      {dia.kmUltimo.valor.toFixed(1)}km
+                                      {(dia.kmUltimo.paga ? dia.kmUltimo.valor : 0).toFixed(1)}km
                                     </span>
                                     {dia.kmUltimo.paga && (
                                       <div className="text-xs text-green-500">✓</div>
                                     )}
                                   </div>
                                 </td>
-                                <td className="text-right py-2 font-bold text-slate-800 pr-4">
+                                <td className="text-right py-2 font-bold text-blue-700 pr-4">
+                                  {dia.kmTotalRecorrido.toFixed(1)}km
+                                </td>
+                                <td className="text-right py-2 font-bold text-green-700 pr-4">
                                   {dia.kmTotal.toFixed(1)}km
                                 </td>
                               </tr>
