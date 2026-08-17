@@ -1,4 +1,5 @@
-import React, { useState, useRef } from 'react';
+import * as React from 'react';
+import { useState, useRef } from 'react';
 import { Upload, FileSpreadsheet, X, CheckCircle2, AlertTriangle, Loader2, Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { WorkerImportData, ImportResult } from '../lib/types';

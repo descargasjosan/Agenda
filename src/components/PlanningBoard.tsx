@@ -1,5 +1,6 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import * as React from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Clock, MapPin, Users, Plus, Edit2, X, AlertCircle, Search, Move, AlertTriangle, Euro, ArrowRightLeft, CheckCircle2, MoreHorizontal, CalendarPlus, Ban, Flag, Briefcase, Award, TrendingUp, UserCheck, StickyNote, Stethoscope, FileText, List, FileSpreadsheet } from 'lucide-react';
 import { Job, PlanningState, Worker, WorkerStatus, ContractType, ReinforcementGroup } from '../lib/types';
 import { isTimeOverlap, checkContinuityRisk, formatDateDMY, getWorkerDisplayName } from '../lib/utils';

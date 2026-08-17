@@ -1,4 +1,4 @@
-import React from 'react';
+import * as React from 'react';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Holiday, Job } from '../lib/types';
 import { isHoliday, formatDateDisplay } from '../lib/utils';

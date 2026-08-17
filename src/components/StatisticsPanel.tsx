@@ -1,5 +1,6 @@
 
-import React, { useState, useMemo } from 'react';
+import * as React from 'react';
+import { useState, useMemo } from 'react';
 import { 
   BarChart3, Users, Clock, CalendarDays, Filter, Building2, MapPin, 
   TrendingUp, Activity, Calculator, ArrowRight, Ban, X, FileText, AlertCircle, Download, FileSpreadsheet, User, Briefcase, CheckCircle2, Stethoscope, StickyNote, Fuel, Plus, Minus

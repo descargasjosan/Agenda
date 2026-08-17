@@ -1,5 +1,6 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import * as React from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { CalendarDays, Search, Download, Table, ArrowRight, Clock, ChevronLeft, ChevronRight, X, Filter, ArrowUpDown } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { PlanningState, Worker, ContractType, Job, Holiday } from '../lib/types';

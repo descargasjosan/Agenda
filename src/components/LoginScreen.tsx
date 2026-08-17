@@ -1,5 +1,6 @@
 
-import React, { useState } from 'react';
+import * as React from 'react';
+import { useState } from 'react';
 // Importamos el cliente que ya tiene la seguridad configurada
 import { supabase } from '../../supabaseClient'; 
 import { Lock, Mail, Loader2, AlertCircle, ArrowRight, UserPlus, LogIn } from 'lucide-react';

@@ -1,4 +1,4 @@
-import React from 'react';
+import * as React from 'react';
 import { Search, User, Car, Euro, CalendarCheck, Briefcase } from 'lucide-react';
 import { Worker, PlanningState, WorkerStatus, ContractType, Job, JobType } from '../lib/types';
 import { checkContinuityRisk, getWorkerDisplayName, getCurrentWorkerStatus } from '../lib/utils';

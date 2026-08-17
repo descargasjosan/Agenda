@@ -1,4 +1,5 @@
-import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import * as React from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { 
   CalendarIcon, Users, Building2, Car, HeartPulse, Settings, Download, Upload, Cloud, CloudOff, AlertCircle, CheckCircle2, X, ChevronLeft, ChevronRight, CalendarDays, Search, Plus, Trash2, Edit2, Copy, FileText, Loader2, LayoutGrid, Table, ListTodo, Bell, MessageSquare, Send, Filter, ArrowRight, Clock, User, Mail, Phone, MapPin, Briefcase, Star, TrendingUp, Activity, DownloadCloud, Database, RotateCcw, BarChart3, MessageCircle, Calendar, CheckCircle, XCircle, GraduationCap, FileSpreadsheet, ChevronDown, Sparkles, ClipboardList, Hash, Save, StickyNote, Fuel, AlertTriangle, RefreshCw, Camera 
 } from 'lucide-react';
@@ -173,6 +174,38 @@ const App: React.FC = () => {
   // Ref para acceder al planning actual desde efectos sin dependencias dinámicas
   const planningRef = useRef(planning);
   planningRef.current = planning;
+
+  // Refs para controlar carga de cursos médicos desde Supabase
+  const availableCoursesLoaded = useRef(false);
+  const availableCoursesModified = useRef(false);
+
+  // Cargar lista de cursos médicos desde app_settings de Supabase
+  useEffect(() => {
+    if (dbStatus !== 'connected' || availableCoursesLoaded.current) return;
+    availableCoursesLoaded.current = true;
+
+    (async () => {
+      const { data, error } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'availableCourses')
+        .maybeSingle();
+
+      if (availableCoursesModified.current) return;
+
+      if (data?.value && Array.isArray(data.value)) {
+        setAvailableCourses(data.value);
+      } else {
+        const saved = localStorage.getItem('availableCourses');
+        const migrated = saved ? JSON.parse(saved) : availableCourses;
+        setAvailableCourses(migrated);
+        const { error: upsertError } = await supabase
+          .from('app_settings')
+          .upsert({ key: 'availableCourses', value: migrated });
+        if (upsertError) console.error('Error guardando cursos por defecto:', upsertError);
+      }
+    })();
+  }, [dbStatus]);
 
   // ── Estado de UI ───────────────────────────────────────────────────────────
   const [view, setView] = useState<ViewType>('planning');
@@ -1438,38 +1471,106 @@ const [planningFilter, setPlanningFilter] = useState('');
     showNotification('Registro médico actualizado', 'success');
   }, [persistMedicalCourse, showNotification]);
 
-  const deleteMedicalCourseHandler = useCallback(async (id: string) => {
+  const deleteMedicalCourseHandler = useCallback(async (courseOrId: MedicalCourse | string) => {
+    const course = typeof courseOrId === 'string' ? undefined : courseOrId;
+    const id = typeof courseOrId === 'string' ? courseOrId : courseOrId.id;
     
-    // Si el ID es undefined, no hacer nada para evitar eliminar todos los registros
-    if (!id) {
-      console.error('❌ Intentando eliminar con ID undefined - operación cancelada');
-      showNotification('Error: ID del registro no válido', 'error');
-      return;
+    console.log('🗑️ Intentando eliminar registro médico:', { id, course });
+    
+    // Función auxiliar para comparar registros por campos
+    const matchByFields = (c: MedicalCourse) => {
+      if (!course) return false;
+      return (
+        c.assignedWorkerIds[0] === course.assignedWorkerIds[0] &&
+        c.issueDate === course.issueDate &&
+        c.provider === course.provider &&
+        c.type === course.type &&
+        (c.name || '') === (course.name || '')
+      );
+    };
+    
+    // 1. Intentar eliminar por ID si existe y está en estado
+    if (id) {
+      const existing = planning.medicalCourses.find((c) => c.id === id);
+      if (existing) {
+        const remaining = planning.medicalCourses.filter((c) => c.id !== id);
+        setPlanning(prev => ({ ...prev, medicalCourses: remaining }));
+        await persistDeleteMedicalCourse(id);
+        showNotification('Registro médico eliminado', 'success');
+        return;
+      }
     }
     
-    
-    const existing = planning.medicalCourses.find((c) => c.id === id);
-    
-    if (!existing) {
-      console.error('No se encontró el registro con ID:', id);
-      showNotification('Error: Registro no encontrado', 'error');
-      return;
+    // 2. Buscar por coincidencia de campos en el estado local
+    if (course) {
+      const existing = planning.medicalCourses.find(matchByFields);
+      if (existing?.id) {
+        const remaining = planning.medicalCourses.filter((c) => !matchByFields(c));
+        setPlanning(prev => ({ ...prev, medicalCourses: remaining }));
+        await persistDeleteMedicalCourse(existing.id);
+        showNotification('Registro médico eliminado', 'success');
+        return;
+      }
+      
+      // 3. Buscar en Supabase por coincidencia de campos
+      console.log('🔍 Registro no encontrado en estado, buscando en Supabase...');
+      const { data: rows, error } = await supabase
+        .from('medical_courses')
+        .select('id, data');
+      
+      if (error) {
+        console.error('Error consultando medical_courses:', error);
+        showNotification('Error al buscar el registro en Supabase', 'error');
+        return;
+      }
+      
+      const match = rows?.find((r: any) => {
+        const d = r.data;
+        return (
+          d.assignedWorkerIds?.[0] === course.assignedWorkerIds[0] &&
+          d.issueDate === course.issueDate &&
+          d.provider === course.provider &&
+          d.type === course.type &&
+          (d.name || '') === (course.name || '')
+        );
+      });
+      
+      if (match) {
+        const remaining = planning.medicalCourses.filter((c) => !matchByFields(c));
+        setPlanning(prev => ({ ...prev, medicalCourses: remaining }));
+        
+        if (match.id) {
+          await persistDeleteMedicalCourse(match.id);
+        } else {
+          // Registro sin ID: eliminar por coincidencia exacta del JSON
+          const { error: deleteError } = await supabase
+            .from('medical_courses')
+            .delete()
+            .eq('data', match.data);
+          if (deleteError) {
+            console.error('Error eliminando registro sin ID:', deleteError);
+            showNotification('Error al eliminar el registro', 'error');
+            return;
+          }
+        }
+        showNotification('Registro médico eliminado', 'success');
+        return;
+      }
     }
     
-    // Eliminar del estado local primero
-    const remaining = planning.medicalCourses.filter((c) => c.id !== id);
-    
-    setPlanning(prev => ({ ...prev, medicalCourses: remaining }));
-    
-    // Eliminar de la base de datos
-    await persistDeleteMedicalCourse(id);
-    
-    showNotification('Registro médico eliminado', 'success');
-  }, [planning.medicalCourses, persistDeleteMedicalCourse, showNotification]);
+    console.error('❌ No se pudo encontrar el registro médico:', { id, course });
+    showNotification('Error: Registro no encontrado', 'error');
+  }, [planning.medicalCourses, persistDeleteMedicalCourse, showNotification, supabase]);
 
-  const addNewMedicalCourse = useCallback(() => {
+  const addNewMedicalCourse = useCallback(async () => {
     if (medicalCourseName.trim() && !availableCourses.includes(medicalCourseName.trim())) {
-      setAvailableCourses(prev => [...prev, medicalCourseName.trim()]);
+      availableCoursesModified.current = true;
+      const newCourses = [...availableCourses, medicalCourseName.trim()];
+      setAvailableCourses(newCourses);
+      const { error } = await supabase
+        .from('app_settings')
+        .upsert({ key: 'availableCourses', value: newCourses });
+      if (error) console.error('Error guardando cursos:', error);
       setMedicalCourseName(''); setShowAddMedicalCourse(false);
     }
   }, [medicalCourseName, availableCourses]);
@@ -4863,7 +4964,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                             <button 
                               onClick={() => {
                                 if (confirm('¿Eliminar este registro médico?')) {
-                                  deleteMedicalCourseHandler(courseId);
+                                  deleteMedicalCourseHandler(course);
                                 }
                               }}
                               className="p-1 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
@@ -7761,9 +7862,16 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                     </button>
                     {planning.editingMedicalCourse.name && availableCourses.includes(planning.editingMedicalCourse.name) && (
                       <button
-                        onClick={() => {
-                          if (confirm(`¿Eliminar el curso "${planning.editingMedicalCourse.name}"?`)) {
-                            deleteMedicalCourseHandler(planning.editingMedicalCourse.id!);
+                        onClick={async () => {
+                          if (confirm(`¿Eliminar el curso "${planning.editingMedicalCourse.name}" del listado?`)) {
+                            availableCoursesModified.current = true;
+                            const courseToDelete = planning.editingMedicalCourse.name;
+                            const newCourses = availableCourses.filter(c => c !== courseToDelete);
+                            setAvailableCourses(newCourses);
+                            const { error } = await supabase
+                              .from('app_settings')
+                              .upsert({ key: 'availableCourses', value: newCourses });
+                            if (error) console.error('Error guardando cursos:', error);
                             setPlanning(prev => ({ 
                               ...prev, 
                               editingMedicalCourse: prev.editingMedicalCourse ? { ...prev.editingMedicalCourse, name: '' } : null 

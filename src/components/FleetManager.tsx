@@ -1,5 +1,6 @@
 
-import React, { useState } from 'react';
+import * as React from 'react';
+import { useState } from 'react';
 import { Car, Wrench, AlertTriangle, Calendar, Plus, X, Edit2, Trash2, CheckCircle2, User, Gauge } from 'lucide-react';
 import { PlanningState, Vehicle, Worker } from '../lib/types';
 import { formatDateDMY } from '../lib/utils';
