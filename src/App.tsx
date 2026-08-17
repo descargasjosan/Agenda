@@ -1145,6 +1145,9 @@ const saveVacationConfig = async () => {
   const [showAddMedicalProvider, setShowAddMedicalProvider] = useState(false);
   const [workerSearchFilter, setWorkerSearchFilter] = useState('');
   const [medicalWorkerFilter, setMedicalWorkerFilter] = useState('');
+  const [selectedTrackingCourse, setSelectedTrackingCourse] = useState('');
+  const [courseTrackingFilter, setCourseTrackingFilter] = useState<'all' | 'done' | 'not-done'>('all');
+  const [courseTrackingSearch, setCourseTrackingSearch] = useState('');
 const [planningFilter, setPlanningFilter] = useState('');
   const [exportHistory, setExportHistory] = useState(() => {
     const saved = localStorage.getItem('exportHistory');
@@ -4856,6 +4859,16 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                >
                  👥 Operarios
                </button>
+               <button 
+                 onClick={() => setPlanning(prev => ({ ...prev, selectedMedicalTab: 'courseTracking' }))}
+                 className={`pb-3 px-1 text-xs font-black uppercase tracking-wider border-b-2 transition-colors ${
+                   planning.selectedMedicalTab === 'courseTracking' 
+                     ? 'text-blue-600 border-blue-600' 
+                     : 'text-slate-400 border-transparent hover:text-slate-600'
+                 } text-xs`}
+               >
+                 📊 Seguimiento
+               </button>
              </div>
 
              {/* Registros Médicos */}
@@ -4937,7 +4950,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                       return (
                         <div key={courseId} className="grid gap-2 p-3 border-b border-slate-100 hover:bg-slate-50 items-center" style={{ gridTemplateColumns: '16.67% 11.67% 38.33% 11.67% 11.67% 10%' }}>
                           <div className="text-sm font-medium text-slate-900 truncate border-r border-slate-100 pr-2">
-                            {course.type === 'recognition' ? '🏥 Reconocimiento médico' : (course.name || '📚 Curso')}
+                            {course.type === 'recognition' ? '🏥 Reconocimiento médico' : `📚 ${course.name || 'Curso'}`}
                           </div>
                           <div className="text-sm text-slate-600 truncate border-r border-slate-100 pr-2">
                             {course.provider}
@@ -5146,7 +5159,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                                    <span className="font-medium text-xs">
                                      {course.type === 'recognition' 
                                        ? '🏥 Reconocimiento Médico' 
-                                       : course.name || '📚 Curso Formación Laboral'}
+                                       : `📚 ${course.name || 'Curso Formación Laboral'}`}
                                    </span>
                                    <span className="text-xs text-slate-500 ml-2 text-xs">
                                      {course.type === 'recognition' ? '🏥' : '📚'} • {course.provider}
@@ -5165,6 +5178,143 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                  })}
                </div>
              )}
+
+             {/* Seguimiento de cursos */}
+             {planning.selectedMedicalTab === 'courseTracking' && (
+               <div className="space-y-4">
+                 <div className="bg-white p-4 rounded-xl border border-slate-200 flex flex-wrap gap-4 items-end">
+                   <div className="flex-1 min-w-[260px]">
+                     <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Curso de formación</label>
+                     <select
+                       value={selectedTrackingCourse}
+                       onChange={(e) => setSelectedTrackingCourse(e.target.value)}
+                       className="w-full p-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                     >
+                       <option value="">Selecciona un curso</option>
+                       {(() => {
+                         const options = Array.from(new Set([
+                           ...availableCourses,
+                           ...planning.medicalCourses
+                             .filter(c => c.type === 'course')
+                             .map(c => c.name)
+                         ])).filter(Boolean).sort((a, b) => a.localeCompare(b));
+                         return options.map(name => (
+                           <option key={name} value={name}>{name}</option>
+                         ));
+                       })()}
+                     </select>
+                   </div>
+
+                   <div className="flex gap-2">
+                     {(['all', 'done', 'not-done'] as const).map((f) => (
+                       <button
+                         key={f}
+                         onClick={() => setCourseTrackingFilter(f)}
+                         className={`px-4 py-2 rounded-xl text-xs font-black uppercase border transition-colors ${
+                           courseTrackingFilter === f
+                             ? 'bg-blue-600 text-white border-blue-600'
+                             : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                         }`}
+                       >
+                         {f === 'all' ? 'Todos' : f === 'done' ? 'Con curso' : 'Sin curso'}
+                       </button>
+                     ))}
+                   </div>
+
+                   <div className="flex-1 min-w-[220px] relative">
+                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                     <input
+                       type="text"
+                       value={courseTrackingSearch}
+                       onChange={(e) => setCourseTrackingSearch(e.target.value)}
+                       className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                       placeholder="Buscar operario..."
+                     />
+                   </div>
+                 </div>
+
+                 {selectedTrackingCourse ? (() => {
+                   const activeWorkers = planning.workers
+                     .filter(w => !w.isArchived)
+                     .filter(w => {
+                       if (!courseTrackingSearch) return true;
+                       const q = courseTrackingSearch.toLowerCase();
+                       return w.name.toLowerCase().includes(q) || w.code.toLowerCase().includes(q);
+                     })
+                     .sort((a, b) => a.name.localeCompare(b.name));
+
+                   const rows = activeWorkers.map(worker => {
+                     const records = planning.medicalCourses.filter(c =>
+                       c.type === 'course' &&
+                       c.name === selectedTrackingCourse &&
+                       c.assignedWorkerIds.includes(worker.id)
+                     );
+                     const record = records.sort((a, b) => {
+                       const dateA = new Date(a.issueDate || a.createdAt || 0).getTime();
+                       const dateB = new Date(b.issueDate || b.createdAt || 0).getTime();
+                       if (isNaN(dateA) && isNaN(dateB)) return 0;
+                       if (isNaN(dateA)) return 1;
+                       if (isNaN(dateB)) return -1;
+                       return dateB - dateA;
+                     })[0];
+                     const has = !!record;
+                     if (courseTrackingFilter === 'done' && !has) return null;
+                     if (courseTrackingFilter === 'not-done' && has) return null;
+                     return { worker, record, has };
+                   }).filter(Boolean) as { worker: Worker; record?: MedicalCourse; has: boolean }[];
+
+                   return (
+                     <div>
+                       <div className="mb-4 flex flex-wrap gap-4 text-sm font-black">
+                         <span className="text-green-600">✅ Con curso: {rows.filter(r => r.has).length}</span>
+                         <span className="text-red-600">❌ Sin curso: {rows.filter(r => !r.has).length}</span>
+                         <span className="text-slate-500">Total: {rows.length}</span>
+                       </div>
+                       {rows.length > 0 ? (
+                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                           {rows.map(({ worker, record, has }) => (
+                             <div
+                               key={worker.id}
+                               className={`p-4 rounded-xl border transition-colors ${
+                                 has ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
+                               }`}
+                             >
+                               <div className="flex items-center gap-3">
+                                 <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-sm text-lg shrink-0">
+                                   {has ? '✅' : '❌'}
+                                 </div>
+                                 <div className="min-w-0">
+                                   <h4 className="font-black text-slate-900 truncate">{worker.name}</h4>
+                                   <p className="text-xs text-slate-500 font-bold">{worker.code} • {worker.role || 'Sin rol'}</p>
+                                 </div>
+                               </div>
+                               {has && record && (
+                                 <div className="mt-3 text-xs text-slate-600 font-medium">
+                                   Realizado: {record.issueDate && !isNaN(new Date(record.issueDate).getTime())
+                                     ? new Date(record.issueDate).toLocaleDateString('es-ES')
+                                     : '-'}
+                                   {record.provider ? ` • ${record.provider}` : ''}
+                                 </div>
+                               )}
+                             </div>
+                           ))}
+                         </div>
+                       ) : (
+                         <div className="text-center py-12 text-slate-400">
+                           <p className="font-bold uppercase text-xs tracking-widest">No hay operarios que coincidan con el filtro</p>
+                         </div>
+                       )}
+                     </div>
+                   );
+                 })() : (
+                   <div className="text-center py-12 text-slate-400">
+                     <div className="text-4xl mb-3">📚</div>
+                     <p className="font-bold uppercase text-xs tracking-widest">Selecciona un curso para ver el seguimiento</p>
+                   </div>
+                 )}
+               </div>
+             )}
+
            </div>
          )}
          {view === 'clients' && (

@@ -253,7 +253,7 @@ export interface PlanningState {
   courses: Course[]; // Sistema de cursos general (se mantendrá para compatibilidad)
   medicalCourses: MedicalCourse[]; // 🏥 Cursos y reconocimientos médicos
   medicalAlerts: MedicalAlert[]; // ⚠️ Alertas médicas calculadas
-  selectedMedicalTab: 'dashboard' | 'courses' | 'alerts' | 'workers'; // 📋 Pestaña activa en Salud Laboral
+  selectedMedicalTab: 'dashboard' | 'courses' | 'alerts' | 'workers' | 'courseTracking'; // 📋 Pestaña activa en Salud Laboral
   editingMedicalCourse: MedicalCourse | null; // 📝 Curso médico en edición
   standardTasks: StandardTask[]; 
   dailyNotes: DailyNote[]; 
