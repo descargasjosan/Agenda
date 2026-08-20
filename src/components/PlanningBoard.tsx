@@ -235,7 +235,8 @@ const PlanningBoard: React.FC<PlanningBoardProps> = ({
       WorkerStatus.BAJA_PATERNIDAD,
       WorkerStatus.PERMISO_RETRIBUIDO,
       WorkerStatus.FALTA,
-      WorkerStatus.REPOSO
+      WorkerStatus.REPOSO,
+      WorkerStatus.NO_DISPONIBLE
     ].includes(statusForCurrentDate);
 
     console.log('  🎯 Final Status:', statusForCurrentDate, 'Available:', !isUnavailableStatus);

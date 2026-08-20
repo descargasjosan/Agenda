@@ -69,6 +69,7 @@ const WorkerSidebar: React.FC<WorkerSidebarProps> = ({
         case 'B': return WorkerStatus.BAJA_MEDICA;
         case 'P': return WorkerStatus.BAJA_PATERNIDAD;
         case 'D': return WorkerStatus.PERMISO_RETRIBUIDO;
+        case 'N': return WorkerStatus.NO_DISPONIBLE;
         default: return WorkerStatus.DISPONIBLE;
       }
     }
@@ -103,6 +104,7 @@ const WorkerSidebar: React.FC<WorkerSidebarProps> = ({
       case 'B': return WorkerStatus.BAJA_MEDICA;
       case 'P': return WorkerStatus.BAJA_PATERNIDAD;
       case 'D': return WorkerStatus.PERMISO_RETRIBUIDO;
+      case 'N': return WorkerStatus.NO_DISPONIBLE;
       default: return WorkerStatus.DISPONIBLE;
     }
   };
@@ -124,7 +126,8 @@ const WorkerSidebar: React.FC<WorkerSidebarProps> = ({
       WorkerStatus.BAJA_PATERNIDAD,
       WorkerStatus.PERMISO_RETRIBUIDO,
       WorkerStatus.FALTA,
-      WorkerStatus.REPOSO
+      WorkerStatus.REPOSO,
+      WorkerStatus.NO_DISPONIBLE
     ].includes(statusForCurrentDate);
 
     if (isUnavailableStatus) {

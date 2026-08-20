@@ -221,7 +221,7 @@ const App: React.FC = () => {
   const [workerAvailabilityFilter, setWorkerAvailabilityFilter] = useState<'all' | 'free' | 'assigned'>('all');
   const [workerContractFilter, setWorkerContractFilter] = useState<'all' | 'fixedDiscontinuous' | 'others'>('all');
   const [workerStatusFilter, setWorkerStatusFilter] = useState<{[key: string]: boolean}>({
-    'DISPONIBLE': true, 'VACACIONES': true, 'BAJA_MEDICA': true, 'BAJA_PATERNIDAD': true, 'PERMISO_RETRIBUIDO': true, 'FALTA': true, 'REPOSO': true
+    'DISPONIBLE': true, 'VACACIONES': true, 'BAJA_MEDICA': true, 'BAJA_PATERNIDAD': true, 'PERMISO_RETRIBUIDO': true, 'FALTA': true, 'REPOSO': true, 'NO_DISPONIBLE': true
   });
   const [medicalWorkerSearch, setMedicalWorkerSearch] = useState('');
   const [itemToDelete, setItemToDelete] = useState<{ id: string, type: 'job' | 'worker' | 'client' | 'task' | 'course', name: string } | null>(null);
@@ -374,7 +374,7 @@ const updateCellValue = async (workerId: string, day: number, value: string) => 
    
    // Permitir B (baja médica) y P (paternidad) en festivos/fin de semana
    // Permitir V (vacaciones) solo en fines de semana, NO en festivos
-   // Permitir horas (números) en festivos/fin de semana
+   // Permitir horas (números) y N (no disponible) en festivos/fin de semana
    // Bloquear F (faltas), D (permiso), R (reposo) en festivos/fin de semana
    const isAllowedValue = value === 'B' || value === 'P' || (value === 'V' && isWeekend && !isHolidayDay);
    
@@ -384,7 +384,7 @@ const updateCellValue = async (workerId: string, day: number, value: string) => 
    // Impedir guardar valores bloqueados en festivos o fines de semana
    if (isBlockedValue) {
       const context = isHolidayDay ? 'días festivos' : 'fines de semana';
-      const reason = value === 'F' ? 'faltas' : value === 'V' ? 'vacaciones' : value === 'R' ? 'reposos' : value === 'D' ? 'permisos' : 'estados';
+      const reason = value === 'F' ? 'faltas' : value === 'V' ? 'vacaciones' : value === 'R' ? 'reposos' : value === 'D' ? 'permisos' : value === 'N' ? 'no disponible' : 'estados';
       showNotification(
          `No se pueden registrar ${reason} en ${context}`, 
          'warning'
@@ -463,6 +463,8 @@ const syncFromStatusRecords = useCallback(async (showSummary: boolean = false) =
                case 'Falta': statusCode = 'F'; break;
                case 'REPOSO':
                case 'Reposo': statusCode = 'R'; break;
+               case 'NO_DISPONIBLE':
+               case 'No Disponible': statusCode = 'N'; break;
                default: statusCode = ''; break;
             }
             newWorkerData[day] = statusCode;
@@ -554,7 +556,7 @@ const syncToStatusRecords = useCallback(async (workerId: string, day: number, va
       // Guardar el valor original para la lógica de eliminación de tareas
       const originalValue = value;
       
-      // Solo procesar como estado si es V, B, P, D, F, R
+      // Solo procesar como estado si es V, B, P, D, F, R, N
       let statusType: WorkerStatus | null = null;
       switch(value) {
          case 'V': statusType = WorkerStatus.VACACIONES; break;
@@ -563,6 +565,7 @@ const syncToStatusRecords = useCallback(async (workerId: string, day: number, va
          case 'D': statusType = WorkerStatus.PERMISO_RETRIBUIDO; break;
          case 'F': statusType = WorkerStatus.FALTA; break;
          case 'R': statusType = WorkerStatus.REPOSO; break;
+         case 'N': statusType = WorkerStatus.NO_DISPONIBLE; break;
          default: statusType = null; break;
       }
       
@@ -583,7 +586,8 @@ const syncToStatusRecords = useCallback(async (workerId: string, day: number, va
                           s.status === WorkerStatus.BAJA_PATERNIDAD ? 'P' :
                           s.status === WorkerStatus.PERMISO_RETRIBUIDO ? 'D' :
                           s.status === WorkerStatus.FALTA ? 'F' :
-                          s.status === WorkerStatus.REPOSO ? 'R' : '';
+                          s.status === WorkerStatus.REPOSO ? 'R' :
+                          s.status === WorkerStatus.NO_DISPONIBLE ? 'N' : '';
             if (sCode === value) sameStatusDays.push(d);
          });
 
@@ -621,8 +625,8 @@ const syncToStatusRecords = useCallback(async (workerId: string, day: number, va
 
          await persistWorker(finalWorker);
 
-         // Si es F, R, D, eliminar de tareas de todos los días afectados por el estado
-         if (['F', 'R', 'D'].includes(originalValue)) {
+         // Si es F, R, D, N, eliminar de tareas de todos los días afectados por el estado
+         if (['F', 'R', 'D', 'N'].includes(originalValue)) {
             let updatedJobs = 0;
             
             // Eliminar de tareas de todos los días en el rango
@@ -857,6 +861,7 @@ const getCellColor = (value: string) => {
       'B': 'bg-red-100 text-red-700',      // Baja médica
       'P': 'bg-orange-100 text-orange-700', // Baja paternidad
       'F': 'bg-yellow-100 text-yellow-700', // Falta asistencia (cambiado a amarillo)
+      'N': 'bg-slate-600 text-white',      // No disponible
       'D': 'bg-gray-100 text-gray-700',     // Permiso retribuido (cambiado a gris)
       'R': 'bg-sky-100 text-sky-700',      // Reposo domiciliario (cambiado a azul claro)
       'V': 'bg-green-100 text-green-700'    // Vacaciones (cambiado a verde)
@@ -3484,7 +3489,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
     }
     
     const activeStatusFilters = Object.keys(workerStatusFilter).filter(k => workerStatusFilter[k]);
-    const statusMapping: {[k: string]: string} = { 'DISPONIBLE': 'Disponible', 'VACACIONES': 'Vacaciones', 'BAJA_MEDICA': 'Baja Médica', 'BAJA_PATERNIDAD': 'Baja Paternidad', 'PERMISO_RETRIBUIDO': 'Permiso Retribuido', 'FALTA': 'Falta', 'REPOSO': 'Reposo' };
+    const statusMapping: {[k: string]: string} = { 'DISPONIBLE': 'Disponible', 'VACACIONES': 'Vacaciones', 'BAJA_MEDICA': 'Baja Médica', 'BAJA_PATERNIDAD': 'Baja Paternidad', 'PERMISO_RETRIBUIDO': 'Permiso Retribuido', 'FALTA': 'Falta', 'REPOSO': 'Reposo', 'NO_DISPONIBLE': 'No Disponible' };
     if (activeStatusFilters.length > 0) workers = workers.filter(w => activeStatusFilters.some(k => getCorrectWorkerStatus(w) === statusMapping[k]));
     
     return workers;
@@ -4371,7 +4376,8 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                             'BAJA_PATERNIDAD': false,
                             'PERMISO_RETRIBUIDO': false,
                             'FALTA': false,
-                            'REPOSO': false
+                            'REPOSO': false,
+                            'NO_DISPONIBLE': false
                           });
                         } else {
                           // Si no todos están activos, activar todos
@@ -4382,7 +4388,8 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                             'BAJA_PATERNIDAD': true,
                             'PERMISO_RETRIBUIDO': true,
                             'FALTA': true,
-                            'REPOSO': true
+                            'REPOSO': true,
+                            'NO_DISPONIBLE': true
                           });
                         }
                       }}
@@ -4407,7 +4414,8 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                             'BAJA_PATERNIDAD': false,
                             'PERMISO_RETRIBUIDO': false,
                             'FALTA': false,
-                            'REPOSO': false
+                            'REPOSO': false,
+                            'NO_DISPONIBLE': false
                           } : {})
                         }));
                       }}
@@ -4432,7 +4440,8 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                             'BAJA_PATERNIDAD': false,
                             'PERMISO_RETRIBUIDO': false,
                             'FALTA': false,
-                            'REPOSO': false
+                            'REPOSO': false,
+                            'NO_DISPONIBLE': false
                           } : {})
                         }));
                       }}
@@ -4457,7 +4466,8 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                             'BAJA_PATERNIDAD': false,
                             'PERMISO_RETRIBUIDO': false,
                             'FALTA': false,
-                            'REPOSO': false
+                            'REPOSO': false,
+                            'NO_DISPONIBLE': false
                           } : {})
                         }));
                       }}
@@ -4482,7 +4492,8 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                             'BAJA_MEDICA': false,
                             'PERMISO_RETRIBUIDO': false,
                             'FALTA': false,
-                            'REPOSO': false
+                            'REPOSO': false,
+                            'NO_DISPONIBLE': false
                           } : {})
                         }));
                       }}
@@ -4507,7 +4518,8 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                             'BAJA_MEDICA': false,
                             'BAJA_PATERNIDAD': false,
                             'FALTA': false,
-                            'REPOSO': false
+                            'REPOSO': false,
+                            'NO_DISPONIBLE': false
                           } : {})
                         }));
                       }}
@@ -4532,7 +4544,8 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                             'BAJA_MEDICA': false,
                             'BAJA_PATERNIDAD': false,
                             'PERMISO_RETRIBUIDO': false,
-                            'REPOSO': false
+                            'REPOSO': false,
+                            'NO_DISPONIBLE': false
                           } : {})
                         }));
                       }}
@@ -4557,7 +4570,8 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                             'BAJA_MEDICA': false,
                             'BAJA_PATERNIDAD': false,
                             'PERMISO_RETRIBUIDO': false,
-                            'FALTA': false
+                            'FALTA': false,
+                            'NO_DISPONIBLE': false
                           } : {})
                         }));
                       }}
@@ -4568,6 +4582,32 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                       }`}
                     >
                       Reposo
+                    </button>
+                    <button
+                      onClick={() => {
+                        const allActive = Object.values(workerStatusFilter).every(v => v);
+                        setWorkerStatusFilter((prev: Record<string, boolean>) => ({
+                          ...prev, 
+                          'NO_DISPONIBLE': !prev['NO_DISPONIBLE'],
+                          // Si todos estaban activos, desactivar los demás al cambiar este
+                          ...(allActive ? {
+                            'DISPONIBLE': false,
+                            'VACACIONES': false,
+                            'BAJA_MEDICA': false,
+                            'BAJA_PATERNIDAD': false,
+                            'PERMISO_RETRIBUIDO': false,
+                            'FALTA': false,
+                            'REPOSO': false
+                          } : {})
+                        }));
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all ${
+                        workerStatusFilter['NO_DISPONIBLE'] 
+                          ? 'bg-slate-700 text-white shadow-sm' 
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      No Disp.
                     </button>
                   </div>
 
@@ -5565,6 +5605,10 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                         <div className="w-4 h-4 bg-green-100 text-green-700 rounded flex items-center justify-center text-[8px] font-bold">V</div>
                         <span className="text-[10px] text-slate-600">Vacaciones</span>
                      </div>
+                     <div className="flex items-center gap-1">
+                        <div className="w-4 h-4 bg-slate-600 text-white rounded flex items-center justify-center text-[8px] font-bold">N</div>
+                        <span className="text-[10px] text-slate-600">No disponible</span>
+                     </div>
                   </div>
                </div>
 
@@ -6126,6 +6170,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                         { code: 'D', label: 'Permiso Retribuido', color: 'bg-gray-100 text-gray-700' },
                         { code: 'R', label: 'Reposo Domiciliario', color: 'bg-sky-100 text-sky-700' },
                         { code: 'V', label: 'Vacaciones', color: 'bg-green-100 text-green-700' },
+                        { code: 'N', label: 'No disponible', color: 'bg-slate-600 text-white' },
                         { code: '', label: 'Limpiar', color: 'bg-white border border-slate-300 text-slate-600' }
                      ].map(({ code, label, color }) => (
                         <button

@@ -130,10 +130,18 @@ export const validateAssignment = (
     restrictedClientIds: worker.restrictedClientIds
   });
 
-  // Verificar si el operario está disponible o si su estado no disponible ha finalizado
+  // Verificar estado del operario para la fecha específica de la tarea (incluye No Disponible)
+  const statusForDate = getCurrentWorkerStatusForDate(worker, job.date);
+  if (statusForDate.status !== WorkerStatus.DISPONIBLE && statusForDate.status !== 'Activo') {
+    console.log('❌ DEBUG - Estado no disponible para la fecha:', statusForDate.status);
+    const endText = statusForDate.endDate ? `hasta ${formatDateDMY(statusForDate.endDate)}` : '';
+    return { error: `Estado: ${statusForDate.status} ${endText}`.trim(), warning: null };
+  }
+  
+  // Fallback: verificar estado global del operario para compatibilidad
   // 🔄 COMPATIBILIDAD: Aceptar "Activo" como equivalente a "Disponible"
   if (worker.status !== WorkerStatus.DISPONIBLE && worker.status !== 'Activo') {
-    console.log('❌ DEBUG - Estado no disponible:', worker.status);
+    console.log('❌ DEBUG - Estado global no disponible:', worker.status);
     // Si tiene fecha de fin de estado, verificar si la tarea es posterior
     if (worker.statusEndDate) {
       if (job.date <= worker.statusEndDate) {

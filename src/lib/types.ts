@@ -6,6 +6,7 @@ export enum WorkerStatus {
   PERMISO_RETRIBUIDO = 'Permiso Retribuido',
   FALTA = 'Falta',
   REPOSO = 'Reposo',
+  NO_DISPONIBLE = 'No Disponible',
   DISPONIBLE = 'Disponible'
 }
 
