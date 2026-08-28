@@ -15,7 +15,7 @@ interface PlanningBoardProps {
   onEditJob: (job: Job) => void;
   onDuplicateJob: (job: Job) => void;
   onShowWorkerList: (clientId: string, centerId: string, date: string) => void;
-  onExportAccessList: (centerId: string, date: string) => void;
+  onExportAccessList: (job: Job) => void;
   highlightedWorker: string | null;
   draggedWorkerId: string | null;
   onDragStartFromBoard: (workerId: string, jobId: string) => void;
@@ -645,7 +645,7 @@ const PlanningBoard: React.FC<PlanningBoardProps> = ({
                                           </button>
                                         )}
                                       </div>
-                                      {job.ref && <p className="text-[8px] font-bold text-slate-400 truncate italic">Ref: {job.ref}</p>}
+                                      {job.ref && <p className="text-[10px] font-bold text-slate-600 truncate italic">{job.ref}</p>}
                                     </div>
                                     
                                     {/* Columna B: Iconos */}
@@ -675,7 +675,7 @@ const PlanningBoard: React.FC<PlanningBoardProps> = ({
                                         <List className="w-2.5 h-2.5" />
                                       </button>
                                       <button 
-                                        onClick={(e) => { e.stopPropagation(); onExportAccessList(job.centerId, job.date); }} 
+                                        onClick={(e) => { e.stopPropagation(); onExportAccessList(job); }} 
                                         onMouseDown={(e) => e.stopPropagation()}
                                         className="p-0.5 text-slate-400 hover:text-green-700 transition-colors" 
                                         title="Exportar listado Excel"

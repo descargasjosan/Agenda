@@ -1285,75 +1285,126 @@ const [planningFilter, setPlanningFilter] = useState('');
   }, [highlightedWorker, highlightTimeout]);
 
   // ── Exportar listado de acceso ─────────────────────────────────────────────
-  const exportWorkerAccessList = useCallback((centerId: string, date: string) => {
+  const exportWorkerAccessList = useCallback((job: Job) => {
     try {
-      const centerJobs = planning.jobs.filter(j => j.centerId === centerId && j.date === date && !j.isCancelled);
-      const assignedWorkerIds = new Set(centerJobs.flatMap(j => j.assignedWorkerIds));
-      const workersToExport = planning.workers.filter(w => assignedWorkerIds.has(w.id));
-      const client = planning.clients.find(c => c.centers.some(ct => ct.id === centerId));
+      const { id: jobId, clientId, centerId, date, assignedWorkerIds, workerTimes, startTime } = job;
+      const client = planning.clients.find(c => c.id === clientId);
+      const isArteRegal = client?.name?.trim().toUpperCase() === 'ARTE REGAL IMPORT, S.L.';
       const center = client?.centers.find(ct => ct.id === centerId);
       const today = new Date().toISOString().split('T')[0];
-      const exportKey = `${centerId}_${date}`;
+      const exportKey = isArteRegal ? `${jobId}_${date}` : `${centerId}_${date}`;
       const currentHistory = exportHistory;
       const previousExport = currentHistory[exportKey];
       const isFirstExport = !previousExport || previousExport.date !== today;
+
+      // Determinar operarios a exportar
+      let workersToExport: Worker[];
+      let allAssignedWorkerIds: string[];
+      if (isArteRegal) {
+        allAssignedWorkerIds = assignedWorkerIds;
+        workersToExport = planning.workers.filter(w => assignedWorkerIds.includes(w.id));
+      } else {
+        const centerJobs = planning.jobs.filter(j => j.centerId === centerId && j.date === date && !j.isCancelled);
+        const centerAssignedIds = new Set(centerJobs.flatMap(j => j.assignedWorkerIds));
+        allAssignedWorkerIds = Array.from(centerAssignedIds);
+        workersToExport = planning.workers.filter(w => centerAssignedIds.has(w.id));
+      }
+
       const newWorkers = isFirstExport ? workersToExport : workersToExport.filter(w => !previousExport.workerIds.includes(w.id));
       const finalWorkers = isFirstExport ? workersToExport : newWorkers;
       if (finalWorkers.length === 0 && !isFirstExport) { showNotification("No hay nuevos operarios desde la última exportación", "info"); return; }
-      // Convertir fecha de AAA-MM-DD a DD-MM-AAAA
+
+      // Convertir fecha de AAAA-MM-DD a DD-MM-AAAA
       const [year, month, day] = date.split('-');
       const formattedDate = `${day}-${month}-${year}`;
-      
-      
+
       // Limpiar el nombre del cliente: quitar guiones bajos, espacios extra y caracteres especiales
       let cleanClientName = (client?.name || 'EMPRESA')
         .replace(/_/g, ' ')           // Reemplazar guiones bajos con espacios
         .replace(/\s+/g, ' ')        // Reemplazar múltiples espacios con uno solo
         .trim();                      // Quitar espacios al inicio y final
-      
-      
+
       // Obtener número de exportación para el sufijo
       const exportCount = (currentHistory[exportKey]?.exportCount || 0) + 1;
       const suffix = exportCount > 1 ? `-${exportCount}` : '';
-      
-      const fileName = isFirstExport 
-        ? `LISTADO ACCESO "${cleanClientName}" ${formattedDate}${suffix}.xlsx` 
+
+      const fileName = isFirstExport
+        ? `LISTADO ACCESO "${cleanClientName}" ${formattedDate}${suffix}.xlsx`
         : `NUEVOS ACCESO "${cleanClientName}" ${formattedDate}${suffix}.xlsx`;
-      
+
       const wb = XLSX.utils.book_new();
-      
-      // Solo incluir operarios fijos en la primera exportación
-      let allWorkers = finalWorkers;
-      
-      if (isFirstExport) {
-        // Operarios fijos solo en la primera exportación
-        const fixedWorkers = [
-          { dni: '24371414Q', name: 'JOSE LUIS RUIZ TARREGA' },
-          { dni: '48581091P', name: 'VICENTE CARRATALA ANASTASIO' }
+
+      let excelData: any[][];
+      let merges: { s: { r: number; c: number }; e: { r: number; c: number } }[];
+      let cols: { wch: number }[];
+
+      if (isArteRegal) {
+        // Filas con nombre completo, NIF repetido y hora, ordenadas por hora
+        const rows = finalWorkers.map(worker => {
+          const nameParts = (worker.name || '').split(' ');
+          const firstName = nameParts[0] || '';
+          const lastName = nameParts.slice(1).join(' ') || '';
+          const fullName = (worker.firstName && worker.lastName)
+            ? `${worker.firstName} ${worker.lastName}`.trim()
+            : worker.name || '';
+          const time = workerTimes?.[worker.id] || startTime || '';
+          return {
+            dni: worker.dni || '',
+            firstName,
+            lastName,
+            company: 'DESCARGAS JOSAN SL',
+            fullName,
+            dni2: worker.dni || '',
+            time,
+            timeValue: time
+          };
+        });
+
+        rows.sort((a, b) => a.timeValue.localeCompare(b.timeValue));
+
+        excelData = [
+          [`${fileName.replace('.xlsx', '')}`],
+          ['NIF', 'NOMBRE', 'APELLIDOS', 'EMPRESA', 'NOMBRE COMPLETO', 'NIF', 'HORA'],
+          ...rows.map(r => [r.dni, r.firstName, r.lastName, r.company, r.fullName, r.dni2, r.time])
         ];
-        
-        // Combinar operarios fijos + resto (evitando duplicados)
-        const fixedDnis = new Set(fixedWorkers.map(w => w.dni));
-        const otherWorkers = finalWorkers.filter(w => !fixedDnis.has(w.dni));
-        allWorkers = [...fixedWorkers, ...otherWorkers];
+        merges = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 6 } }];
+        cols = [{ wch: 15 }, { wch: 18 }, { wch: 22 }, { wch: 22 }, { wch: 32 }, { wch: 15 }, { wch: 12 }];
+      } else {
+        // Solo incluir operarios fijos en la primera exportación (comportamiento anterior)
+        let allWorkers: any[] = finalWorkers;
+
+        if (isFirstExport) {
+          const fixedWorkers = [
+            { dni: '24371414Q', name: 'JOSE LUIS RUIZ TARREGA' },
+            { dni: '48581091P', name: 'VICENTE CARRATALA ANASTASIO' }
+          ];
+
+          // Combinar operarios fijos + resto (evitando duplicados)
+          const fixedDnis = new Set(fixedWorkers.map(w => w.dni));
+          const otherWorkers = finalWorkers.filter(w => !fixedDnis.has(w.dni));
+          allWorkers = [...fixedWorkers, ...otherWorkers];
+        }
+
+        excelData = [
+          [`${fileName.replace('.xlsx', '')}`],
+          ['NIF', 'NOMBRE', 'APELLIDOS', 'EMPRESA'],
+          ...allWorkers.map(worker => {
+            const nameParts = (worker.name || '').split(' ');
+            return [worker.dni || '', nameParts[0] || '', nameParts.slice(1).join(' ') || '', 'DESCARGAS JOSAN SL'];
+          })
+        ];
+        merges = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 3 } }];
+        cols = [{ wch: 15 }, { wch: 20 }, { wch: 25 }, { wch: 25 }];
       }
 
-      const excelData = [
-        [`${fileName.replace('.xlsx', '')}`],
-        ['NIF', 'NOMBRE', 'APELLIDOS', 'EMPRESA'],
-        ...allWorkers.map(worker => {
-          const nameParts = (worker.name || '').split(' ');
-          return [worker.dni || '', nameParts[0] || '', nameParts.slice(1).join(' ') || '', 'DESCARGAS JOSAN SL'];
-        })
-      ];
       const ws = XLSX.utils.aoa_to_sheet(excelData);
-      ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 3 } }];
-      ws['!cols'] = [{ wch: 15 }, { wch: 20 }, { wch: 25 }, { wch: 25 }];
+      ws['!merges'] = merges;
+      ws['!cols'] = cols;
       XLSX.utils.book_append_sheet(wb, ws, 'Listado Acceso');
-      updateExportHistory({ ...currentHistory, [exportKey]: { date: today, workerIds: Array.from(assignedWorkerIds), exportCount: (currentHistory[exportKey]?.exportCount || 0) + 1, lastExportTime: new Date().toISOString() } });
+      updateExportHistory({ ...currentHistory, [exportKey]: { date: today, workerIds: allAssignedWorkerIds, exportCount: (currentHistory[exportKey]?.exportCount || 0) + 1, lastExportTime: new Date().toISOString() } });
       XLSX.writeFile(wb, fileName);
       showNotification(isFirstExport ? `Listado completo exportado: ${fileName}` : `Nuevos operarios exportados: ${fileName}`, 'success');
-      
+
     } catch (error) {
       console.error('Error al exportar listado de acceso:', error);
       showNotification('Error al exportar listado de acceso', 'error');
