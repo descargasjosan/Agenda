@@ -423,7 +423,7 @@ const syncFromStatusRecords = useCallback(async (showSummary: boolean = false) =
    // Cargar datos manuales (F, D, R, horas) desde Supabase
    const manualData: {[workerId: string]: {[day: number]: string}} = {};
    planning.workerControls
-      .filter(control => control.month === selectedMonth && control.value !== 'ADV') // Excluir anticipos
+      .filter(control => control.month === selectedMonth && control.value !== 'ADV' && control.value !== 'L') // Excluir anticipos y liquidaciones
       .forEach(control => {
          if (!manualData[control.worker_id]) {
             manualData[control.worker_id] = {};
