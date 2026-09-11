@@ -31,6 +31,24 @@ export interface AdvanceInfo {
   paid: boolean;
 }
 
+export interface FuelRecord {
+  id: string;
+  date: string;
+  liters: number | null;
+  cost: number;
+}
+
+export interface FuelSummary {
+  success: boolean;
+  worker: WorkerInfo;
+  records: FuelRecord[];
+  totals: {
+    count: number;
+    liters: number;
+    cost: number;
+  };
+}
+
 export interface WorkerSummary {
   success: boolean;
   worker: WorkerInfo;

@@ -1,8 +1,10 @@
+/// <reference types="vite/client" />
 import { useState, useCallback, useEffect } from 'react';
-import { Calendar, ChevronLeft, ChevronRight, LogOut, Clock, Wallet, PiggyBank, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
-import type { WorkerSummary } from './lib/types';
+import { Calendar, ChevronLeft, ChevronRight, LogOut, Clock, Wallet, PiggyBank, AlertCircle, CheckCircle2, Loader2, Droplet, Sun } from 'lucide-react';
+import type { WorkerSummary, FuelSummary, FuelRecord, WorkerInfo } from './lib/types';
 
 const API_URL = import.meta.env.VITE_API_URL || '/api/worker-hours';
+const FUEL_API_URL = import.meta.env.VITE_API_FUEL_URL || '/api/fuel';
 
 const MONTH_NAMES = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -297,24 +299,259 @@ function SummaryView({
           <DayList days={summary.days} />
         )}
       </main>
+    </div>
+  );
+}
 
-      <div className="fixed bottom-0 left-0 right-0 border-t border-slate-200 bg-white px-4 py-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
-        <div className="mx-auto max-w-md">
-          <div className="flex items-center justify-between text-sm">
-            <div className="flex items-center gap-2 text-slate-600">
-              <PiggyBank size={18} />
-              <span className="font-medium">A pagar:</span>
-            </div>
-            <span className="text-lg font-bold text-blue-700">{summary.total}h</span>
-          </div>
+function FuelRecordCard({ record }: { record: FuelRecord }) {
+  const date = new Date(`${record.date}T00:00:00`);
+  return (
+    <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-3">
+      <div className="flex items-center gap-3">
+        <div className="flex h-11 w-11 flex-col items-center justify-center rounded-lg bg-slate-100 text-slate-700">
+          <span className="text-[10px] font-medium uppercase leading-none">{date.toLocaleDateString('es-ES', { weekday: 'short' })}</span>
+          <span className="text-lg font-bold leading-tight">{date.getDate()}</span>
         </div>
+        <div>
+          <p className="text-sm font-medium text-slate-900">
+            {date.toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })}
+          </p>
+        </div>
+      </div>
+
+      <div className="text-right">
+        <p className="text-sm font-bold text-slate-900">
+          {record.liters != null ? `${record.liters.toFixed(2)} L` : '-'}
+        </p>
+        <p className="text-sm font-bold text-blue-700">{record.cost.toFixed(2)} €</p>
       </div>
     </div>
   );
 }
 
+function FuelView({
+  dni,
+  pin,
+  worker,
+  onLogout
+}: {
+  dni: string;
+  pin: string;
+  worker: WorkerInfo;
+  onLogout: () => void;
+}) {
+  const today = new Date().toISOString().split('T')[0];
+  const yearStart = `${new Date().getFullYear()}-01-01`;
+
+  const [startDate, setStartDate] = useState(yearStart);
+  const [endDate, setEndDate] = useState(today);
+  const [records, setRecords] = useState<FuelRecord[]>([]);
+  const [totals, setTotals] = useState({ count: 0, liters: 0, cost: 0 });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchFuel = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch(FUEL_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          dni,
+          pin,
+          startDate,
+          endDate
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || data.error || 'Error al consultar repostajes');
+      }
+
+      const fuel = data as FuelSummary;
+      setRecords(fuel.records || []);
+      setTotals(fuel.totals || { count: 0, liters: 0, cost: 0 });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error desconocido');
+    } finally {
+      setLoading(false);
+    }
+  }, [dni, pin, startDate, endDate]);
+
+  useEffect(() => {
+    fetchFuel();
+  }, [fetchFuel]);
+
+  return (
+    <div className="min-h-screen bg-slate-50 pb-24">
+      <header className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-4 shadow-sm">
+        <div className="mx-auto max-w-md">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-slate-900">{worker.name}</h2>
+              <p className="text-xs text-slate-500">{worker.dni}</p>
+            </div>
+            <button
+              onClick={onLogout}
+              className="flex items-center gap-1 rounded-lg bg-slate-100 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-200"
+            >
+              <LogOut size={16} />
+              Salir
+            </button>
+          </div>
+
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="fuel-start" className="mb-1 block text-xs font-medium text-slate-600">
+                Desde
+              </label>
+              <input
+                id="fuel-start"
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+              />
+            </div>
+            <div>
+              <label htmlFor="fuel-end" className="mb-1 block text-xs font-medium text-slate-600">
+                Hasta
+              </label>
+              <input
+                id="fuel-end"
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+              />
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-md px-4 pt-4">
+        {error && (
+          <div className="mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-700 ring-1 ring-red-200">
+            {error}
+          </div>
+        )}
+
+        <div className="mb-4 grid grid-cols-3 gap-3">
+          <SummaryCard label="Repostajes" value={String(totals.count)} color="blue" />
+          <SummaryCard label="Litros" value={totals.liters.toFixed(2)} color="amber" />
+          <SummaryCard label="Coste" value={`${totals.cost.toFixed(2)}€`} color="green" />
+        </div>
+
+        <div className="mb-3 flex items-center gap-2">
+          <Droplet size={18} className="text-slate-500" />
+          <h3 className="text-base font-bold text-slate-800">Repostajes</h3>
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 size={32} className="animate-spin text-blue-600" />
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {records.map((record) => (
+              <FuelRecordCard key={record.id} record={record} />
+            ))}
+            {records.length === 0 && (
+              <p className="py-8 text-center text-sm text-slate-500">
+                No hay repostajes en este rango de fechas.
+              </p>
+            )}
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
+
+function VacationsView({
+  worker,
+  onLogout
+}: {
+  worker: WorkerInfo;
+  onLogout: () => void;
+}) {
+  return (
+    <div className="min-h-screen bg-slate-50 pb-24">
+      <header className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-4 shadow-sm">
+        <div className="mx-auto max-w-md">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-slate-900">{worker.name}</h2>
+              <p className="text-xs text-slate-500">{worker.dni}</p>
+            </div>
+            <button
+              onClick={onLogout}
+              className="flex items-center gap-1 rounded-lg bg-slate-100 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-200"
+            >
+              <LogOut size={16} />
+              Salir
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-md px-4 pt-12 text-center">
+        <div className="rounded-2xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
+          <Sun size={48} className="mx-auto mb-4 text-amber-500" />
+          <h3 className="text-lg font-bold text-slate-900">Vacaciones</h3>
+          <p className="mt-2 text-sm text-slate-500">Apartado en construcción.</p>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+function BottomNav({
+  activeTab,
+  onChange
+}: {
+  activeTab: 'hours' | 'fuel' | 'vacations';
+  onChange: (tab: 'hours' | 'fuel' | 'vacations') => void;
+}) {
+  const tabs = [
+    { id: 'hours', label: 'Horas', icon: Clock },
+    { id: 'fuel', label: 'Combustible', icon: Droplet },
+    { id: 'vacations', label: 'Vacaciones', icon: Sun }
+  ] as const;
+
+  return (
+    <nav className="fixed bottom-0 left-0 right-0 z-20 border-t border-slate-200 bg-white px-4 pb-3 pt-2 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+      <div className="mx-auto flex max-w-md items-center justify-around">
+        {tabs.map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => onChange(tab.id)}
+              className={`flex flex-col items-center gap-1 rounded-lg px-3 py-2 text-xs font-medium transition ${
+                isActive ? 'bg-blue-50 text-blue-700' : 'text-slate-500 hover:bg-slate-50'
+              }`}
+            >
+              <Icon size={22} className={isActive ? 'text-blue-700' : 'text-slate-400'} />
+              <span>{tab.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </nav>
+  );
+}
+
 export default function App() {
   const [view, setView] = useState<'login' | 'summary'>('login');
+  const [activeTab, setActiveTab] = useState<'hours' | 'fuel' | 'vacations'>('hours');
   const [dni, setDni] = useState('');
   const [pin, setPin] = useState('');
   const [month, setMonth] = useState(getCurrentMonth());
@@ -372,6 +609,7 @@ export default function App() {
     setDni('');
     setPin('');
     setSummary(null);
+    setActiveTab('hours');
     setView('login');
     setError(null);
   }, []);
@@ -381,13 +619,24 @@ export default function App() {
   }
 
   return (
-    <SummaryView
-      summary={summary}
-      month={month}
-      onMonthChange={handleMonthChange}
-      onLogout={handleLogout}
-      loading={loading}
-      error={error}
-    />
+    <div className="relative min-h-screen bg-slate-50">
+      {activeTab === 'hours' && (
+        <SummaryView
+          summary={summary}
+          month={month}
+          onMonthChange={handleMonthChange}
+          onLogout={handleLogout}
+          loading={loading}
+          error={error}
+        />
+      )}
+      {activeTab === 'fuel' && (
+        <FuelView dni={dni} pin={pin} worker={summary.worker} onLogout={handleLogout} />
+      )}
+      {activeTab === 'vacations' && (
+        <VacationsView worker={summary.worker} onLogout={handleLogout} />
+      )}
+      <BottomNav activeTab={activeTab} onChange={setActiveTab} />
+    </div>
   );
 }
