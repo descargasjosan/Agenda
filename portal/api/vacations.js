@@ -118,8 +118,8 @@ export default async function handler(req, res) {
     }
 
     const vacationConfig = (worker.vacationConfig || {})[String(year)] || {};
-    const totalDays = typeof vacationConfig.totalDays === 'number' ? vacationConfig.totalDays : 0;
-    const carryOver = typeof vacationConfig.carryOver === 'number' ? vacationConfig.carryOver : 0;
+    const totalDays = Number.isFinite(Number(vacationConfig.totalDays)) ? Number(vacationConfig.totalDays) : 34;
+    const carryOver = Number.isFinite(Number(vacationConfig.carryOver)) ? Number(vacationConfig.carryOver) : 0;
     const annualTotal = totalDays + carryOver;
 
     const statusRecords = Array.isArray(worker.statusRecords) ? worker.statusRecords : [];

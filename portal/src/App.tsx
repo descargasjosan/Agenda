@@ -594,7 +594,12 @@ function VacationsView({
 
         {data && (
           <div className="mb-4 grid grid-cols-3 gap-3">
-            <SummaryCard label="Total" value={String(data.annualTotal)} color="green" />
+            <SummaryCard
+              label="Derecho"
+              value={String(data.annualTotal)}
+              sub={`${data.totalDays} + ${data.carryOver} arr.`}
+              color="green"
+            />
             <SummaryCard label="Marcados" value={String(data.taken)} color="amber" />
             <SummaryCard label="Restantes" value={String(data.remaining)} color="blue" />
           </div>
