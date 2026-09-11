@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 import { useState, useCallback, useEffect } from 'react';
-import { Calendar, ChevronLeft, ChevronRight, LogOut, Clock, Wallet, PiggyBank, AlertCircle, CheckCircle2, Loader2, Droplet, Sun } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, LogOut, Clock, Wallet, PiggyBank, AlertCircle, CheckCircle2, Loader2, Fuel, Sun } from 'lucide-react';
 import type { WorkerSummary, FuelSummary, FuelRecord, VacationSummary, WorkerInfo } from './lib/types';
 
 const API_URL = import.meta.env.VITE_API_URL || '/api/worker-hours';
@@ -450,8 +450,8 @@ function FuelView({
         </div>
 
         <div className="mb-3 flex items-center gap-2">
-          <Droplet size={18} className="text-slate-500" />
-          <h3 className="text-base font-bold text-slate-800">Repostajes</h3>
+          <Fuel size={18} className="text-amber-600" />
+          <h3 className="text-base font-bold text-amber-900">Repostajes</h3>
         </div>
 
         {loading ? (
@@ -665,10 +665,16 @@ function BottomNav({
   onChange: (tab: 'hours' | 'fuel' | 'vacations') => void;
 }) {
   const tabs = [
-    { id: 'hours', label: 'Horas', icon: Clock },
-    { id: 'fuel', label: 'Combustible', icon: Droplet },
-    { id: 'vacations', label: 'Vacaciones', icon: Sun }
+    { id: 'hours', label: 'Horas', icon: Clock, color: 'blue' },
+    { id: 'fuel', label: 'Combustible', icon: Fuel, color: 'amber' },
+    { id: 'vacations', label: 'Vacaciones', icon: Sun, color: 'emerald' }
   ] as const;
+
+  const colorMap: Record<typeof tabs[number]['color'], { active: string; inactive: string; activeIcon: string; inactiveIcon: string }> = {
+    blue: { active: 'bg-blue-600 text-white shadow-md shadow-blue-200', inactive: 'text-blue-600 hover:bg-blue-50', activeIcon: 'text-white', inactiveIcon: 'text-blue-500' },
+    amber: { active: 'bg-amber-600 text-white shadow-md shadow-amber-200', inactive: 'text-amber-600 hover:bg-amber-50', activeIcon: 'text-white', inactiveIcon: 'text-amber-500' },
+    emerald: { active: 'bg-emerald-600 text-white shadow-md shadow-emerald-200', inactive: 'text-emerald-600 hover:bg-emerald-50', activeIcon: 'text-white', inactiveIcon: 'text-emerald-500' }
+  };
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-20 border-t border-slate-200 bg-white px-4 pb-3 pt-2 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
@@ -676,15 +682,16 @@ function BottomNav({
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
+          const colors = colorMap[tab.color];
           return (
             <button
               key={tab.id}
               onClick={() => onChange(tab.id)}
-              className={`flex flex-col items-center gap-1 rounded-lg px-3 py-2 text-xs font-medium transition ${
-                isActive ? 'bg-blue-50 text-blue-700' : 'text-slate-500 hover:bg-slate-50'
+              className={`flex flex-col items-center gap-1 rounded-xl px-3 py-2 text-xs font-black transition ${
+                isActive ? colors.active : colors.inactive
               }`}
             >
-              <Icon size={22} className={isActive ? 'text-blue-700' : 'text-slate-400'} />
+              <Icon size={22} className={isActive ? colors.activeIcon : colors.inactiveIcon} />
               <span>{tab.label}</span>
             </button>
           );
