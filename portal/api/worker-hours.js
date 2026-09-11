@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { parseJsonBody } from './_body.js';
 
 const MONTH_NAMES = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -209,7 +210,8 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { dni, pin, month } = req.body || {};
+    const body = await parseJsonBody(req);
+    const { dni, pin, month } = body || {};
 
     if (!dni || !pin) {
       return res.status(400).json({

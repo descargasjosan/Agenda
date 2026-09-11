@@ -49,6 +49,20 @@ export interface FuelSummary {
   };
 }
 
+export interface VacationSummary {
+  success: boolean;
+  worker: WorkerInfo;
+  month: string;
+  monthName: string;
+  year: number;
+  totalDays: number;
+  carryOver: number;
+  annualTotal: number;
+  taken: number;
+  remaining: number;
+  vacationDays: string[];
+}
+
 export interface WorkerSummary {
   success: boolean;
   worker: WorkerInfo;

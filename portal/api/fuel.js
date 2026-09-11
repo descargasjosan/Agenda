@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { parseJsonBody } from './_body.js';
 
 function getSupabaseClient() {
   const url = process.env.SUPABASE_URL;
@@ -37,7 +38,8 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { dni, pin, startDate, endDate } = req.body || {};
+    const body = await parseJsonBody(req);
+    const { dni, pin, startDate, endDate } = body || {};
 
     if (!dni || !pin) {
       return res.status(400).json({

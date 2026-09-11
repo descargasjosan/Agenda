@@ -1,10 +1,11 @@
 /// <reference types="vite/client" />
 import { useState, useCallback, useEffect } from 'react';
 import { Calendar, ChevronLeft, ChevronRight, LogOut, Clock, Wallet, PiggyBank, AlertCircle, CheckCircle2, Loader2, Droplet, Sun } from 'lucide-react';
-import type { WorkerSummary, FuelSummary, FuelRecord, WorkerInfo } from './lib/types';
+import type { WorkerSummary, FuelSummary, FuelRecord, VacationSummary, WorkerInfo } from './lib/types';
 
 const API_URL = import.meta.env.VITE_API_URL || '/api/worker-hours';
 const FUEL_API_URL = import.meta.env.VITE_API_FUEL_URL || '/api/fuel';
+const VACATIONS_API_URL = import.meta.env.VITE_API_VACATIONS_URL || '/api/vacations';
 
 const MONTH_NAMES = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -475,12 +476,72 @@ function FuelView({
 }
 
 function VacationsView({
+  dni,
+  pin,
   worker,
   onLogout
 }: {
+  dni: string;
+  pin: string;
   worker: WorkerInfo;
   onLogout: () => void;
 }) {
+  const [month, setMonth] = useState(getCurrentMonth());
+  const [data, setData] = useState<VacationSummary | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchVacations = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch(VACATIONS_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          dni,
+          pin,
+          month
+        })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.message || result.error || 'Error al consultar vacaciones');
+      }
+
+      setData(result as VacationSummary);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error desconocido');
+      setData(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [dni, pin, month]);
+
+  useEffect(() => {
+    fetchVacations();
+  }, [fetchVacations]);
+
+  const [year, monthNum] = month.split('-').map(Number);
+  const daysInMonth = new Date(year, monthNum, 0).getDate();
+  const firstWeekday = new Date(year, monthNum - 1, 1).getDay();
+  const mondayOffset = (firstWeekday + 6) % 7;
+  const today = new Date().toISOString().slice(0, 10);
+  const vacationSet = new Set(data?.vacationDays || []);
+
+  const days: { day: number; date: string; isWeekend: boolean }[] = [];
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dayStr = String(d).padStart(2, '0');
+    const date = `${month}-${dayStr}`;
+    const weekday = new Date(year, monthNum - 1, d).getDay();
+    days.push({ day: d, date, isWeekend: weekday === 0 || weekday === 6 });
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 pb-24">
       <header className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-4 shadow-sm">
@@ -498,15 +559,94 @@ function VacationsView({
               Salir
             </button>
           </div>
+
+          <div className="mt-4 flex items-center justify-between rounded-xl bg-slate-100 p-2">
+            <button
+              onClick={() => setMonth(addMonths(month, -1))}
+              disabled={loading}
+              className="rounded-lg bg-white p-2 shadow-sm hover:bg-slate-50 disabled:opacity-50"
+            >
+              <ChevronLeft size={20} className="text-slate-700" />
+            </button>
+
+            <div className="flex items-center gap-2 text-sm font-bold text-slate-900">
+              <Calendar size={18} className="text-amber-500" />
+              {formatMonthName(month)}
+            </div>
+
+            <button
+              onClick={() => setMonth(addMonths(month, 1))}
+              disabled={loading}
+              className="rounded-lg bg-white p-2 shadow-sm hover:bg-slate-50 disabled:opacity-50"
+            >
+              <ChevronRight size={20} className="text-slate-700" />
+            </button>
+          </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-md px-4 pt-12 text-center">
-        <div className="rounded-2xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
-          <Sun size={48} className="mx-auto mb-4 text-amber-500" />
-          <h3 className="text-lg font-bold text-slate-900">Vacaciones</h3>
-          <p className="mt-2 text-sm text-slate-500">Apartado en construcción.</p>
-        </div>
+      <main className="mx-auto max-w-md px-4 pt-4">
+        {error && (
+          <div className="mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-700 ring-1 ring-red-200">
+            {error}
+          </div>
+        )}
+
+        {data && (
+          <div className="mb-4 grid grid-cols-3 gap-3">
+            <SummaryCard label="Total" value={String(data.annualTotal)} color="green" />
+            <SummaryCard label="Marcados" value={String(data.taken)} color="amber" />
+            <SummaryCard label="Restantes" value={String(data.remaining)} color="blue" />
+          </div>
+        )}
+
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 size={32} className="animate-spin text-amber-500" />
+          </div>
+        ) : data ? (
+          <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+            <div className="mb-3 grid grid-cols-7 gap-1 text-center">
+              {['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((label) => (
+                <div key={label} className="text-xs font-bold text-slate-500">
+                  {label}
+                </div>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-7 gap-1">
+              {Array.from({ length: mondayOffset }).map((_, i) => (
+                <div key={`empty-${i}`} />
+              ))}
+
+              {days.map(({ day, date, isWeekend }) => {
+                const isVacation = vacationSet.has(date);
+                const isToday = date === today;
+
+                return (
+                  <div
+                    key={date}
+                    className={`flex aspect-square items-center justify-center rounded-lg text-sm font-semibold transition ${
+                      isVacation
+                        ? 'bg-green-500 text-white'
+                        : isWeekend
+                        ? 'text-slate-400'
+                        : 'text-slate-700'
+                    } ${isToday ? 'ring-2 ring-amber-500 ring-offset-1' : ''}`}
+                  >
+                    {day}
+                  </div>
+                );
+              })}
+            </div>
+
+            {data.vacationDays.length === 0 && (
+              <p className="mt-4 text-center text-sm text-slate-500">
+                No hay días de vacaciones en {formatMonthName(month)}.
+              </p>
+            )}
+          </div>
+        ) : null}
       </main>
     </div>
   );
@@ -634,7 +774,7 @@ export default function App() {
         <FuelView dni={dni} pin={pin} worker={summary.worker} onLogout={handleLogout} />
       )}
       {activeTab === 'vacations' && (
-        <VacationsView worker={summary.worker} onLogout={handleLogout} />
+        <VacationsView dni={dni} pin={pin} worker={summary.worker} onLogout={handleLogout} />
       )}
       <BottomNav activeTab={activeTab} onChange={setActiveTab} />
     </div>
