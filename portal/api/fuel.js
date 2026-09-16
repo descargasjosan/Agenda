@@ -71,6 +71,13 @@ export default async function handler(req, res) {
 
     const worker = { ...workerRows[0].data, id: workerRows[0].id };
 
+    if (worker.isArchived) {
+      return res.status(401).json({
+        error: 'Acceso denegado',
+        message: 'DNI o PIN incorrectos'
+      });
+    }
+
     if (!verifyPin(worker, String(pin))) {
       return res.status(401).json({
         error: 'Acceso denegado',
