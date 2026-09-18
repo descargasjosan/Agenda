@@ -125,12 +125,12 @@ function LoginForm({ onLogin, loading, error }: { onLogin: (dni: string, pin: st
               maxLength={10}
               value={pin}
               onChange={(e) => setPin(e.target.value)}
-              placeholder="Últimos 4 dígitos del teléfono"
+              placeholder="PIN de 6 dígitos"
               className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-lg font-medium text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
               required
             />
             <p className="mt-1.5 text-xs text-slate-500">
-              Si no funciona, prueba con un PIN definido por tu supervisor.
+              PIN facilitado por tu supervisor. Si no lo tienes, pídeselo.
             </p>
           </div>
 

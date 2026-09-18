@@ -7,7 +7,9 @@ Portal externo para que los operarios consulten sus horas, acumulados, anticipos
 Una única URL para todos. Cada operario entra con:
 
 - **DNI**
-- **PIN**: últimos 4 dígitos de su teléfono registrado, o un PIN específico guardado en su ficha (`data.portalPin`).
+- **PIN** de 6 dígitos, único por operario, guardado en su ficha (`data.portalPin`) y facilitado en privado por su supervisor.
+
+Los operarios **archivados** no pueden acceder (la API devuelve 401).
 
 ## Tecnología
 
@@ -96,15 +98,19 @@ Haz clic en **Deploy**. Cuando termine el build, Vercel te dará la URL, por eje
 Abre la URL en un móvil o en el navegador con vista móvil e introduce:
 
 - **DNI** de un operario
-- **PIN** = últimos 4 dígitos de su teléfono registrado
-
-Si el operario no tiene teléfono o quieres un PIN fijo, guarda el campo `portalPin` en su `data` de la tabla `workers`.
+- **PIN** de 6 dígitos (el generado con `init-pins.js`)
 
 ## PIN de acceso
 
-Por defecto, el PIN de cada operario son los **últimos 4 dígitos de su teléfono**.
+Cada operario activo tiene un PIN aleatorio de 6 dígitos en `data.portalPin` de la tabla `workers`.
 
-Si un operario no tiene teléfono o quieres asignar un PIN fijo, guarda el campo `portalPin` dentro de `data` del registro en la tabla `workers`.
+Para regenerar todos los PINs (rota el acceso de quien tenga el antiguo):
+
+```bash
+node scripts/init-pins.js
+```
+
+Lee las credenciales de `portal/.env.local` y genera `pins-lista.html`, un listado imprimible (Nombre–DNI–PIN) para repartir en privado. **Bórralo tras repartirlo** — está en `.gitignore` pero contiene todos los PINs.
 
 ## Funcionamiento
 

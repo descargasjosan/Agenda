@@ -69,16 +69,7 @@ function getStatusColor(value) {
 
 function verifyPin(worker, pin) {
   if (!pin || pin.trim().length === 0) return false;
-
-  // Si el operario tiene un PIN definido explícitamente, se usa ese
-  if (worker.portalPin && worker.portalPin === pin) return true;
-
-  // Si no, se usa como PIN los últimos 4 dígitos del teléfono
-  const phoneDigits = (worker.phone || '').replace(/\D/g, '');
-  const phonePin = phoneDigits.slice(-4);
-  if (phonePin && phonePin === pin) return true;
-
-  return false;
+  return Boolean(worker.portalPin) && worker.portalPin === String(pin);
 }
 
 function buildDayList(controls, month, workerId) {
@@ -216,7 +207,7 @@ export default async function handler(req, res) {
     if (!dni || !pin) {
       return res.status(400).json({
         error: 'Faltan datos',
-        message: 'Debes introducir DNI y PIN (últimos 4 dígitos del teléfono)'
+        message: 'Debes introducir DNI y PIN'
       });
     }
 

@@ -14,14 +14,7 @@ function getSupabaseClient() {
 
 function verifyPin(worker, pin) {
   if (!pin || pin.trim().length === 0) return false;
-
-  if (worker.portalPin && worker.portalPin === pin) return true;
-
-  const phoneDigits = (worker.phone || '').replace(/\D/g, '');
-  const phonePin = phoneDigits.slice(-4);
-  if (phonePin && phonePin === pin) return true;
-
-  return false;
+  return Boolean(worker.portalPin) && worker.portalPin === String(pin);
 }
 
 export default async function handler(req, res) {
