@@ -863,7 +863,7 @@ const getCellColor = (value: string) => {
       'F': 'bg-yellow-100 text-yellow-700', // Falta asistencia (cambiado a amarillo)
       'N': 'bg-slate-600 text-white',      // No disponible
       'D': 'bg-gray-100 text-gray-700',     // Permiso retribuido (cambiado a gris)
-      'R': 'bg-sky-100 text-sky-700',      // Reposo domiciliario (cambiado a azul claro)
+      'R': 'bg-violet-100 text-violet-700', // Reposo domiciliario (cambiado a violeta)
       'V': 'bg-green-100 text-green-700'    // Vacaciones (cambiado a verde)
    };
    return colors[value] || 'bg-slate-100 text-slate-700';
@@ -5649,7 +5649,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                         <span className="text-[10px] text-slate-600">Permiso retribuido</span>
                      </div>
                      <div className="flex items-center gap-1">
-                        <div className="w-4 h-4 bg-sky-100 text-sky-700 rounded flex items-center justify-center text-[8px] font-bold">R</div>
+                        <div className="w-4 h-4 bg-violet-100 text-violet-700 rounded flex items-center justify-center text-[8px] font-bold">R</div>
                         <span className="text-[10px] text-slate-600">Reposo domiciliario</span>
                      </div>
                      <div className="flex items-center gap-1">
@@ -6196,9 +6196,10 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                   {/* Input para horas */}
                   <div className="mb-4">
                      <label className="block text-xs font-black text-slate-700 mb-2">Horas (número decimal)</label>
-                     <input 
-                        type="number" 
+                     <input
+                        type="number"
                         step="0.5"
+                        autoFocus
                         placeholder="Ej: 8, 4.5, -2"
                         className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                         onKeyDown={(e) => {
@@ -6219,7 +6220,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                         { code: 'P', label: 'Baja Paternidad', color: 'bg-orange-100 text-orange-700' },
                         { code: 'F', label: 'Falta', color: 'bg-yellow-100 text-yellow-700' },
                         { code: 'D', label: 'Permiso Retribuido', color: 'bg-gray-100 text-gray-700' },
-                        { code: 'R', label: 'Reposo Domiciliario', color: 'bg-sky-100 text-sky-700' },
+                        { code: 'R', label: 'Reposo Domiciliario', color: 'bg-violet-100 text-violet-700' },
                         { code: 'V', label: 'Vacaciones', color: 'bg-green-100 text-green-700' },
                         { code: 'N', label: 'No disponible', color: 'bg-slate-600 text-white' },
                         { code: '', label: 'Limpiar', color: 'bg-white border border-slate-300 text-slate-600' }
