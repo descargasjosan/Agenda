@@ -133,6 +133,19 @@ export interface WorkerStatusRecord {
   totalDays: number;
 }
 
+// --- BAJA EN LA EMPRESA ---
+export type TerminationReason = 'Baja Voluntaria' | 'Periodo Prueba No Superado' | 'Despido';
+export type TerminationNotificationStatus = 'Pendiente de enviar' | 'Enviada' | 'Firmada y recibida' | 'No devuelta';
+
+export interface Termination {
+  reason: TerminationReason;
+  date: string; // Fecha de baja YYYY-MM-DD
+  notificationStatus: TerminationNotificationStatus;
+  notificationSentAt?: string;   // Autocompletado al marcar "Enviada"
+  notificationSignedAt?: string; // Autocompletado al marcar "Firmada y recibida"
+  notes?: string;
+}
+
 export interface Worker {
   id: string;
   code: string;
@@ -163,6 +176,7 @@ export interface Worker {
       carryOver: number;   // Días arrastrados del año anterior
     };
   };
+  termination?: Termination; // Baja en la empresa (motivo + estado de notificación)
 }
 
 export interface WorkCenter {

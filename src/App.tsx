@@ -11,7 +11,7 @@ import PlanningBoard from './components/PlanningBoard';
 import StatisticsPanel from './components/StatisticsPanel';
 import CompactPlanningView from './components/CompactPlanningView';
 import FleetManager from './components/FleetManager';
-import { PlanningState, Worker, Client, Job, Holiday, Vehicle, FuelRecord, DailyNote, MedicalCourse, Course, StandardTask, VehicleAssignment, ContractType, WorkerStatus, WorkerStatusRecord, ViewType, JobType, NoteType, WorkerControlData, WorkerControl } from './lib/types';
+import { PlanningState, Worker, Client, Job, Holiday, Vehicle, FuelRecord, DailyNote, MedicalCourse, Course, StandardTask, VehicleAssignment, ContractType, WorkerStatus, WorkerStatusRecord, ViewType, JobType, NoteType, WorkerControlData, WorkerControl, TerminationReason, TerminationNotificationStatus } from './lib/types';
 import { formatDateDMY, isHoliday, getWorkerDisplayName, getCurrentWorkerStatus, getCurrentWorkerStatusForDate, getNextStatusChange, addOrUpdateStatusRecord, removeStatusRecord, validateAssignment, getWorkerSSFormat } from './lib/utils';
 import { WORKER_ROLES, GENERAL_NOTE_WORKER_ID } from './lib/constants';
 
@@ -868,6 +868,18 @@ const getCellColor = (value: string) => {
    };
    return colors[value] || 'bg-slate-100 text-slate-700';
 };
+
+// Motivos de baja y estados de la notificación de baja
+const TERMINATION_REASONS: TerminationReason[] = ['Baja Voluntaria', 'Periodo Prueba No Superado', 'Despido'];
+const TERMINATION_NOTIF_STATUSES: { status: TerminationNotificationStatus; label: string; color: string }[] = [
+   { status: 'Pendiente de enviar', label: 'Pendiente', color: 'bg-red-100 text-red-700' },
+   { status: 'Enviada', label: 'Enviada', color: 'bg-amber-100 text-amber-700' },
+   { status: 'Firmada y recibida', label: 'Firmada', color: 'bg-green-100 text-green-700' },
+   { status: 'No devuelta', label: 'No devuelta', color: 'bg-slate-600 text-white' }
+];
+
+const getTerminationNotifColor = (status?: TerminationNotificationStatus) =>
+   TERMINATION_NOTIF_STATUSES.find(s => s.status === status)?.color || 'bg-slate-100 text-slate-600';
 
 // Función para calcular totales por operario
 const calculateWorkerTotals = (workerId: string) => {
@@ -4764,6 +4776,13 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                              {worker.firstName || worker.name?.split(' ')[0] || worker.name}
                            </p>
                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">{worker.role}</p>
+                           {worker.termination && (
+                             <p className="mt-1">
+                               <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase ${getTerminationNotifColor(worker.termination.notificationStatus)}`}>
+                                 {worker.termination.reason} · {TERMINATION_NOTIF_STATUSES.find(s => s.status === worker.termination?.notificationStatus)?.label}
+                               </span>
+                             </p>
+                           )}
                         </td>
                         <td className="px-6 py-3">
                            <p className="font-black text-slate-900 text-sm">
@@ -7168,6 +7187,123 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                      </div>
                   )}
                </div>
+            </div>
+
+            <div className="bg-rose-50/50 rounded-2xl p-6 mb-6 border border-rose-100">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-8 h-8 bg-rose-100 rounded-lg flex items-center justify-center text-rose-600">
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+                <h3 className="font-black text-rose-900 uppercase tracking-widest text-xs">Baja en la Empresa</h3>
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Motivo de la baja</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {TERMINATION_REASONS.map(reason => (
+                    <button
+                      key={reason}
+                      onClick={() => {
+                        if (editingWorker.termination?.reason === reason) {
+                          setEditingWorker({ ...editingWorker, termination: undefined });
+                        } else {
+                          const prev = editingWorker.termination;
+                          setEditingWorker({
+                            ...editingWorker,
+                            isArchived: true,
+                            termination: {
+                              reason,
+                              date: prev?.date || new Date().toISOString().split('T')[0],
+                              notificationStatus: prev?.notificationStatus || 'Pendiente de enviar',
+                              notificationSentAt: prev?.notificationSentAt,
+                              notificationSignedAt: prev?.notificationSignedAt,
+                              notes: prev?.notes
+                            }
+                          });
+                        }
+                      }}
+                      className={`py-2.5 px-2 rounded-xl text-[10px] font-black uppercase tracking-wide transition-all ${
+                        editingWorker.termination?.reason === reason
+                          ? 'bg-rose-600 text-white shadow-md shadow-rose-200'
+                          : 'bg-white text-slate-500 border border-rose-100 hover:border-rose-300 hover:text-rose-600'
+                      }`}
+                    >
+                      {reason}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {editingWorker.termination && (
+                <>
+                  <div className="grid grid-cols-2 gap-3 mb-4">
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Fecha de baja</label>
+                      <input
+                        type="date"
+                        className="w-full bg-white border border-rose-100 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-rose-300 outline-none"
+                        value={editingWorker.termination.date}
+                        onChange={e => setEditingWorker({ ...editingWorker, termination: { ...editingWorker.termination!, date: e.target.value } })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Notas (opcional)</label>
+                      <input
+                        className="w-full bg-white border border-rose-100 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-700 placeholder:text-slate-400 focus:ring-2 focus:ring-rose-300 outline-none"
+                        placeholder="Ej: enviado por burofax"
+                        value={editingWorker.termination.notes || ''}
+                        onChange={e => setEditingWorker({ ...editingWorker, termination: { ...editingWorker.termination!, notes: e.target.value || undefined } })}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Notificación de baja</label>
+                    <div className="grid grid-cols-4 gap-2">
+                      {TERMINATION_NOTIF_STATUSES.map(({ status, label, color }) => (
+                        <button
+                          key={status}
+                          onClick={() => {
+                            const t = editingWorker.termination!;
+                            const today = new Date().toISOString().split('T')[0];
+                            setEditingWorker({
+                              ...editingWorker,
+                              termination: {
+                                ...t,
+                                notificationStatus: status,
+                                notificationSentAt: (status === 'Enviada' || status === 'No devuelta')
+                                  ? (t.notificationSentAt || today)
+                                  : status === 'Firmada y recibida' ? t.notificationSentAt : undefined,
+                                notificationSignedAt: status === 'Firmada y recibida'
+                                  ? (t.notificationSignedAt || today)
+                                  : undefined
+                              }
+                            });
+                          }}
+                          className={`py-2.5 px-1 rounded-xl text-[9px] font-black uppercase tracking-wide transition-all ${
+                            editingWorker.termination.notificationStatus === status
+                              ? `${color} ring-2 ring-offset-1 ring-slate-400`
+                              : 'bg-white text-slate-400 border border-rose-100 hover:border-rose-300 hover:text-slate-600'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex gap-4 mt-2 min-h-[14px]">
+                      {editingWorker.termination.notificationStatus === 'Enviada' && editingWorker.termination.notificationSentAt && (
+                        <span className="text-[10px] font-bold text-amber-600">Enviada: {formatDateDMY(editingWorker.termination.notificationSentAt)}</span>
+                      )}
+                      {editingWorker.termination.notificationStatus === 'Firmada y recibida' && editingWorker.termination.notificationSignedAt && (
+                        <span className="text-[10px] font-bold text-green-600">Firmada: {formatDateDMY(editingWorker.termination.notificationSignedAt)}</span>
+                      )}
+                      {editingWorker.termination.notificationStatus === 'No devuelta' && editingWorker.termination.notificationSentAt && (
+                        <span className="text-[10px] font-bold text-slate-500">Enviada: {formatDateDMY(editingWorker.termination.notificationSentAt)} · sin devolver</span>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="flex items-center justify-between pt-6 border-t border-slate-100">
