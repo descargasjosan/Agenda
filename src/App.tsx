@@ -6735,9 +6735,19 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
           <div className="bg-white w-full max-w-4xl rounded-[32px] p-8 shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar" onClick={e => e.stopPropagation()}>
             
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-black text-slate-900 italic uppercase tracking-tight">Editar Operario</h2>
+              <div className="flex items-baseline gap-3">
+                <h2 className="text-xl font-black text-slate-900 italic uppercase tracking-tight">Editar Operario</h2>
+                <span className="text-lg font-black text-rose-600 uppercase tracking-tight">{editingWorker.name}</span>
+              </div>
               <button onClick={() => setEditingWorker(null)} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><X className="w-5 h-5 text-slate-400" /></button>
             </div>
+
+            <details className="group mb-6">
+              <summary className="list-none cursor-pointer flex items-center justify-between bg-slate-100 hover:bg-slate-200 rounded-xl px-4 py-3 transition-colors">
+                <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Datos personales y contrato</span>
+                <ChevronDown className="w-4 h-4 text-slate-400 transition-transform group-open:rotate-180" />
+              </summary>
+              <div className="pt-6">
 
             {/* Primera fila: Nombre - Apellidos - Apodo */}
             <div className="grid grid-cols-12 gap-4 mb-6">
@@ -6870,33 +6880,8 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
               </label>
             </div>
 
-            <div className="bg-blue-50/50 rounded-2xl p-6 mb-6 border border-blue-100">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600">
-                  <GraduationCap className="w-5 h-5" />
-                </div>
-                <h3 className="font-black text-blue-900 uppercase tracking-widest text-xs">Formación y Cursos</h3>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {planning.courses.map(course => (
-                  <label key={course.id} className="flex items-center gap-3 p-3 bg-white rounded-xl border border-blue-100 cursor-pointer hover:border-blue-300 transition-all">
-                    <input 
-                      type="checkbox" 
-                      className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300"
-                      checked={editingWorker.completedCourses?.includes(course.name)}
-                      onChange={e => {
-                        const current = editingWorker.completedCourses || [];
-                        const updated = e.target.checked 
-                          ? [...current, course.name]
-                          : current.filter(c => c !== course.name);
-                        setEditingWorker({...editingWorker, completedCourses: updated});
-                      }}
-                    />
-                    <span className="text-[10px] font-bold text-slate-600 uppercase leading-tight">{course.name}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
+            </details>
 
             <div className="bg-amber-50/50 rounded-2xl p-6 mb-6 border border-amber-100">
               <div className="flex items-center gap-3 mb-4">
@@ -6915,7 +6900,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                  <button onClick={handleAddFuel} className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-black text-[10px] uppercase tracking-widest transition-colors shadow-lg shadow-amber-200">Registrar Repostaje</button>
               </div>
 
-              <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar">
+              <div className="space-y-2 max-h-36 overflow-y-auto custom-scrollbar">
                  {planning.fuelRecords.filter(r => r.workerId === editingWorker.id).length === 0 ? (
                    <p className="text-center text-[10px] text-amber-400 font-bold italic py-4">Sin registros</p>
                  ) : (
@@ -7033,9 +7018,9 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                 </div>
               )}
 
-              <div className="overflow-x-auto">
+              <div className="overflow-auto max-h-36 custom-scrollbar">
                 <table className="w-full text-xs">
-                  <thead>
+                  <thead className="[&_th]:sticky [&_th]:top-0 [&_th]:bg-white">
                     <tr className="border-b border-slate-200">
                       <th className="text-left py-2 px-2 font-black text-slate-400 uppercase tracking-wider text-[10px]">Estado</th>
                       <th className="text-left py-2 px-2 font-black text-slate-400 uppercase tracking-wider text-[10px]">Fecha Inicio</th>
@@ -7210,7 +7195,6 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                           const prev = editingWorker.termination;
                           setEditingWorker({
                             ...editingWorker,
-                            isArchived: true,
                             termination: {
                               reason,
                               date: prev?.date || new Date().toISOString().split('T')[0],
