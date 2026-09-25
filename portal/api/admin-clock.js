@@ -97,6 +97,7 @@ export default async function handler(req, res) {
             id: r.id,
             name: r.data.name,
             dni: r.data.dni,
+            code: r.data.code,
             state: lastState(logs),
             count: effectiveLogs(logs).length,
             logs: logs.map(serializeLog)

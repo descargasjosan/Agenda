@@ -30,6 +30,7 @@ interface OverviewWorker {
   id: string;
   name: string;
   dni: string;
+  code?: string;
   state: 'none' | 'in' | 'paused' | 'out';
   count: number;
   logs: AdminLog[];
@@ -290,6 +291,15 @@ function ActionModal({
 
 // ---------- Vistas ----------
 
+type OverviewFilter = 'all' | OverviewWorker['state'];
+
+const STATE_DOT: Record<OverviewWorker['state'], string> = {
+  in: 'bg-green-500',
+  paused: 'bg-amber-500',
+  out: 'bg-blue-400',
+  none: 'bg-slate-300'
+};
+
 function OverviewPanel({ workers, loading, onRefresh, onOpenHistory }: {
   workers: OverviewWorker[];
   loading: boolean;
@@ -297,10 +307,7 @@ function OverviewPanel({ workers, loading, onRefresh, onOpenHistory }: {
   onOpenHistory: (workerId: string) => void;
 }) {
   const [filter, setFilter] = useState('');
-
-  const filtered = workers.filter(w =>
-    !filter || w.name?.toLowerCase().includes(filter.toLowerCase()) || w.dni?.toLowerCase().includes(filter.toLowerCase())
-  );
+  const [stateFilter, setStateFilter] = useState<OverviewFilter>('all');
 
   const counts = {
     in: workers.filter(w => w.state === 'in').length,
@@ -309,82 +316,201 @@ function OverviewPanel({ workers, loading, onRefresh, onOpenHistory }: {
     none: workers.filter(w => w.state === 'none').length
   };
 
+  const filtered = workers.filter(w => {
+    if (stateFilter !== 'all' && w.state !== stateFilter) return false;
+    if (!filter) return true;
+    const q = filter.toLowerCase();
+    return (
+      w.name?.toLowerCase().includes(q) ||
+      w.dni?.toLowerCase().includes(q) ||
+      String(w.code || '').toLowerCase().includes(q)
+    );
+  });
+
+  const stateButtons: { id: OverviewFilter; label: string; count: number }[] = [
+    { id: 'all', label: 'Todos', count: workers.length },
+    { id: 'in', label: 'Trabajando', count: counts.in },
+    { id: 'paused', label: 'En pausa', count: counts.paused },
+    { id: 'out', label: 'Cerrados', count: counts.out },
+    { id: 'none', label: 'Sin fichar', count: counts.none }
+  ];
+
   return (
     <div className="p-6">
-      <div className="mb-6 grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { label: 'Trabajando', value: counts.in, classes: 'bg-green-50 text-green-700 ring-green-200' },
-          { label: 'En pausa', value: counts.paused, classes: 'bg-amber-50 text-amber-700 ring-amber-200' },
-          { label: 'Cerrados', value: counts.out, classes: 'bg-blue-50 text-blue-700 ring-blue-200' },
-          { label: 'Sin fichar', value: counts.none, classes: 'bg-slate-50 text-slate-600 ring-slate-200' }
-        ].map(c => (
-          <div key={c.label} className={`rounded-2xl p-4 ring-1 ${c.classes}`}>
-            <p className="text-[10px] font-black uppercase tracking-widest opacity-70">{c.label}</p>
-            <p className="mt-1 text-3xl font-black">{c.value}</p>
-          </div>
-        ))}
-      </div>
-
-      <div className="mb-4 flex items-center gap-3">
+      {/* Filtros */}
+      <div className="mb-4 flex flex-wrap items-center gap-4">
         <input
           type="text"
           value={filter}
           onChange={e => setFilter(e.target.value)}
-          placeholder="🔍 Buscar operario..."
+          placeholder="🔍 Código, nombre o DNI..."
           className="w-64 p-2.5 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
         />
+        <div className="flex items-center gap-1.5">
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mr-1">Estado</span>
+          {stateButtons.map(b => (
+            <button
+              key={b.id}
+              onClick={() => setStateFilter(b.id)}
+              className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-colors border ${
+                stateFilter === b.id
+                  ? 'bg-slate-900 text-white border-slate-900'
+                  : 'bg-white text-slate-400 border-slate-200 hover:text-slate-600'
+              }`}
+            >
+              {b.label} <span className="opacity-60">{b.count}</span>
+            </button>
+          ))}
+        </div>
         <button
           onClick={onRefresh}
           disabled={loading}
-          className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 transition-all"
+          className="ml-auto flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 transition-all"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           Actualizar
         </button>
       </div>
 
-      {loading && workers.length === 0 ? (
-        <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-blue-600" /></div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filtered.map(w => {
-            const badge = STATE_BADGE[w.state];
-            const mins = workedMinutesToday(w.logs);
-            return (
-              <button
-                key={w.id}
-                onClick={() => onOpenHistory(w.id)}
-                className="text-left bg-white rounded-2xl p-5 ring-1 ring-slate-200 shadow-sm hover:shadow-md hover:ring-blue-200 transition-all"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="text-sm font-black text-slate-900 truncate">{w.name}</p>
-                    <p className="text-[10px] font-bold text-slate-400">{w.dni}</p>
-                  </div>
-                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-widest ${badge.classes}`}>
-                    {badge.label}
-                  </span>
-                </div>
+      {/* Tabla */}
+      <div className="bg-white rounded-2xl ring-1 ring-slate-200 shadow-sm overflow-hidden">
+        {loading && workers.length === 0 ? (
+          <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-blue-600" /></div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead className="bg-slate-100 border-b border-slate-200">
+                <tr>
+                  <th className="px-4 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest w-16">Cód.</th>
+                  <th className="px-4 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Operario</th>
+                  <th className="px-4 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Entrada</th>
+                  <th className="px-4 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Pausa</th>
+                  <th className="px-4 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Salida</th>
+                  <th className="px-4 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest text-right">Tiempo hoy</th>
+                  <th className="px-4 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Estado</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filtered.map(w => {
+                  const eff = w.logs.filter(l => !l.superseded && !l.voided && l.type !== 'void');
+                  const entries = eff.filter(l => l.type === 'in');
+                  const exits = eff.filter(l => l.type === 'out');
 
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  {w.logs.filter(l => !l.superseded && !l.voided && l.type !== 'void').map(l => (
-                    <span key={l.id} className={`rounded-lg px-2 py-1 text-[10px] font-black tabular-nums ${TYPE_BADGE[l.type] || 'bg-slate-100 text-slate-600'}`}>
-                      {l.type === 'in' ? 'E' : l.type === 'out' ? 'S' : l.type === 'pause_start' ? 'P⏸' : 'P▶'} {l.time}
+                  const pauses: { start: AdminLog; end?: AdminLog }[] = [];
+                  let openPause: AdminLog | null = null;
+                  for (const l of eff) {
+                    if (l.type === 'pause_start') openPause = l;
+                    else if (l.type === 'pause_end' && openPause) {
+                      pauses.push({ start: openPause, end: l });
+                      openPause = null;
+                    }
+                  }
+                  if (openPause) pauses.push({ start: openPause });
+
+                  const mins = workedMinutesToday(w.logs);
+                  const lastWithGps = [...eff].reverse().find(l => l.lat != null && l.lng != null);
+
+                  const Time = ({ t, log }: { t: string; log?: AdminLog }) => (
+                    <span className="inline-flex items-center gap-1 font-black tabular-nums text-slate-900">
+                      {t}
+                      {log && log.lat != null && log.lng != null && (
+                        <a
+                          href={`https://www.google.com/maps?q=${log.lat},${log.lng}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          title="Ver ubicación"
+                          onClick={e => e.stopPropagation()}
+                          className="text-emerald-500 hover:text-emerald-700"
+                        >
+                          <MapPin className="w-3.5 h-3.5" />
+                        </a>
+                      )}
                     </span>
-                  ))}
-                  {w.count === 0 && <span className="text-[10px] font-bold text-slate-300">Sin fichajes hoy</span>}
-                </div>
+                  );
 
-                {mins > 0 && (
-                  <p className="mt-3 text-[10px] font-black uppercase tracking-widest text-slate-400">
-                    Hoy: <span className="text-slate-900">{formatMinutes(mins)}</span>
-                  </p>
+                  return (
+                    <tr
+                      key={w.id}
+                      onClick={() => onOpenHistory(w.id)}
+                      className="hover:bg-slate-50 transition-colors cursor-pointer"
+                    >
+                      <td className="px-4 py-3">
+                        <div className="w-8 h-8 rounded-xl flex items-center justify-center font-black text-[10px] border bg-slate-900 text-white border-slate-900">
+                          {w.code || '—'}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <p className="font-black text-slate-900 text-sm">{w.name}</p>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">{w.dni}</p>
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        {entries.length === 0 ? (
+                          <span className="text-slate-300 font-bold">—</span>
+                        ) : (
+                          <div className="space-y-0.5">
+                            {entries.map(l => <div key={l.id}><Time t={l.time} log={l} /></div>)}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        {pauses.length === 0 ? (
+                          <span className="text-slate-300 font-bold">—</span>
+                        ) : (
+                          <div className="space-y-0.5">
+                            {pauses.map((p, i) => (
+                              <div key={i} className="flex items-center gap-1">
+                                <Time t={p.start.time} log={p.start} />
+                                <span className="text-slate-300 font-bold">→</span>
+                                {p.end ? <Time t={p.end.time} log={p.end} /> : <span className="text-amber-600 font-black">…</span>}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        {exits.length === 0 ? (
+                          <span className="text-slate-300 font-bold">—</span>
+                        ) : (
+                          <div className="space-y-0.5">
+                            {exits.map(l => <div key={l.id}><Time t={l.time} log={l} /></div>)}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-right">
+                        {mins > 0 ? (
+                          <span className="font-black tabular-nums text-slate-900">{formatMinutes(mins)}</span>
+                        ) : (
+                          <span className="text-slate-300 font-bold">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="inline-flex items-center gap-1.5">
+                          <span className={`h-2 w-2 rounded-full ${STATE_DOT[w.state]}`} />
+                          <span className="text-[10px] font-black uppercase tracking-widest text-slate-600">
+                            {STATE_BADGE[w.state].label}
+                          </span>
+                          {lastWithGps && (
+                            <span title="Último fichaje con GPS">
+                              <MapPin className="w-3 h-3 text-emerald-500" />
+                            </span>
+                          )}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {filtered.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="px-6 py-16 text-center text-xs font-black uppercase tracking-widest text-slate-400">
+                      Sin operarios con ese filtro
+                    </td>
+                  </tr>
                 )}
-              </button>
-            );
-          })}
-        </div>
-      )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
