@@ -47,14 +47,6 @@ const STATE_BADGE: Record<OverviewWorker['state'], { label: string; classes: str
   none: { label: 'Sin fichar', classes: 'bg-slate-100 text-slate-500' }
 };
 
-const TYPE_BADGE: Record<string, string> = {
-  in: 'bg-green-100 text-green-700',
-  out: 'bg-rose-100 text-rose-700',
-  pause_start: 'bg-amber-100 text-amber-700',
-  pause_end: 'bg-amber-100 text-amber-700',
-  void: 'bg-slate-200 text-slate-500'
-};
-
 function workedMinutesToday(logs: AdminLog[]) {
   const eff = logs.filter(l => !l.superseded && !l.voided && l.type !== 'void');
   let minutes = 0;
@@ -411,7 +403,7 @@ function OverviewPanel({ workers, loading, onRefresh, onOpenHistory }: {
                   const lastWithGps = [...eff].reverse().find(l => l.lat != null && l.lng != null);
 
                   const Time = ({ t, log }: { t: string; log?: AdminLog }) => (
-                    <span className="inline-flex items-center gap-1 font-black tabular-nums text-slate-900">
+                    <span className="inline-flex items-center gap-1 font-medium tabular-nums text-slate-800">
                       {t}
                       {log && log.lat != null && log.lng != null && (
                         <a
@@ -435,13 +427,13 @@ function OverviewPanel({ workers, loading, onRefresh, onOpenHistory }: {
                       className="hover:bg-slate-50 transition-colors cursor-pointer"
                     >
                       <td className="px-4 py-3">
-                        <div className="w-8 h-8 rounded-xl flex items-center justify-center font-black text-[10px] border bg-slate-900 text-white border-slate-900">
+                        <div className="w-8 h-8 rounded-xl flex items-center justify-center font-bold text-[10px] border bg-slate-100 text-slate-500 border-slate-200">
                           {w.code || '—'}
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        <p className="font-black text-slate-900 text-sm">{w.name}</p>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">{w.dni}</p>
+                        <p className="font-semibold text-slate-800 text-sm">{w.name}</p>
+                        <p className="text-[10px] text-slate-400 uppercase tracking-tight">{w.dni}</p>
                       </td>
                       <td className="px-4 py-3 text-sm">
                         {entries.length === 0 ? (
@@ -478,7 +470,7 @@ function OverviewPanel({ workers, loading, onRefresh, onOpenHistory }: {
                       </td>
                       <td className="px-4 py-3 text-sm text-right">
                         {mins > 0 ? (
-                          <span className="font-black tabular-nums text-slate-900">{formatMinutes(mins)}</span>
+                          <span className="font-medium tabular-nums text-slate-800">{formatMinutes(mins)}</span>
                         ) : (
                           <span className="text-slate-300 font-bold">—</span>
                         )}
@@ -534,13 +526,16 @@ function HistoryPanel({
   }
   const dates = Object.keys(byDate).sort().reverse();
 
+  const logById: Record<string, AdminLog> = {};
+  for (const l of logs) logById[l.id] = l;
+
   return (
     <div className="p-6">
-      <div className="mb-6 flex flex-wrap items-center gap-3">
+      <div className="mb-4 flex flex-wrap items-center gap-3">
         <select
           value={workerId}
           onChange={e => onWorkerChange(e.target.value)}
-          className="bg-white text-sm font-bold px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[240px]"
+          className="bg-white text-sm font-medium px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[240px]"
         >
           <option value="">Selecciona operario…</option>
           {workers.map(w => (
@@ -551,13 +546,13 @@ function HistoryPanel({
           type="month"
           value={month}
           onChange={e => onMonthChange(e.target.value)}
-          className="bg-white text-sm font-bold px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="bg-white text-sm font-medium px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
         {workerId && (
           <button
             onClick={onRefresh}
             disabled={loading}
-            className="flex items-center gap-2 px-4 py-3 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50"
+            className="ml-auto flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
             Actualizar
@@ -572,113 +567,168 @@ function HistoryPanel({
         </div>
       ) : loading ? (
         <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-blue-600" /></div>
-      ) : dates.length === 0 ? (
-        <div className="rounded-2xl bg-white ring-1 ring-slate-200 p-16 text-center">
-          <p className="text-xs font-black uppercase tracking-widest text-slate-400">Sin fichajes en este mes</p>
-          <button
-            onClick={() => onAction({ kind: 'add', workerId, date: `${month}-01` })}
-            className="mt-4 px-6 py-3 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-800"
-          >
-            + Añadir fichaje
-          </button>
-        </div>
       ) : (
-        <div className="space-y-4">
-          {dates.map(date => {
-            const dayLogs = byDate[date];
-            const d = new Date(`${date}T00:00:00`);
-            return (
-              <div key={date} className="bg-white rounded-2xl ring-1 ring-slate-200 shadow-sm overflow-hidden">
-                <div className="flex items-center justify-between px-5 py-3 bg-slate-50 border-b border-slate-100">
-                  <p className="text-xs font-black uppercase tracking-widest text-slate-700 capitalize">
-                    {d.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}
-                  </p>
-                  <button
-                    onClick={() => onAction({ kind: 'add', workerId, date })}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-100"
-                  >
-                    <Plus className="w-3 h-3" /> Fichaje
-                  </button>
-                </div>
-                <div className="divide-y divide-slate-50">
-                  {dayLogs.map(l => {
-                    const inactive = l.superseded || l.voided || l.type === 'void';
-                    return (
-                      <div key={l.id} className={`flex items-center justify-between px-5 py-3 ${inactive ? 'opacity-40' : ''}`}>
-                        <div className="flex items-center gap-3 min-w-0">
-                          <span className={`rounded-lg px-2.5 py-1 text-[10px] font-black uppercase tracking-widest ${TYPE_BADGE[l.type] || 'bg-slate-100 text-slate-600'}`}>
-                            {l.label}
-                          </span>
-                          <span className={`text-sm font-black tabular-nums text-slate-900 ${inactive ? 'line-through' : ''}`}>
-                            {l.time}
-                          </span>
-                          <div className="flex items-center gap-1.5">
-                            {l.source === 'admin' && (
-                              <span className="rounded bg-indigo-50 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-widest text-indigo-600">Admin</span>
-                            )}
-                            {l.correctsId && l.type !== 'void' && (
-                              <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-widest text-blue-600">Corrección</span>
-                            )}
-                            {l.type === 'void' && (
-                              <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-widest text-slate-500">Anulación</span>
-                            )}
-                            {l.voided && (
-                              <span className="rounded bg-rose-50 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-widest text-rose-500">Anulado</span>
-                            )}
-                            {l.superseded && !l.voided && (
-                              <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-widest text-slate-400">Sustituido</span>
-                            )}
-                            <LocationPin lat={l.lat} lng={l.lng} />
-                          </div>
-                          {l.correctionReason && (
-                            <span className="text-[10px] font-bold text-slate-400 truncate">· {l.correctionReason}</span>
-                          )}
-                        </div>
-                        {!inactive && (
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            <button
-                              onClick={() => onAction({ kind: 'correct', workerId, date, log: l })}
-                              title="Corregir hora"
-                              className="p-2 rounded-lg text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition-all"
-                            >
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => onAction({ kind: 'void', workerId, date, log: l })}
-                              title="Anular fichaje"
-                              className="p-2 rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-all"
-                            >
-                              <Ban className="w-3.5 h-3.5" />
-                            </button>
+        <div className="bg-white rounded-2xl ring-1 ring-slate-200 shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead className="bg-slate-100 border-b border-slate-200">
+                <tr>
+                  <th className="px-4 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Fecha</th>
+                  <th className="px-4 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Entrada</th>
+                  <th className="px-4 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Pausa</th>
+                  <th className="px-4 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Salida</th>
+                  <th className="px-4 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest text-right">Total</th>
+                  <th className="px-4 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Observaciones</th>
+                  <th className="px-4 py-4 w-12"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {dates.map(date => {
+                  const dayLogs = byDate[date];
+                  const d = new Date(`${date}T00:00:00`);
+                  const eff = dayLogs.filter(l => !l.superseded && !l.voided && l.type !== 'void');
+                  const entries = eff.filter(l => l.type === 'in');
+                  const exits = eff.filter(l => l.type === 'out');
+                  const supersededLogs = dayLogs.filter(l => (l.superseded || l.voided) && l.type !== 'void');
+                  const corrections = dayLogs.filter(l => l.correctionReason);
+
+                  const pauses: { start: AdminLog; end?: AdminLog }[] = [];
+                  let openPause: AdminLog | null = null;
+                  for (const l of eff) {
+                    if (l.type === 'pause_start') openPause = l;
+                    else if (l.type === 'pause_end' && openPause) {
+                      pauses.push({ start: openPause, end: l });
+                      openPause = null;
+                    }
+                  }
+                  if (openPause) pauses.push({ start: openPause });
+
+                  const mins = workedMinutesToday(dayLogs);
+
+                  const Punch = ({ l }: { l: AdminLog }) => (
+                    <div className="flex items-center gap-1 group">
+                      <span className="font-medium tabular-nums text-slate-800">{l.time}</span>
+                      {l.lat != null && l.lng != null && (
+                        <a
+                          href={`https://www.google.com/maps?q=${l.lat},${l.lng}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          title="Ver ubicación"
+                          onClick={e => e.stopPropagation()}
+                          className="text-emerald-500 hover:text-emerald-700"
+                        >
+                          <MapPin className="w-3.5 h-3.5" />
+                        </a>
+                      )}
+                      {l.source === 'admin' && (
+                        <span className="text-[9px] font-semibold uppercase tracking-wider text-indigo-400">admin</span>
+                      )}
+                      {l.correctsId && (
+                        <span className="text-[9px] font-semibold uppercase tracking-wider text-blue-400">corr.</span>
+                      )}
+                      <button
+                        onClick={() => onAction({ kind: 'correct', workerId, date, log: l })}
+                        title="Corregir hora"
+                        className="p-1 rounded text-slate-300 hover:bg-blue-50 hover:text-blue-600 transition-all"
+                      >
+                        <Pencil className="w-3 h-3" />
+                      </button>
+                      <button
+                        onClick={() => onAction({ kind: 'void', workerId, date, log: l })}
+                        title="Anular fichaje"
+                        className="p-1 rounded text-slate-300 hover:bg-rose-50 hover:text-rose-600 transition-all"
+                      >
+                        <Ban className="w-3 h-3" />
+                      </button>
+                    </div>
+                  );
+
+                  return (
+                    <tr key={date} className="hover:bg-slate-50/60 transition-colors">
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <p className="font-medium text-slate-800 text-sm capitalize">
+                          {d.toLocaleDateString('es-ES', { weekday: 'short' })}
+                          <span className="text-slate-400"> · </span>
+                          {d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                        </p>
+                      </td>
+                      <td className="px-4 py-3 text-sm align-top">
+                        {entries.length === 0 ? <span className="text-slate-300">—</span> : (
+                          <div className="space-y-1">{entries.map(l => <Punch key={l.id} l={l} />)}</div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-sm align-top">
+                        {pauses.length === 0 ? <span className="text-slate-300">—</span> : (
+                          <div className="space-y-1">
+                            {pauses.map((p, i) => (
+                              <div key={i} className="flex items-center gap-1">
+                                <Punch l={p.start} />
+                                <span className="text-slate-300">→</span>
+                                {p.end ? <Punch l={p.end} /> : <span className="text-amber-600 font-medium">…</span>}
+                              </div>
+                            ))}
                           </div>
                         )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
+                      </td>
+                      <td className="px-4 py-3 text-sm align-top">
+                        {exits.length === 0 ? <span className="text-slate-300">—</span> : (
+                          <div className="space-y-1">{exits.map(l => <Punch key={l.id} l={l} />)}</div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-right align-top">
+                        {mins > 0 ? (
+                          <span className="font-medium tabular-nums text-slate-800">{formatMinutes(mins)}</span>
+                        ) : <span className="text-slate-300">—</span>}
+                      </td>
+                      <td className="px-4 py-3 align-top">
+                        <div className="space-y-1">
+                          {supersededLogs.map(l => (
+                            <p key={l.id} className="text-[10px] text-slate-400">
+                              <span className="line-through">{l.label} {l.time}</span>
+                              <span className="ml-1">{l.voided ? 'anulado' : 'sustituido'}</span>
+                            </p>
+                          ))}
+                          {corrections.map(l => (
+                            <p key={`r-${l.id}`} className="text-[10px] text-slate-400" title={l.createdBy || ''}>
+                              {l.type === 'void' ? 'Anulación' : 'Corrección'}: {l.correctionReason}
+                            </p>
+                          ))}
+                          {supersededLogs.length === 0 && corrections.length === 0 && (
+                            <span className="text-slate-200">—</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 align-top">
+                        <button
+                          onClick={() => onAction({ kind: 'add', workerId, date })}
+                          title="Añadir fichaje este día"
+                          className="p-1.5 rounded-lg text-slate-300 hover:bg-slate-100 hover:text-slate-600 transition-all"
+                        >
+                          <Plus className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {dates.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="px-6 py-16 text-center">
+                      <p className="text-xs font-black uppercase tracking-widest text-slate-400">Sin fichajes en este mes</p>
+                      <button
+                        onClick={() => onAction({ kind: 'add', workerId, date: `${month}-01` })}
+                        className="mt-4 px-6 py-3 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-800"
+                      >
+                        + Añadir fichaje
+                      </button>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>
-  );
-}
-
-function LocationPin({ lat, lng }: { lat: number | null; lng: number | null }) {
-  if (lat == null || lng == null) return null;
-  return (
-    <a
-      href={`https://www.google.com/maps?q=${lat},${lng}`}
-      target="_blank"
-      rel="noreferrer"
-      title="Ver ubicación del fichaje"
-      className="inline-flex items-center gap-0.5 rounded bg-emerald-50 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-widest text-emerald-600 hover:bg-emerald-100"
-      onClick={e => e.stopPropagation()}
-    >
-      <MapPin className="w-3 h-3" />
-      GPS
-    </a>
   );
 }
 
