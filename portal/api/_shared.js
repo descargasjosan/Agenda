@@ -123,3 +123,23 @@ export const CLOCK_LABELS = {
   pause_end: 'Fin pausa',
   void: 'Anulación'
 };
+
+// ---- Ajustes del registro de jornada (app_settings key='clock') ----
+
+const CLOCK_SETTINGS_DEFAULTS = { gpsMode: 'optional' };
+
+export async function getClockSettings(supabase) {
+  const { data } = await supabase
+    .from('app_settings')
+    .select('value')
+    .eq('key', 'clock')
+    .maybeSingle();
+  return { ...CLOCK_SETTINGS_DEFAULTS, ...(data?.value || {}) };
+}
+
+export async function saveClockSettings(supabase, settings) {
+  const { error } = await supabase
+    .from('app_settings')
+    .upsert({ key: 'clock', value: { ...CLOCK_SETTINGS_DEFAULTS, ...settings } });
+  if (error) throw error;
+}

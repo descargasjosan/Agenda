@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import {
   Activity, CalendarDays, FileDown, LogOut, RefreshCw, Plus, Pencil, Ban,
-  AlertCircle, Loader2, Lock, Mail, ArrowRight, Clock, ShieldCheck, LogIn, Coffee
+  AlertCircle, Loader2, Lock, Mail, ArrowRight, Clock, ShieldCheck, Settings, MapPin
 } from 'lucide-react';
 
 const AUTH_API_URL = import.meta.env.VITE_API_ADMIN_AUTH_URL || '/api/admin-auth';
@@ -35,7 +35,9 @@ interface OverviewWorker {
   logs: AdminLog[];
 }
 
-type AdminView = 'overview' | 'history' | 'export';
+type AdminView = 'overview' | 'history' | 'export' | 'settings';
+
+type GpsMode = 'off' | 'optional' | 'required';
 
 const STATE_BADGE: Record<OverviewWorker['state'], { label: string; classes: string }> = {
   in: { label: 'Trabajando', classes: 'bg-green-100 text-green-700' },
@@ -500,6 +502,7 @@ function HistoryPanel({
                             {l.superseded && !l.voided && (
                               <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-widest text-slate-400">Sustituido</span>
                             )}
+                            <LocationPin lat={l.lat} lng={l.lng} />
                           </div>
                           {l.correctionReason && (
                             <span className="text-[10px] font-bold text-slate-400 truncate">· {l.correctionReason}</span>
@@ -536,6 +539,115 @@ function HistoryPanel({
   );
 }
 
+function LocationPin({ lat, lng }: { lat: number | null; lng: number | null }) {
+  if (lat == null || lng == null) return null;
+  return (
+    <a
+      href={`https://www.google.com/maps?q=${lat},${lng}`}
+      target="_blank"
+      rel="noreferrer"
+      title="Ver ubicación del fichaje"
+      className="inline-flex items-center gap-0.5 rounded bg-emerald-50 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-widest text-emerald-600 hover:bg-emerald-100"
+      onClick={e => e.stopPropagation()}
+    >
+      <MapPin className="w-3 h-3" />
+      GPS
+    </a>
+  );
+}
+
+function SettingsPanel({ apiCall }: { apiCall: (payload: Record<string, unknown>) => Promise<any> }) {
+  const [gpsMode, setGpsMode] = useState<GpsMode>('optional');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    apiCall({ action: 'settings' })
+      .then(d => { if (d.settings?.gpsMode) setGpsMode(d.settings.gpsMode); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [apiCall]);
+
+  const save = async () => {
+    setSaving(true);
+    setSaved(false);
+    try {
+      await apiCall({ action: 'save-settings', settings: { gpsMode } });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const options: { id: GpsMode; title: string; desc: string }[] = [
+    { id: 'off', title: 'Desactivada', desc: 'El fichaje no pide ni guarda ubicación.' },
+    { id: 'optional', title: 'Opcional', desc: 'Se pide permiso al fichar y se guarda si el operario acepta. Si lo deniega, el fichaje se registra igualmente sin coordenadas.' },
+    { id: 'required', title: 'Obligatoria', desc: 'Sin ubicación no se registra el fichaje — el operario debe aceptar el permiso GPS.' }
+  ];
+
+  return (
+    <div className="p-6">
+      <div className="max-w-xl bg-white rounded-3xl ring-1 ring-slate-200 p-8 shadow-sm">
+        <div className="flex items-center gap-3 mb-2">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+            <MapPin className="w-5 h-5" />
+          </div>
+          <h3 className="text-base font-black text-slate-900 uppercase tracking-tight">Geolocalización al fichar</h3>
+        </div>
+        <p className="text-xs font-bold text-slate-400 mb-6">
+          La ubicación solo se captura en el instante de fichar; nunca se rastrea en segundo plano.
+        </p>
+
+        {loading ? (
+          <div className="flex justify-center py-6"><Loader2 className="w-6 h-6 animate-spin text-blue-600" /></div>
+        ) : (
+          <>
+            <div className="space-y-3">
+              {options.map(o => (
+                <button
+                  key={o.id}
+                  onClick={() => setGpsMode(o.id)}
+                  className={`w-full text-left rounded-2xl border-2 p-4 transition-all ${
+                    gpsMode === o.id
+                      ? 'border-blue-500 bg-blue-50/50 ring-4 ring-blue-50'
+                      : 'border-slate-200 bg-white hover:border-slate-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`flex h-4 w-4 items-center justify-center rounded-full border-2 ${
+                      gpsMode === o.id ? 'border-blue-600' : 'border-slate-300'
+                    }`}>
+                      {gpsMode === o.id && <div className="h-2 w-2 rounded-full bg-blue-600" />}
+                    </div>
+                    <div>
+                      <p className="text-sm font-black text-slate-900 uppercase tracking-wide">{o.title}</p>
+                      <p className="text-xs font-bold text-slate-400 mt-0.5">{o.desc}</p>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            <button
+              onClick={save}
+              disabled={saving}
+              className="mt-6 px-6 py-3.5 bg-slate-900 text-white rounded-2xl font-black text-[11px] uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg shadow-slate-200 flex items-center gap-2 disabled:opacity-50"
+            >
+              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+              Guardar ajustes
+            </button>
+            {saved && (
+              <p className="mt-3 text-xs font-black uppercase tracking-widest text-green-600">✓ Guardado</p>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ExportPanel({ apiCall, month, onMonthChange }: {
   apiCall: (payload: Record<string, unknown>) => Promise<any>;
   month: string;
@@ -551,7 +663,7 @@ function ExportPanel({ apiCall, month, onMonthChange }: {
       const data = await apiCall({ action: 'export', month });
       const logs: AdminLog[] = data.logs || [];
 
-      const header = 'DNI;Operario;Fecha;Hora;Tipo;Origen;Estado;Motivo';
+      const header = 'DNI;Operario;Fecha;Hora;Tipo;Origen;Estado;Motivo;Lat;Lng';
       const rows = logs.map(l => [
         l.workerDni,
         l.workerName,
@@ -560,7 +672,9 @@ function ExportPanel({ apiCall, month, onMonthChange }: {
         l.label,
         l.source === 'admin' ? 'Administración' : 'Operario',
         l.superseded ? 'Sustituido' : 'Vigente',
-        (l.correctionReason || '').replace(/;/g, ',')
+        (l.correctionReason || '').replace(/;/g, ','),
+        l.lat ?? '',
+        l.lng ?? ''
       ].join(';'));
 
       const csv = '﻿' + [header, ...rows].join('\r\n');
@@ -713,13 +827,15 @@ export default function AdminApp() {
   const navItems: { id: AdminView; label: string; icon: typeof Activity }[] = [
     { id: 'overview', label: 'En Curso', icon: Activity },
     { id: 'history', label: 'Historial', icon: CalendarDays },
-    { id: 'export', label: 'Exportar', icon: FileDown }
+    { id: 'export', label: 'Exportar', icon: FileDown },
+    { id: 'settings', label: 'Ajustes', icon: Settings }
   ];
 
   const titles: Record<AdminView, string> = {
     overview: 'Registro en Curso',
     history: 'Historial de Fichajes',
-    export: 'Exportación'
+    export: 'Exportación',
+    settings: 'Ajustes'
   };
 
   return (
@@ -805,6 +921,7 @@ export default function AdminApp() {
           {view === 'export' && (
             <ExportPanel apiCall={apiCall} month={exportMonth} onMonthChange={setExportMonth} />
           )}
+          {view === 'settings' && <SettingsPanel apiCall={apiCall} />}
         </main>
       </div>
 

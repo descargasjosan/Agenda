@@ -1,6 +1,19 @@
 import { useState, useCallback, useEffect } from 'react';
-import { LogIn, LogOut, Coffee, Play, Loader2, AlertCircle, Clock } from 'lucide-react';
+import { LogIn, LogOut, Coffee, Play, Loader2, AlertCircle, Clock, MapPin } from 'lucide-react';
 import type { WorkerInfo } from './lib/types';
+
+type GpsMode = 'off' | 'optional' | 'required';
+
+function getPosition(timeoutMs = 8000): Promise<{ lat: number; lng: number; accuracy: number } | null> {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) return resolve(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy }),
+      () => resolve(null),
+      { enableHighAccuracy: true, timeout: timeoutMs, maximumAge: 30000 }
+    );
+  });
+}
 
 const CLOCK_API_URL = import.meta.env.VITE_API_CLOCK_URL || '/api/clock';
 
@@ -11,6 +24,8 @@ interface ClockLog {
   time: string;
   source: string;
   corrected: boolean;
+  lat: number | null;
+  lng: number | null;
 }
 
 type ClockState = 'none' | 'in' | 'paused' | 'out';
@@ -35,6 +50,7 @@ export default function ClockView({
 }) {
   const [logs, setLogs] = useState<ClockLog[]>([]);
   const [state, setState] = useState<ClockState>('none');
+  const [gpsMode, setGpsMode] = useState<GpsMode>('optional');
   const [loading, setLoading] = useState(true);
   const [punching, setPunching] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,10 +66,15 @@ export default function ClockView({
     setError(null);
 
     try {
+      let coords: { lat: number; lng: number; accuracy: number } | null = null;
+      if (punch && gpsMode !== 'off') {
+        coords = await getPosition();
+      }
+
       const response = await fetch(CLOCK_API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dni, pin, punch })
+        body: JSON.stringify({ dni, pin, punch, ...(coords || {}) })
       });
 
       const data = await response.json();
@@ -61,13 +82,14 @@ export default function ClockView({
 
       setLogs(data.logs || []);
       setState(data.state || 'none');
+      if (data.gpsMode) setGpsMode(data.gpsMode);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
       setLoading(false);
       setPunching(false);
     }
-  }, [dni, pin]);
+  }, [dni, pin, gpsMode]);
 
   useEffect(() => {
     callClock();
@@ -115,6 +137,12 @@ export default function ClockView({
             <Clock size={15} />
             {loading ? 'Cargando...' : info.label}
           </div>
+          {gpsMode !== 'off' && (
+            <p className="mt-3 flex items-center justify-center gap-1 text-xs text-slate-400">
+              <MapPin size={12} />
+              Al fichar se registrará tu ubicación{gpsMode === 'required' ? ' (obligatoria)' : ''}
+            </p>
+          )}
         </div>
 
         {/* Botones de fichaje */}

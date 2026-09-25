@@ -1,6 +1,8 @@
 import { parseJsonBody } from './_body.js';
 import {
   getSupabaseClient,
+  getClockSettings,
+  saveClockSettings,
   madridDateStr,
   madridTimeStr,
   madridDayRangeUtc,
@@ -24,7 +26,10 @@ function serializeLog(l) {
     source: l.source,
     correctsId: l.corrects_id,
     correctionReason: l.correction_reason,
-    createdBy: l.created_by
+    createdBy: l.created_by,
+    lat: l.lat ?? null,
+    lng: l.lng ?? null,
+    accuracy: l.accuracy ?? null
   };
 }
 
@@ -50,6 +55,21 @@ export default async function handler(req, res) {
 
     const body = await parseJsonBody(req);
     const { action } = body || {};
+
+    // ---------- Ajustes ----------
+    if (action === 'settings') {
+      return res.status(200).json({ success: true, settings: await getClockSettings(supabase) });
+    }
+
+    if (action === 'save-settings') {
+      const { settings } = body;
+      const allowed = ['off', 'optional', 'required'];
+      if (!settings || !allowed.includes(settings.gpsMode)) {
+        return res.status(400).json({ error: 'Ajustes no válidos' });
+      }
+      await saveClockSettings(supabase, { gpsMode: settings.gpsMode });
+      return res.status(200).json({ success: true });
+    }
 
     // ---------- Quién está dentro ahora ----------
     if (action === 'overview') {
