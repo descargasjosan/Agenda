@@ -7,6 +7,9 @@ import AdminApp from './AdminApp';
 
 const AUTH_KEY = 'dj-portal-auth';
 
+// Piloto del fichaje: solo estos DNI ven la pestaña "Fichar"
+const CLOCK_PILOT_DNIS = new Set(['24368437Y']);
+
 const API_URL = import.meta.env.VITE_API_URL || '/api/worker-hours';
 const FUEL_API_URL = import.meta.env.VITE_API_FUEL_URL || '/api/fuel';
 const VACATIONS_API_URL = import.meta.env.VITE_API_VACATIONS_URL || '/api/vacations';
@@ -676,17 +679,21 @@ type PortalTab = 'clock' | 'hours' | 'fuel' | 'vacations';
 
 function BottomNav({
   activeTab,
-  onChange
+  onChange,
+  showClock
 }: {
   activeTab: PortalTab;
   onChange: (tab: PortalTab) => void;
+  showClock: boolean;
 }) {
-  const tabs = [
+  const allTabs = [
     { id: 'clock', label: 'Fichar', icon: Timer, color: 'rose' },
     { id: 'hours', label: 'Horas', icon: Clock, color: 'blue' },
     { id: 'fuel', label: 'Combustible', icon: Fuel, color: 'amber' },
     { id: 'vacations', label: 'Vacaciones', icon: Sun, color: 'emerald' }
   ] as const;
+
+  const tabs = showClock ? allTabs : allTabs.filter(t => t.id !== 'clock');
 
   const colorMap: Record<typeof tabs[number]['color'], { active: string; inactive: string; activeIcon: string; inactiveIcon: string }> = {
     rose: { active: 'bg-rose-600 text-white shadow-md shadow-rose-200', inactive: 'text-rose-600 hover:bg-rose-50', activeIcon: 'text-white', inactiveIcon: 'text-rose-500' },
@@ -763,6 +770,7 @@ export default function App() {
 
       setSummary(data as WorkerSummary);
       setView('summary');
+      setActiveTab(CLOCK_PILOT_DNIS.has(String(data.worker?.dni || '').toUpperCase()) ? 'clock' : 'hours');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error desconocido');
       setSummary(null);
@@ -822,12 +830,15 @@ export default function App() {
     return <LoginForm onLogin={handleLogin} loading={loading} error={error} />;
   }
 
+  const canClock = CLOCK_PILOT_DNIS.has(String(summary.worker.dni || '').toUpperCase());
+  const tab = canClock ? activeTab : 'hours';
+
   return (
     <div className="relative min-h-screen bg-slate-50">
-      {activeTab === 'clock' && (
+      {tab === 'clock' && (
         <ClockView dni={dni} pin={pin} worker={summary.worker} onLogout={handleLogout} />
       )}
-      {activeTab === 'hours' && (
+      {tab === 'hours' && (
         <SummaryView
           summary={summary}
           month={month}
@@ -837,13 +848,13 @@ export default function App() {
           error={error}
         />
       )}
-      {activeTab === 'fuel' && (
+      {tab === 'fuel' && (
         <FuelView dni={dni} pin={pin} worker={summary.worker} onLogout={handleLogout} />
       )}
-      {activeTab === 'vacations' && (
+      {tab === 'vacations' && (
         <VacationsView dni={dni} pin={pin} worker={summary.worker} onLogout={handleLogout} />
       )}
-      <BottomNav activeTab={activeTab} onChange={setActiveTab} />
+      <BottomNav activeTab={tab} onChange={setActiveTab} showClock={canClock} />
     </div>
   );
 }

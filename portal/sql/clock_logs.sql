@@ -41,3 +41,7 @@ create table if not exists clock_logs (
 
 create index if not exists idx_clock_logs_worker_ts on clock_logs (worker_id, ts desc);
 create index if not exists idx_clock_logs_ts on clock_logs (ts);
+
+-- RLS activado SIN políticas: solo la service role key (APIs del portal)
+-- puede acceder. La anon key del navegador no puede ni leer ni escribir.
+alter table clock_logs enable row level security;
