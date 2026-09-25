@@ -112,6 +112,31 @@ node scripts/init-pins.js
 
 Lee las credenciales de `portal/.env.local` y genera `pins-lista.html`, un listado imprimible (Nombre–DNI–PIN) para repartir en privado. **Bórralo tras repartirlo** — está en `.gitignore` pero contiene todos los PINs.
 
+## Registro de Jornada (fichajes)
+
+Módulo independiente dentro del portal:
+
+- **Operario** (`/`): pestaña "Fichar" con Entrada / Salida / Pausas. Sesión persistente opcional ("Mantener sesión en este dispositivo") para fichar en 1 toque.
+- **Admin** (`/#admin`): panel oculto de gestión — quién está dentro ahora, historial con correcciones/anulaciones (audit log inmutable) y exportación mensual CSV. Acceso con las **mismas credenciales de Supabase Auth** que la app principal (email + contraseña). Las APIs verifican el token en servidor.
+
+### Setup inicial (una sola vez)
+
+Ejecutar en **Supabase → SQL Editor**:
+
+```
+portal/sql/clock_logs.sql
+```
+
+### Endpoints
+
+| Endpoint | Quién | Qué hace |
+|---|---|---|
+| `api/clock.js` | Operario (DNI+PIN) | Fichar y ver fichajes de hoy |
+| `api/admin-auth.js` | Admin | Login email+password → token |
+| `api/admin-clock.js` | Admin (Bearer token) | overview, history, add, correct, void, export |
+
+La tabla `clock_logs` es append-only: las correcciones del admin son filas nuevas que apuntan al fichaje original (`corrects_id`), que queda conservado pero fuera del cómputo.
+
 ## Funcionamiento
 
 La función `api/worker-hours.js`:

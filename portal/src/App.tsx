@@ -1,7 +1,11 @@
 /// <reference types="vite/client" />
 import { useState, useCallback, useEffect } from 'react';
-import { Calendar, ChevronLeft, ChevronRight, LogOut, Clock, Wallet, PiggyBank, AlertCircle, CheckCircle2, Loader2, Fuel, Sun } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, LogOut, Clock, Wallet, PiggyBank, AlertCircle, CheckCircle2, Loader2, Fuel, Sun, Timer } from 'lucide-react';
 import type { WorkerSummary, FuelSummary, FuelRecord, VacationSummary, WorkerInfo } from './lib/types';
+import ClockView from './ClockView';
+import AdminApp from './AdminApp';
+
+const AUTH_KEY = 'dj-portal-auth';
 
 const API_URL = import.meta.env.VITE_API_URL || '/api/worker-hours';
 const FUEL_API_URL = import.meta.env.VITE_API_FUEL_URL || '/api/fuel';
@@ -74,13 +78,14 @@ function SummaryCard({ label, value, sub, color = 'blue' }: { label: string; val
   );
 }
 
-function LoginForm({ onLogin, loading, error }: { onLogin: (dni: string, pin: string) => void; loading: boolean; error: string | null }) {
+function LoginForm({ onLogin, loading, error }: { onLogin: (dni: string, pin: string, remember: boolean) => void; loading: boolean; error: string | null }) {
   const [dni, setDni] = useState('');
   const [pin, setPin] = useState('');
+  const [remember, setRemember] = useState(true);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onLogin(dni.trim().toUpperCase(), pin.trim());
+    onLogin(dni.trim().toUpperCase(), pin.trim(), remember);
   };
 
   return (
@@ -133,6 +138,16 @@ function LoginForm({ onLogin, loading, error }: { onLogin: (dni: string, pin: st
               PIN facilitado por tu supervisor. Si no lo tienes, pídeselo.
             </p>
           </div>
+
+          <label className="flex cursor-pointer items-center gap-2.5 rounded-xl bg-slate-50 px-4 py-3 ring-1 ring-slate-200">
+            <input
+              type="checkbox"
+              checked={remember}
+              onChange={(e) => setRemember(e.target.checked)}
+              className="h-4 w-4 rounded accent-blue-600"
+            />
+            <span className="text-sm font-medium text-slate-600">Mantener sesión en este dispositivo</span>
+          </label>
 
           {error && (
             <div className="rounded-xl bg-red-50 p-3 text-sm text-red-700 ring-1 ring-red-200">
@@ -657,20 +672,24 @@ function VacationsView({
   );
 }
 
+type PortalTab = 'clock' | 'hours' | 'fuel' | 'vacations';
+
 function BottomNav({
   activeTab,
   onChange
 }: {
-  activeTab: 'hours' | 'fuel' | 'vacations';
-  onChange: (tab: 'hours' | 'fuel' | 'vacations') => void;
+  activeTab: PortalTab;
+  onChange: (tab: PortalTab) => void;
 }) {
   const tabs = [
+    { id: 'clock', label: 'Fichar', icon: Timer, color: 'rose' },
     { id: 'hours', label: 'Horas', icon: Clock, color: 'blue' },
     { id: 'fuel', label: 'Combustible', icon: Fuel, color: 'amber' },
     { id: 'vacations', label: 'Vacaciones', icon: Sun, color: 'emerald' }
   ] as const;
 
   const colorMap: Record<typeof tabs[number]['color'], { active: string; inactive: string; activeIcon: string; inactiveIcon: string }> = {
+    rose: { active: 'bg-rose-600 text-white shadow-md shadow-rose-200', inactive: 'text-rose-600 hover:bg-rose-50', activeIcon: 'text-white', inactiveIcon: 'text-rose-500' },
     blue: { active: 'bg-blue-600 text-white shadow-md shadow-blue-200', inactive: 'text-blue-600 hover:bg-blue-50', activeIcon: 'text-white', inactiveIcon: 'text-blue-500' },
     amber: { active: 'bg-amber-600 text-white shadow-md shadow-amber-200', inactive: 'text-amber-600 hover:bg-amber-50', activeIcon: 'text-white', inactiveIcon: 'text-amber-500' },
     emerald: { active: 'bg-emerald-600 text-white shadow-md shadow-emerald-200', inactive: 'text-emerald-600 hover:bg-emerald-50', activeIcon: 'text-white', inactiveIcon: 'text-emerald-500' }
@@ -702,8 +721,16 @@ function BottomNav({
 }
 
 export default function App() {
+  const [isAdmin, setIsAdmin] = useState(() => window.location.hash === '#admin');
+
+  useEffect(() => {
+    const onHash = () => setIsAdmin(window.location.hash === '#admin');
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+
   const [view, setView] = useState<'login' | 'summary'>('login');
-  const [activeTab, setActiveTab] = useState<'hours' | 'fuel' | 'vacations'>('hours');
+  const [activeTab, setActiveTab] = useState<PortalTab>('clock');
   const [dni, setDni] = useState('');
   const [pin, setPin] = useState('');
   const [month, setMonth] = useState(getCurrentMonth());
@@ -744,11 +771,31 @@ export default function App() {
     }
   }, []);
 
-  const handleLogin = useCallback(async (newDni: string, newPin: string) => {
+  const handleLogin = useCallback(async (newDni: string, newPin: string, remember: boolean) => {
     setDni(newDni);
     setPin(newPin);
+    if (remember) {
+      localStorage.setItem(AUTH_KEY, JSON.stringify({ dni: newDni, pin: newPin }));
+    }
     await fetchSummary(newDni, newPin, month);
   }, [month, fetchSummary]);
+
+  // Auto-login si el operario marcó "mantener sesión"
+  useEffect(() => {
+    if (isAdmin) return;
+    try {
+      const saved = localStorage.getItem(AUTH_KEY);
+      if (saved) {
+        const { dni: sd, pin: sp } = JSON.parse(saved);
+        if (sd && sp) {
+          setDni(sd);
+          setPin(sp);
+          fetchSummary(sd, sp, getCurrentMonth());
+        }
+      }
+    } catch { /* credenciales corruptas: pedir login */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin]);
 
   const handleMonthChange = useCallback(async (newMonth: string) => {
     setMonth(newMonth);
@@ -758,13 +805,18 @@ export default function App() {
   }, [dni, pin, fetchSummary]);
 
   const handleLogout = useCallback(() => {
+    localStorage.removeItem(AUTH_KEY);
     setDni('');
     setPin('');
     setSummary(null);
-    setActiveTab('hours');
+    setActiveTab('clock');
     setView('login');
     setError(null);
   }, []);
+
+  if (isAdmin) {
+    return <AdminApp />;
+  }
 
   if (view === 'login' || !summary) {
     return <LoginForm onLogin={handleLogin} loading={loading} error={error} />;
@@ -772,6 +824,9 @@ export default function App() {
 
   return (
     <div className="relative min-h-screen bg-slate-50">
+      {activeTab === 'clock' && (
+        <ClockView dni={dni} pin={pin} worker={summary.worker} onLogout={handleLogout} />
+      )}
       {activeTab === 'hours' && (
         <SummaryView
           summary={summary}
