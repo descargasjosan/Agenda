@@ -226,17 +226,18 @@ export default async function handler(req, res) {
       }
 
       const superseded = new Set((logsRes.data || []).filter(l => l.corrects_id).map(l => l.corrects_id));
+      const voidIds = new Set((logsRes.data || []).filter(l => l.type === 'void').map(l => l.corrects_id));
 
       return res.status(200).json({
         success: true,
         month,
         logs: (logsRes.data || [])
-          .filter(l => l.type !== 'void')
           .map(l => ({
             ...serializeLog(l),
             workerName: workerMap[l.worker_id]?.name || l.worker_id,
             workerDni: workerMap[l.worker_id]?.dni || '',
-            superseded: superseded.has(l.id)
+            superseded: superseded.has(l.id),
+            voided: voidIds.has(l.id)
           }))
       });
     }

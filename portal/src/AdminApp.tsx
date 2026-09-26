@@ -839,30 +839,91 @@ function ExportPanel({ apiCall, month, onMonthChange }: {
       const data = await apiCall({ action: 'export', month });
       const logs: AdminLog[] = data.logs || [];
 
-      const header = 'DNI;Operario;Fecha;Hora;Tipo;Origen;Estado;Motivo;Lat;Lng';
-      const rows = logs.map(l => [
-        l.workerDni,
-        l.workerName,
-        l.date,
-        l.time,
-        l.label,
-        l.source === 'admin' ? 'Administración' : 'Operario',
-        l.superseded ? 'Sustituido' : 'Vigente',
-        (l.correctionReason || '').replace(/;/g, ','),
-        l.lat ?? '',
-        l.lng ?? ''
-      ].join(';'));
+      const [y, m] = month.split('-').map(Number);
+      const monthName = new Date(y, m - 1, 1)
+        .toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })
+        .toUpperCase();
 
-      const csv = '﻿' + [header, ...rows].join('\r\n');
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `registro_jornada_${month}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
+      // Agrupar por operario → fecha
+      const byWorkerDate = new Map<string, AdminLog[]>();
+      for (const l of logs) {
+        const key = `${l.workerId}|${l.date}`;
+        const arr = byWorkerDate.get(key) || [];
+        arr.push(l);
+        byWorkerDate.set(key, arr);
+      }
 
-      setMessage(`Exportados ${logs.length} fichajes de ${month}.`);
+      const rows: (string | number)[][] = [];
+      const workerIds = [...new Set(logs.map(l => l.workerId))];
+
+      for (const wId of workerIds) {
+        const wDates = [...byWorkerDate.keys()]
+          .filter(k => k.startsWith(`${wId}|`))
+          .map(k => k.split('|')[1])
+          .sort();
+
+        for (const date of wDates) {
+          const dayLogs = byWorkerDate.get(`${wId}|${date}`)!;
+          const eff = dayLogs.filter(l => !l.superseded && l.type !== 'void');
+          const first = eff[0];
+
+          const entries = eff.filter(l => l.type === 'in').map(l => l.time);
+          const exits = eff.filter(l => l.type === 'out').map(l => l.time);
+
+          const pauses: string[] = [];
+          let openPause: AdminLog | null = null;
+          for (const l of eff) {
+            if (l.type === 'pause_start') openPause = l;
+            else if (l.type === 'pause_end' && openPause) {
+              pauses.push(`${openPause.time}–${l.time}`);
+              openPause = null;
+            }
+          }
+          if (openPause) pauses.push(`${openPause.time}–`);
+
+          const obs: string[] = [];
+          for (const x of dayLogs.filter(x => x.superseded && x.type !== 'void')) {
+            obs.push(`${x.label} ${x.time} ${x.voided ? 'anulado' : 'sustituido'}`);
+          }
+          for (const l of dayLogs.filter(x => x.correctionReason)) {
+            obs.push(`${l.type === 'void' ? 'Anulación' : 'Corrección'}: ${l.correctionReason}`);
+          }
+
+          const mins = workedMinutesToday(dayLogs);
+          const [dy, dm, dd] = date.split('-');
+
+          rows.push([
+            first?.workerDni || '',
+            first?.workerName || wId,
+            `${dd}/${dm}/${dy}`,
+            entries.join('  '),
+            pauses.join('  '),
+            exits.join('  '),
+            mins > 0 ? formatMinutes(mins) : '',
+            obs.join(' | ')
+          ]);
+        }
+      }
+
+      const XLSX = await import('xlsx');
+      const sheet = XLSX.utils.aoa_to_sheet([
+        [`REGISTRO DE JORNADA — ${monthName}`],
+        [`Descargas Josan · Generado el ${new Date().toLocaleDateString('es-ES')}`],
+        [],
+        ['DNI', 'Operario', 'Fecha', 'Entrada', 'Pausa', 'Salida', 'Total', 'Observaciones'],
+        ...rows
+      ]);
+
+      sheet['!cols'] = [
+        { wch: 12 }, { wch: 26 }, { wch: 11 }, { wch: 14 },
+        { wch: 22 }, { wch: 14 }, { wch: 10 }, { wch: 46 }
+      ];
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, sheet, 'Registro');
+      XLSX.writeFile(wb, `registro_jornada_${month}.xlsx`);
+
+      setMessage(`Exportados ${rows.length} días de ${monthName.toLowerCase()}.`);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Error al exportar');
     } finally {
@@ -880,7 +941,7 @@ function ExportPanel({ apiCall, month, onMonthChange }: {
           <h3 className="text-base font-black text-slate-900 uppercase tracking-tight">Exportar registro mensual</h3>
         </div>
         <p className="text-xs font-bold text-slate-400 mb-6">
-          Genera un CSV con todos los fichajes del mes (vigentes y sustituidos) listo para Excel.
+          Genera un Excel con los fichajes del mes: una fila por operario y día, con entradas, pausas, salidas, total y observaciones.
         </p>
 
         <div className="flex items-center gap-3">
@@ -896,7 +957,7 @@ function ExportPanel({ apiCall, month, onMonthChange }: {
             className="px-6 py-3.5 bg-slate-900 text-white rounded-2xl font-black text-[11px] uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg shadow-slate-200 flex items-center gap-2 disabled:opacity-50"
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
-            Exportar CSV
+            Exportar Excel
           </button>
         </div>
 
