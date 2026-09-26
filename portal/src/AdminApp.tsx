@@ -734,13 +734,17 @@ function HistoryPanel({
 
 function SettingsPanel({ apiCall }: { apiCall: (payload: Record<string, unknown>) => Promise<any> }) {
   const [gpsMode, setGpsMode] = useState<GpsMode>('optional');
+  const [requireTask, setRequireTask] = useState(true);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     apiCall({ action: 'settings' })
-      .then(d => { if (d.settings?.gpsMode) setGpsMode(d.settings.gpsMode); })
+      .then(d => {
+        if (d.settings?.gpsMode) setGpsMode(d.settings.gpsMode);
+        if (typeof d.settings?.requireTask === 'boolean') setRequireTask(d.settings.requireTask);
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [apiCall]);
@@ -749,7 +753,7 @@ function SettingsPanel({ apiCall }: { apiCall: (payload: Record<string, unknown>
     setSaving(true);
     setSaved(false);
     try {
-      await apiCall({ action: 'save-settings', settings: { gpsMode } });
+      await apiCall({ action: 'save-settings', settings: { gpsMode, requireTask } });
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } finally {
@@ -806,18 +810,51 @@ function SettingsPanel({ apiCall }: { apiCall: (payload: Record<string, unknown>
               ))}
             </div>
 
-            <button
-              onClick={save}
-              disabled={saving}
-              className="mt-6 px-6 py-3.5 bg-slate-900 text-white rounded-2xl font-black text-[11px] uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg shadow-slate-200 flex items-center gap-2 disabled:opacity-50"
-            >
-              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-              Guardar ajustes
-            </button>
-            {saved && (
-              <p className="mt-3 text-xs font-black uppercase tracking-widest text-green-600">✓ Guardado</p>
-            )}
           </>
+        )}
+      </div>
+
+      {/* Fichar solo con tarea asignada */}
+      <div className="max-w-xl bg-white rounded-3xl ring-1 ring-slate-200 p-8 shadow-sm mt-6">
+        <div className="flex items-center gap-3 mb-2">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+            <CalendarDays className="w-5 h-5" />
+          </div>
+          <h3 className="text-base font-black text-slate-900 uppercase tracking-tight">Tarea asignada</h3>
+        </div>
+        <p className="text-xs font-bold text-slate-400 mb-6">
+          Si está activo, el operario solo puede fichar los días en que tiene algún trabajo asignado en la planificación.
+        </p>
+
+        {loading ? null : (
+          <button
+            onClick={() => setRequireTask(!requireTask)}
+            className="flex w-full items-center justify-between rounded-2xl border-2 border-slate-200 bg-white p-4 transition-all hover:border-slate-300"
+          >
+            <div className="text-left">
+              <p className="text-sm font-black text-slate-900 uppercase tracking-wide">Fichar solo con tarea</p>
+              <p className="text-xs font-bold text-slate-400 mt-0.5">
+                {requireTask ? 'Sin tarea asignada, el botón de fichar aparece desactivado.' : 'El operario puede fichar aunque no tenga tarea.'}
+              </p>
+            </div>
+            <div className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${requireTask ? 'bg-blue-600' : 'bg-slate-200'}`}>
+              <div className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-all ${requireTask ? 'left-[22px]' : 'left-0.5'}`} />
+            </div>
+          </button>
+        )}
+      </div>
+
+      <div className="max-w-xl mt-6">
+        <button
+          onClick={save}
+          disabled={saving || loading}
+          className="px-8 py-4 bg-slate-900 text-white rounded-2xl font-black text-[11px] uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg shadow-slate-200 flex items-center gap-2 disabled:opacity-50"
+        >
+          {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+          Guardar ajustes
+        </button>
+        {saved && (
+          <p className="mt-3 text-xs font-black uppercase tracking-widest text-green-600">✓ Guardado</p>
         )}
       </div>
     </div>

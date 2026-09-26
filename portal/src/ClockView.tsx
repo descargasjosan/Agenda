@@ -51,6 +51,7 @@ export default function ClockView({
   const [logs, setLogs] = useState<ClockLog[]>([]);
   const [state, setState] = useState<ClockState>('none');
   const [gpsMode, setGpsMode] = useState<GpsMode>('optional');
+  const [hasWorkToday, setHasWorkToday] = useState(true);
   const [loading, setLoading] = useState(true);
   const [punching, setPunching] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -83,6 +84,7 @@ export default function ClockView({
       setLogs(data.logs || []);
       setState(data.state || 'none');
       if (data.gpsMode) setGpsMode(data.gpsMode);
+      setHasWorkToday(data.hasWorkToday !== false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
@@ -149,6 +151,16 @@ export default function ClockView({
         {loading ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 size={32} className="animate-spin text-blue-600" />
+          </div>
+        ) : !hasWorkToday ? (
+          <div className="mb-6">
+            <div className="flex items-center justify-center gap-3 rounded-2xl bg-slate-200 px-4 py-6 text-slate-400 cursor-not-allowed select-none">
+              <LogIn size={26} className="opacity-50" />
+              <span className="text-lg font-black uppercase tracking-wider">Fichar</span>
+            </div>
+            <p className="mt-3 text-center text-sm font-medium text-slate-500">
+              Hoy no tienes tareas asignadas. El fichaje está desactivado.
+            </p>
           </div>
         ) : (
           <div className="mb-6 grid grid-cols-2 gap-3">

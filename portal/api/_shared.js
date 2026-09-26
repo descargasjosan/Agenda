@@ -126,7 +126,7 @@ export const CLOCK_LABELS = {
 
 // ---- Ajustes del registro de jornada (app_settings key='clock') ----
 
-const CLOCK_SETTINGS_DEFAULTS = { gpsMode: 'optional' };
+const CLOCK_SETTINGS_DEFAULTS = { gpsMode: 'optional', requireTask: true };
 
 export async function getClockSettings(supabase) {
   const { data } = await supabase

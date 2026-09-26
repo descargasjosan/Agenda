@@ -64,10 +64,10 @@ export default async function handler(req, res) {
     if (action === 'save-settings') {
       const { settings } = body;
       const allowed = ['off', 'optional', 'required'];
-      if (!settings || !allowed.includes(settings.gpsMode)) {
+      if (!settings || !allowed.includes(settings.gpsMode) || typeof settings.requireTask !== 'boolean') {
         return res.status(400).json({ error: 'Ajustes no válidos' });
       }
-      await saveClockSettings(supabase, { gpsMode: settings.gpsMode });
+      await saveClockSettings(supabase, { gpsMode: settings.gpsMode, requireTask: settings.requireTask });
       return res.status(200).json({ success: true });
     }
 

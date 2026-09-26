@@ -45,6 +45,24 @@ export default async function handler(req, res) {
 
     const today = madridDateStr();
     const [dayStart, dayEnd] = madridDayRangeUtc(today);
+    const settings = await getClockSettings(supabase);
+
+    // Si está activada la regla, el operario solo ficha con tarea asignada hoy
+    let hasWorkToday = true;
+    if (settings.requireTask) {
+      const { data: jobRows, error: jobsError } = await supabase
+        .from('jobs')
+        .select('data')
+        .eq('data->>date', today);
+      if (jobsError) throw jobsError;
+
+      hasWorkToday = (jobRows || []).some(r => {
+        const d = r.data || {};
+        if (d.isCancelled) return false;
+        if ((d.assignedWorkerIds || []).includes(worker.id)) return true;
+        return (d.reinforcementGroups || []).some(g => (g.workerIds || []).includes(worker.id));
+      });
+    }
 
     const loadLogs = async () => {
       const { data, error: logsError } = await supabase
@@ -59,11 +77,17 @@ export default async function handler(req, res) {
     };
 
     let logs = await loadLogs();
-    const settings = await getClockSettings(supabase);
 
     if (punch) {
       if (!PUNCH_TYPES.includes(punch)) {
         return res.status(400).json({ error: 'Tipo de fichaje no válido' });
+      }
+
+      if (!hasWorkToday) {
+        return res.status(403).json({
+          error: 'Sin tarea asignada',
+          message: 'Hoy no tienes tareas asignadas. No puedes fichar.'
+        });
       }
 
       const hasCoords =
@@ -105,6 +129,7 @@ export default async function handler(req, res) {
       state: lastState(logs),
       serverTime: new Date().toISOString(),
       gpsMode: settings.gpsMode,
+      hasWorkToday,
       logs: eff.map(l => ({
         id: l.id,
         type: l.type,
