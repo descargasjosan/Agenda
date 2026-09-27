@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 import { useState, useCallback, useEffect } from 'react';
-import { Calendar, ChevronLeft, ChevronRight, LogOut, Clock, Wallet, PiggyBank, AlertCircle, CheckCircle2, Loader2, Fuel, Sun, Timer } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, LogOut, LogIn, Clock, Wallet, PiggyBank, AlertCircle, CheckCircle2, Loader2, Fuel, Sun, Timer } from 'lucide-react';
 import type { WorkerSummary, FuelSummary, FuelRecord, VacationSummary, WorkerInfo } from './lib/types';
 import ClockView from './ClockView';
 import AdminApp from './AdminApp';
@@ -166,8 +166,8 @@ function LoginForm({ onLogin, loading, error }: { onLogin: (dni: string, pin: st
             disabled={loading || !dni || !pin}
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3.5 text-base font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-400"
           >
-            {loading ? <Loader2 size={20} className="animate-spin" /> : <CheckCircle2 size={20} />}
-            {loading ? 'Cargando...' : 'Consultar mis horas'}
+            {loading ? <Loader2 size={20} className="animate-spin" /> : <LogIn size={20} />}
+            {loading ? 'Cargando...' : 'Acceder'}
           </button>
         </form>
       </div>
