@@ -100,18 +100,20 @@ export function madridMonthRangeUtc(month) {
 
 // ---- Planificacion ----
 
-// Hora de inicio mas temprana ('HH:mm') del operario dentro de un trabajo,
-// teniendo en cuenta workerTimes y grupos de refuerzo.
+// Hora de entrada del operario en un trabajo ('HH:mm').
+// Prioridad (igual que la app principal): si es refuerzo manda la hora de su
+// grupo — un refuerzo aparece tambien en assignedWorkerIds, pero entra mas
+// tarde. Si no, workerTimes[workerId] (hora personalizada) o job.startTime.
 export function jobWorkerStart(jobData, workerId) {
   const d = jobData || {};
-  const candidates = [];
-  if (d.workerTimes && d.workerTimes[workerId]) candidates.push(d.workerTimes[workerId]);
-  if ((d.assignedWorkerIds || []).includes(workerId)) candidates.push(d.startTime);
-  for (const g of d.reinforcementGroups || []) {
-    if ((g.workerIds || []).includes(workerId)) candidates.push(g.startTime || d.startTime);
-  }
-  const valid = candidates.filter(Boolean).sort();
-  return valid[0] || null;
+  const groupTimes = (d.reinforcementGroups || [])
+    .filter(g => (g.workerIds || []).includes(workerId))
+    .map(g => g.startTime)
+    .filter(Boolean)
+    .sort();
+  if (groupTimes.length) return groupTimes[0];
+  if (!(d.assignedWorkerIds || []).includes(workerId)) return null;
+  return (d.workerTimes && d.workerTimes[workerId]) || d.startTime || null;
 }
 
 // ---- Reglas del audit log ----
