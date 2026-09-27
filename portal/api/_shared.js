@@ -69,7 +69,7 @@ export function madridTimeStr(ts) {
   });
 }
 
-function madridOffsetMinutes(utcDate) {
+export function madridOffsetMinutes(utcDate) {
   const dtf = new Intl.DateTimeFormat('en-US', {
     timeZone: MADRID_TZ, hour12: false,
     year: 'numeric', month: '2-digit', day: '2-digit',
@@ -126,7 +126,7 @@ export const CLOCK_LABELS = {
 
 // ---- Ajustes del registro de jornada (app_settings key='clock') ----
 
-const CLOCK_SETTINGS_DEFAULTS = { gpsMode: 'optional', requireTask: true };
+const CLOCK_SETTINGS_DEFAULTS = { gpsMode: 'optional', requireTask: true, notifyDelayMin: 15 };
 
 export async function getClockSettings(supabase) {
   const { data } = await supabase

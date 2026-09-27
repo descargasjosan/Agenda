@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import {
   Activity, CalendarDays, FileDown, LogOut, RefreshCw, Plus, Pencil, Ban,
-  AlertCircle, Loader2, Lock, Mail, ArrowRight, Clock, ShieldCheck, Settings, MapPin
+  AlertCircle, Loader2, Lock, Mail, ArrowRight, Clock, ShieldCheck, Settings, MapPin, Bell
 } from 'lucide-react';
 
 const AUTH_API_URL = import.meta.env.VITE_API_ADMIN_AUTH_URL || '/api/admin-auth';
@@ -735,6 +735,7 @@ function HistoryPanel({
 function SettingsPanel({ apiCall }: { apiCall: (payload: Record<string, unknown>) => Promise<any> }) {
   const [gpsMode, setGpsMode] = useState<GpsMode>('optional');
   const [requireTask, setRequireTask] = useState(true);
+  const [notifyDelayMin, setNotifyDelayMin] = useState(15);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -744,6 +745,7 @@ function SettingsPanel({ apiCall }: { apiCall: (payload: Record<string, unknown>
       .then(d => {
         if (d.settings?.gpsMode) setGpsMode(d.settings.gpsMode);
         if (typeof d.settings?.requireTask === 'boolean') setRequireTask(d.settings.requireTask);
+        if (Number.isFinite(d.settings?.notifyDelayMin)) setNotifyDelayMin(d.settings.notifyDelayMin);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -753,7 +755,7 @@ function SettingsPanel({ apiCall }: { apiCall: (payload: Record<string, unknown>
     setSaving(true);
     setSaved(false);
     try {
-      await apiCall({ action: 'save-settings', settings: { gpsMode, requireTask } });
+      await apiCall({ action: 'save-settings', settings: { gpsMode, requireTask, notifyDelayMin } });
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } finally {
@@ -841,6 +843,34 @@ function SettingsPanel({ apiCall }: { apiCall: (payload: Record<string, unknown>
               <div className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-all ${requireTask ? 'left-[22px]' : 'left-0.5'}`} />
             </div>
           </button>
+        )}
+      </div>
+
+      {/* Aviso push si no ficha */}
+      <div className="max-w-xl bg-white rounded-3xl ring-1 ring-slate-200 p-8 shadow-sm mt-6">
+        <div className="flex items-center gap-3 mb-2">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
+            <Bell className="w-5 h-5" />
+          </div>
+          <h3 className="text-base font-black text-slate-900 uppercase tracking-tight">Aviso de fichaje</h3>
+        </div>
+        <p className="text-xs font-bold text-slate-400 mb-6">
+          Si el operario tiene tarea asignada y no ha fichado la entrada pasado este margen desde su hora de inicio, recibe una notificación en su móvil (requiere que active los avisos en el portal).
+        </p>
+
+        {loading ? null : (
+          <div className="flex items-center gap-3 rounded-2xl border-2 border-slate-200 bg-white p-4">
+            <p className="flex-1 text-sm font-black text-slate-900 uppercase tracking-wide">Avisar tras</p>
+            <input
+              type="number"
+              min={0}
+              max={120}
+              value={notifyDelayMin}
+              onChange={e => setNotifyDelayMin(Math.max(0, Math.min(120, Number(e.target.value) || 0)))}
+              className="w-20 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-center text-sm font-bold tabular-nums text-slate-900 outline-none focus:border-blue-500"
+            />
+            <span className="text-sm font-bold text-slate-400">min</span>
+          </div>
         )}
       </div>
 

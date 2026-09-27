@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { LogIn, LogOut, Coffee, Play, Loader2, AlertCircle, Clock, MapPin } from 'lucide-react';
+import { LogIn, LogOut, Coffee, Play, Loader2, AlertCircle, Clock, MapPin, Bell, BellOff } from 'lucide-react';
 import type { WorkerInfo } from './lib/types';
 
 type GpsMode = 'off' | 'optional' | 'required';
@@ -16,6 +16,15 @@ function getPosition(timeoutMs = 8000): Promise<{ lat: number; lng: number; accu
 }
 
 const CLOCK_API_URL = import.meta.env.VITE_API_CLOCK_URL || '/api/clock';
+const PUSH_API_URL = import.meta.env.VITE_API_PUSH_URL || '/api/push';
+
+function urlB64ToUint8Array(base64: string) {
+  const padding = '='.repeat((4 - (base64.length % 4)) % 4);
+  const b64 = (base64 + padding).replace(/-/g, '+').replace(/_/g, '/');
+  return Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+}
+
+type PushState = 'unsupported' | 'loading' | 'subscribed' | 'unsubscribed' | 'denied';
 
 interface ClockLog {
   id: string;
@@ -56,6 +65,8 @@ export default function ClockView({
   const [punching, setPunching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(new Date());
+  const [pushState, setPushState] = useState<PushState>('loading');
+  const [pushBusy, setPushBusy] = useState(false);
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
@@ -96,6 +107,79 @@ export default function ClockView({
   useEffect(() => {
     callClock();
   }, [callClock]);
+
+  // Estado de la suscripcion push de este dispositivo
+  useEffect(() => {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
+      setPushState('unsupported');
+      return;
+    }
+    if (Notification.permission === 'denied') {
+      setPushState('denied');
+      return;
+    }
+    navigator.serviceWorker.ready
+      .then(reg => reg.pushManager.getSubscription())
+      .then(sub => setPushState(sub ? 'subscribed' : 'unsubscribed'))
+      .catch(() => setPushState('unsubscribed'));
+  }, []);
+
+  const enablePush = useCallback(async () => {
+    setPushBusy(true);
+    setError(null);
+    try {
+      const keyRes = await fetch(PUSH_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'key' })
+      });
+      const { publicKey } = await keyRes.json();
+      if (!publicKey) throw new Error('Los avisos aún no están configurados en el servidor');
+
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        setPushState('denied');
+        return;
+      }
+
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlB64ToUint8Array(publicKey)
+      });
+
+      const res = await fetch(PUSH_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'subscribe', dni, pin, subscription: sub.toJSON() })
+      });
+      if (!res.ok) throw new Error('No se pudo guardar la suscripción');
+      setPushState('subscribed');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudieron activar los avisos');
+    } finally {
+      setPushBusy(false);
+    }
+  }, [dni, pin]);
+
+  const disablePush = useCallback(async () => {
+    setPushBusy(true);
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if (sub) {
+        await fetch(PUSH_API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'unsubscribe', dni, pin, subscription: { endpoint: sub.endpoint } })
+        });
+        await sub.unsubscribe();
+      }
+      setPushState('unsubscribed');
+    } finally {
+      setPushBusy(false);
+    }
+  }, [dni, pin]);
 
   const info = STATE_INFO[state];
 
@@ -257,6 +341,46 @@ export default function ClockView({
             </p>
           )}
         </div>
+
+        {/* Avisos push */}
+        {pushState !== 'unsupported' && (
+          <div className="mt-8 rounded-2xl bg-white p-4 ring-1 ring-slate-200">
+            <div className="flex items-center gap-3">
+              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
+                pushState === 'subscribed' ? 'bg-blue-50 text-blue-600' : 'bg-slate-100 text-slate-400'
+              }`}>
+                {pushState === 'subscribed' ? <Bell size={18} /> : <BellOff size={18} />}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-bold text-slate-900">Aviso de fichaje</p>
+                <p className="text-xs text-slate-500">
+                  {pushState === 'subscribed'
+                    ? 'Te avisaremos si no fichas pasada tu hora de inicio.'
+                    : pushState === 'denied'
+                      ? 'Avisos bloqueados. Actívalos en los ajustes del navegador.'
+                      : 'Te avisaremos si no fichas pasada tu hora de inicio.'}
+                </p>
+              </div>
+              {pushState === 'subscribed' ? (
+                <button
+                  onClick={disablePush}
+                  disabled={pushBusy}
+                  className="shrink-0 rounded-lg bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-200 disabled:opacity-50"
+                >
+                  Desactivar
+                </button>
+              ) : pushState !== 'denied' && pushState !== 'loading' ? (
+                <button
+                  onClick={enablePush}
+                  disabled={pushBusy}
+                  className="shrink-0 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {pushBusy ? 'Activando…' : 'Activar'}
+                </button>
+              ) : null}
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );

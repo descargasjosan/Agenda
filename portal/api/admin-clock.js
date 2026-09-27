@@ -64,10 +64,19 @@ export default async function handler(req, res) {
     if (action === 'save-settings') {
       const { settings } = body;
       const allowed = ['off', 'optional', 'required'];
-      if (!settings || !allowed.includes(settings.gpsMode) || typeof settings.requireTask !== 'boolean') {
+      const delay = Number(settings?.notifyDelayMin);
+      if (
+        !settings || !allowed.includes(settings.gpsMode) ||
+        typeof settings.requireTask !== 'boolean' ||
+        !Number.isFinite(delay) || delay < 0 || delay > 120
+      ) {
         return res.status(400).json({ error: 'Ajustes no válidos' });
       }
-      await saveClockSettings(supabase, { gpsMode: settings.gpsMode, requireTask: settings.requireTask });
+      await saveClockSettings(supabase, {
+        gpsMode: settings.gpsMode,
+        requireTask: settings.requireTask,
+        notifyDelayMin: Math.round(delay)
+      });
       return res.status(200).json({ success: true });
     }
 
