@@ -46,11 +46,12 @@ create extension if not exists pg_net;
 
 grant usage on schema net to postgres;
 
--- 'plan': genera la cola del dia. Dos pasadas por si la planificacion
--- cambia por la manana (02:30 y 07:30 UTC ~= 04:30/09:30 en Madrid).
+-- 'plan': genera/actualiza la cola del dia una vez por hora en la ventana
+-- laboral (03:30-17:30 UTC ~= 05:30-19:30 Madrid), para recoger tareas
+-- asignadas a lo largo del dia.
 select cron.schedule(
   'push-plan',
-  '30 2,7 * * *',
+  '30 3-17 * * *',
   $$
   select net.http_post(
     url := 'https://horas-descargasjosan.vercel.app/api/push',
@@ -85,3 +86,5 @@ select cron.schedule(
 -- select * from cron.job;
 -- Para borrarlos si hiciera falta:
 -- select cron.unschedule('push-plan'); select cron.unschedule('push-tick');
+-- Para cambiar la frecuencia de uno existente:
+-- select cron.alter_job((select jobid from cron.job where jobname='push-plan'), schedule := '30 3-17 * * *');
