@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import {
   Activity, CalendarDays, FileDown, LogOut, RefreshCw, Plus, Pencil, Ban,
-  AlertCircle, Loader2, Lock, Mail, ArrowRight, Clock, ShieldCheck, Settings, MapPin, Bell
+  AlertCircle, AlertTriangle, Loader2, Lock, Mail, ArrowRight, Clock, ShieldCheck, Settings, MapPin, Bell
 } from 'lucide-react';
 
 const AUTH_API_URL = import.meta.env.VITE_API_ADMIN_AUTH_URL || '/api/admin-auth';
@@ -35,6 +35,8 @@ interface OverviewWorker {
   count: number;
   taskStart?: string | null;
   taskDue?: boolean;
+  late?: boolean;
+  lateMin?: number | null;
   logs: AdminLog[];
 }
 
@@ -382,6 +384,7 @@ function OverviewPanel({ workers, loading, onRefresh, onOpenHistory }: {
                   <th className="px-4 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Salida</th>
                   <th className="px-4 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest text-right">Tiempo hoy</th>
                   <th className="px-4 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Estado</th>
+                  <th className="px-4 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Incidencia</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -505,12 +508,25 @@ function OverviewPanel({ workers, loading, onRefresh, onOpenHistory }: {
                           )}
                         </span>
                       </td>
+                      <td className="px-4 py-3">
+                        {w.late ? (
+                          <span
+                            title={`Tarea desde las ${w.taskStart} — lleva ${w.lateMin} min sin fichar pasado el margen`}
+                            className="inline-flex items-center gap-1.5 text-rose-600"
+                          >
+                            <AlertTriangle className="w-3.5 h-3.5" />
+                            <span className="text-[10px] font-black uppercase tracking-widest">Sin fichar</span>
+                          </span>
+                        ) : (
+                          <span className="text-slate-300 font-bold">—</span>
+                        )}
+                      </td>
                     </tr>
                   );
                 })}
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-6 py-16 text-center text-xs font-black uppercase tracking-widest text-slate-400">
+                    <td colSpan={8} className="px-6 py-16 text-center text-xs font-black uppercase tracking-widest text-slate-400">
                       Sin operarios con ese filtro
                     </td>
                   </tr>

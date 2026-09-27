@@ -86,6 +86,8 @@ export default async function handler(req, res) {
       const today = madridDateStr();
       const [start, end] = madridDayRangeUtc(today);
       const nowStr = madridTimeStr(new Date());
+      const settings = await getClockSettings(supabase);
+      const graceMin = Math.max(0, Number(settings.notifyDelayMin ?? 15));
 
       const [workersRes, logsRes, jobsRes] = await Promise.all([
         supabase.from('workers').select('id, data'),
@@ -122,15 +124,27 @@ export default async function handler(req, res) {
         .map(r => {
           const logs = byWorker[r.id] || [];
           const taskStart = taskStarts[r.id] || null;
+          const state = lastState(logs);
+
+          // Minutos que lleva sin fichar pasado el margen (negativo = aun a tiempo)
+          let lateMin = null;
+          if (taskStart) {
+            const [sh, sm] = taskStart.split(':').map(Number);
+            const [nh, nm] = nowStr.split(':').map(Number);
+            lateMin = (nh * 60 + nm) - (sh * 60 + sm) - graceMin;
+          }
+
           return {
             id: r.id,
             name: r.data.name,
             dni: r.data.dni,
             code: r.data.code,
-            state: lastState(logs),
+            state,
             count: effectiveLogs(logs).length,
             taskStart,
             taskDue: Boolean(taskStart && taskStart <= nowStr),
+            late: Boolean(state === 'none' && lateMin !== null && lateMin > 0),
+            lateMin,
             logs: logs.map(serializeLog)
           };
         })
