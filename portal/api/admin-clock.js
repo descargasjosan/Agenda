@@ -9,6 +9,7 @@ import {
   madridMonthRangeUtc,
   effectiveLogs,
   lastState,
+  jobWorkerStart,
   CLOCK_LABELS
 } from './_shared.js';
 
@@ -84,14 +85,32 @@ export default async function handler(req, res) {
     if (action === 'overview') {
       const today = madridDateStr();
       const [start, end] = madridDayRangeUtc(today);
+      const nowStr = madridTimeStr(new Date());
 
-      const [workersRes, logsRes] = await Promise.all([
+      const [workersRes, logsRes, jobsRes] = await Promise.all([
         supabase.from('workers').select('id, data'),
-        supabase.from('clock_logs').select('*').gte('ts', start).lt('ts', end).order('ts', { ascending: true })
+        supabase.from('clock_logs').select('*').gte('ts', start).lt('ts', end).order('ts', { ascending: true }),
+        supabase.from('jobs').select('data').eq('data->>date', today)
       ]);
 
       if (workersRes.error) throw workersRes.error;
       if (logsRes.error) throw logsRes.error;
+      if (jobsRes.error) throw jobsRes.error;
+
+      // Primera hora de inicio del dia por operario (tareas no canceladas)
+      const taskStarts = {};
+      for (const row of jobsRes.data || []) {
+        const d = row.data || {};
+        if (d.isCancelled) continue;
+        const ids = new Set([
+          ...(d.assignedWorkerIds || []),
+          ...(d.reinforcementGroups || []).flatMap(g => g.workerIds || [])
+        ]);
+        for (const wid of ids) {
+          const t = jobWorkerStart(d, wid);
+          if (t && (!taskStarts[wid] || t < taskStarts[wid])) taskStarts[wid] = t;
+        }
+      }
 
       const byWorker = {};
       for (const l of logsRes.data || []) {
@@ -102,6 +121,7 @@ export default async function handler(req, res) {
         .filter(r => !r.data.isArchived)
         .map(r => {
           const logs = byWorker[r.id] || [];
+          const taskStart = taskStarts[r.id] || null;
           return {
             id: r.id,
             name: r.data.name,
@@ -109,6 +129,8 @@ export default async function handler(req, res) {
             code: r.data.code,
             state: lastState(logs),
             count: effectiveLogs(logs).length,
+            taskStart,
+            taskDue: Boolean(taskStart && taskStart <= nowStr),
             logs: logs.map(serializeLog)
           };
         })

@@ -98,6 +98,22 @@ export function madridMonthRangeUtc(month) {
   return [start, end];
 }
 
+// ---- Planificacion ----
+
+// Hora de inicio mas temprana ('HH:mm') del operario dentro de un trabajo,
+// teniendo en cuenta workerTimes y grupos de refuerzo.
+export function jobWorkerStart(jobData, workerId) {
+  const d = jobData || {};
+  const candidates = [];
+  if (d.workerTimes && d.workerTimes[workerId]) candidates.push(d.workerTimes[workerId]);
+  if ((d.assignedWorkerIds || []).includes(workerId)) candidates.push(d.startTime);
+  for (const g of d.reinforcementGroups || []) {
+    if ((g.workerIds || []).includes(workerId)) candidates.push(g.startTime || d.startTime);
+  }
+  const valid = candidates.filter(Boolean).sort();
+  return valid[0] || null;
+}
+
 // ---- Reglas del audit log ----
 // Un fichaje queda fuera del cómputo si existe otra fila con corrects_id = su id
 // (corrección o anulación). Las filas 'void' son solo marcadores: se excluyen.

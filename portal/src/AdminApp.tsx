@@ -33,6 +33,8 @@ interface OverviewWorker {
   code?: string;
   state: 'none' | 'in' | 'paused' | 'out';
   count: number;
+  taskStart?: string | null;
+  taskDue?: boolean;
   logs: AdminLog[];
 }
 
@@ -427,7 +429,22 @@ function OverviewPanel({ workers, loading, onRefresh, onOpenHistory }: {
                       className="hover:bg-slate-50 transition-colors cursor-pointer"
                     >
                       <td className="px-4 py-3">
-                        <div className="w-8 h-8 rounded-xl flex items-center justify-center font-bold text-[10px] border bg-slate-100 text-slate-500 border-slate-200">
+                        <div
+                          title={
+                            !w.taskStart
+                              ? 'Sin tarea asignada hoy'
+                              : w.taskDue
+                                ? `Tarea desde las ${w.taskStart} — jornada iniciada`
+                                : `Tarea asignada — empieza a las ${w.taskStart}`
+                          }
+                          className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-[10px] border ${
+                            !w.taskStart
+                              ? 'bg-slate-100 text-slate-500 border-slate-200'
+                              : w.taskDue
+                                ? 'bg-green-100 text-green-700 border-green-300'
+                                : 'bg-amber-100 text-amber-700 border-amber-300'
+                          }`}
+                        >
                           {w.code || '—'}
                         </div>
                       </td>

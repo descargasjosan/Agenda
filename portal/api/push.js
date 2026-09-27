@@ -7,7 +7,8 @@ import {
   madridDateStr,
   madridDayRangeUtc,
   madridOffsetMinutes,
-  effectiveLogs
+  effectiveLogs,
+  jobWorkerStart
 } from './_shared.js';
 
 // Piloto: solo estos DNI reciben avisos (misma lista que clock.js)
@@ -27,17 +28,7 @@ function madridTimeToUtc(dateStr, timeStr) {
 }
 
 // Hora de inicio mas temprana del operario entre sus trabajos del dia
-function workerStartTime(job, workerId) {
-  const d = job.data || {};
-  const candidates = [];
-  if (d.workerTimes && d.workerTimes[workerId]) candidates.push(d.workerTimes[workerId]);
-  if ((d.assignedWorkerIds || []).includes(workerId)) candidates.push(d.startTime);
-  for (const g of d.reinforcementGroups || []) {
-    if ((g.workerIds || []).includes(workerId)) candidates.push(g.startTime || d.startTime);
-  }
-  const valid = candidates.filter(Boolean).sort();
-  return valid[0] || null;
-}
+const workerStartTime = (job, workerId) => jobWorkerStart(job.data, workerId);
 
 async function runPlan(supabase) {
   const today = madridDateStr();
