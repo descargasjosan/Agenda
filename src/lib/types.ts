@@ -69,6 +69,7 @@ export interface WorkerControl {
   month: string;     // 'YYYY-MM' para indexación
   notes?: string;    // Opcional
   advance?: string;  // Anticipo pagado (máximo 4 cifras)
+  settledUntil?: string; // 'YYYY-MM-DD' — último día cubierto por la liquidación (registros 'L')
 }
 
 export interface Course {

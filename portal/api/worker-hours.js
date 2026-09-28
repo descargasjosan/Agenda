@@ -140,6 +140,27 @@ function isHoursSettled(controls, workerId, month) {
   return controls.some(c => c.id === settledId && c.value === 'L');
 }
 
+// Último día cubierto por la liquidación. Registros antiguos sin
+// settledUntil = mes completo.
+function getSettledUntil(controls, workerId, month) {
+  const rec = controls.find(c => c.id === `${workerId}-${month}-settled` && c.value === 'L');
+  if (!rec) return null;
+  if (!rec.settledUntil) return getMonthDays(month).length;
+  return parseInt(rec.settledUntil.split('-')[2], 10);
+}
+
+// Horas de un mes posteriores al día de corte (pasan a la siguiente nómina)
+function postCutoffHours(controls, workerId, month, cutoffDay) {
+  let sum = 0;
+  for (const c of controls) {
+    if (c.worker_id !== workerId || c.month !== month) continue;
+    const day = parseInt((c.date || '').split('-')[2] || '0', 10);
+    const num = parseFloat(c.value);
+    if (day > cutoffDay && !isNaN(num)) sum += num;
+  }
+  return sum;
+}
+
 function getWorkerAdvance(controls, workerId, month) {
   const advanceId = `${workerId}-${month}-advance`;
   const control = controls.find(c => c.id === advanceId);
@@ -156,17 +177,17 @@ function getWorkerAdvance(controls, workerId, month) {
 
 function calculateAccumulatedHours(controls, workerId, month) {
   // Buscar meses liquidados anteriores al mes seleccionado
-  const settledMonths = controls
+  const settledRecs = controls
     .filter(c => {
       if (c.worker_id !== workerId) return false;
       if (c.id !== `${workerId}-${c.month}-settled`) return false;
       if (c.value !== 'L') return false;
       return c.month < month;
     })
-    .map(c => c.month)
-    .sort();
+    .sort((a, b) => (a.month < b.month ? -1 : a.month > b.month ? 1 : 0));
 
-  const lastSettledMonth = settledMonths.length > 0 ? settledMonths[settledMonths.length - 1] : null;
+  const lastSettled = settledRecs.length > 0 ? settledRecs[settledRecs.length - 1] : null;
+  const lastSettledMonth = lastSettled ? lastSettled.month : null;
 
   let accumulated = 0;
 
@@ -183,7 +204,15 @@ function calculateAccumulatedHours(controls, workerId, month) {
     }
   }
 
-  return accumulated;
+  // Arrastre: días posteriores al corte del último mes liquidado
+  let carryIn = 0;
+  if (lastSettled && lastSettled.settledUntil) {
+    const cutoffDay = parseInt(lastSettled.settledUntil.split('-')[2], 10);
+    carryIn = postCutoffHours(controls, workerId, lastSettledMonth, cutoffDay);
+    accumulated += carryIn;
+  }
+
+  return { accumulated, carryIn, carryFrom: carryIn !== 0 ? lastSettledMonth : null };
 }
 
 export default async function handler(req, res) {
@@ -267,11 +296,25 @@ export default async function handler(req, res) {
     // Calcular resumen
     const dayList = buildDayList(controls, selectedMonth, worker.id);
     const totals = calculateMonthTotals(dayList);
-    const accumulated = calculateAccumulatedHours(controls, worker.id, selectedMonth);
+    const { accumulated, carryIn, carryFrom } = calculateAccumulatedHours(controls, worker.id, selectedMonth);
     const isSettled = isHoursSettled(controls, worker.id, selectedMonth);
     const advance = getWorkerAdvance(controls, worker.id, selectedMonth);
+    const settledUntil = getSettledUntil(controls, worker.id, selectedMonth);
+
+    // Días posteriores al corte de ESTE mes (pendientes de la siguiente nómina)
+    const lastDay = dayList.length;
+    const pendingDays = isSettled && settledUntil !== null && settledUntil < lastDay
+      ? dayList.filter(d => d.day > settledUntil).map(d => d.day)
+      : [];
+    const pendingHours = settledUntil !== null && settledUntil < lastDay
+      ? postCutoffHours(controls, worker.id, selectedMonth, settledUntil)
+      : 0;
 
     const [year, m] = selectedMonth.split('-').map(Number);
+    const carryFromName = carryFrom
+      ? MONTH_NAMES[parseInt(carryFrom.split('-')[1], 10) - 1]
+      : null;
+    const nextMonthName = new Date(year, m, 1).toLocaleDateString('es-ES', { month: 'long' });
 
     return res.status(200).json({
       success: true,
@@ -292,6 +335,12 @@ export default async function handler(req, res) {
       total: totals.totalHours + accumulated,
       isSettled,
       advance,
+      settledUntil,
+      pendingDays,
+      pendingHours,
+      carryIn,
+      carryFromMonth: carryFromName,
+      nextMonthName,
       lastSettledMonth: null // se puede completar si es necesario
     });
 

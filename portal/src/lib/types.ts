@@ -75,4 +75,10 @@ export interface WorkerSummary {
   isSettled: boolean;
   advance: AdvanceInfo;
   lastSettledMonth: string | null;
+  settledUntil?: number | null;
+  pendingDays?: number[];
+  pendingHours?: number;
+  carryIn?: number;
+  carryFromMonth?: string | null;
+  nextMonthName?: string;
 }

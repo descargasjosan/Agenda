@@ -243,6 +243,11 @@ const [selectedCell, setSelectedCell] = useState<{workerId: string, day: number}
 const [selectedColumn, setSelectedColumn] = useState<number | null>(null);
 const [workerFilter, setWorkerFilter] = useState('');
 const [isSyncingFromGrid, setIsSyncingFromGrid] = useState(false);
+const [settleTarget, setSettleTarget] = useState<{workerId: string} | null>(null);
+const [settleCutoff, setSettleCutoff] = useState<number>(() => {
+  const saved = parseInt(localStorage.getItem('dj-payroll-cutoff') || '28', 10);
+  return isNaN(saved) ? 28 : saved;
+});
 const [vacationModal, setVacationModal] = useState<{workerId: string} | null>(null);
 const [vacationModalData, setVacationModalData] = useState<{totalDays: number, carryOver: number}>({totalDays: 34, carryOver: 0});
 
@@ -977,21 +982,56 @@ const isHoursSettled = (workerId: string): boolean => {
    return planning.workerControls.some(c => c.id === settledId && c.value === 'L');
 };
 
-const toggleHoursSettled = async (workerId: string) => {
+// Último día del mes cubierto por la liquidación. Registros antiguos sin
+// settledUntil se consideran liquidados a mes completo.
+const getSettledUntil = (workerId: string, month: string): number | null => {
+   const rec = planning.workerControls.find(c => c.id === `${workerId}-${month}-settled` && c.value === 'L');
+   if (!rec) return null;
+   if (!rec.settledUntil) return getMonthDays(month).length;
+   return parseInt(rec.settledUntil.split('-')[2], 10);
+};
+
+// Horas de un mes posteriores a un día de corte (días que pasan a la siguiente nómina)
+const postCutoffHours = (workerId: string, month: string, cutoffDay: number): number => {
+   let sum = 0;
+   planning.workerControls
+      .filter(c => c.worker_id === workerId && c.month === month)
+      .forEach(c => {
+         const day = parseInt(c.date?.split('-')[2] || '0', 10);
+         const num = parseFloat(c.value);
+         if (day > cutoffDay && !isNaN(num)) sum += num;
+      });
+   return sum;
+};
+
+const toggleHoursSettled = async (workerId: string, cutoffDay?: number) => {
    const settledId = `${workerId}-${selectedMonth}-settled`;
-   
+
    if (isHoursSettled(workerId)) {
       await deleteWorkerControl(settledId);
-   } else {
-      try {
-         await saveWorkerControl({
-            id: settledId,
-            worker_id: workerId,
-            date: `${selectedMonth}-31`, // Usar día 31 para evitar conflicto con días reales
-            value: 'L',
-            month: selectedMonth
-         });
-      } catch (error: any) {
+      return;
+   }
+
+   // Sin día de corte -> pedirlo en el modal
+   if (cutoffDay == null) {
+      setSettleTarget({ workerId });
+      return;
+   }
+
+   const lastDay = getMonthDays(selectedMonth).length;
+   const clamped = Math.max(1, Math.min(lastDay, Math.round(cutoffDay)));
+   localStorage.setItem('dj-payroll-cutoff', String(clamped));
+
+   try {
+      await saveWorkerControl({
+         id: settledId,
+         worker_id: workerId,
+         date: `${selectedMonth}-31`, // Usar día 31 para evitar conflicto con días reales
+         value: 'L',
+         month: selectedMonth,
+         settledUntil: `${selectedMonth}-${String(clamped).padStart(2, '0')}`
+      });
+   } catch (error: any) {
          // Si es error de duplicado, eliminar directamente y crear nuevo registro
          if (error.message?.includes('duplicate key') || error.code === '23505') {
             try {
@@ -1009,7 +1049,8 @@ const toggleHoursSettled = async (workerId: string) => {
                   worker_id: workerId,
                   date: `${selectedMonth}-31`, // Usar día 31 para evitar conflicto con días reales
                   value: 'L',
-                  month: selectedMonth
+                  month: selectedMonth,
+                  settledUntil: `${selectedMonth}-${String(clamped).padStart(2, '0')}`
                });
             } catch (directError: any) {
                throw directError;
@@ -1018,17 +1059,17 @@ const toggleHoursSettled = async (workerId: string) => {
             throw error;
          }
       }
-   }
 };
 
-// Suma las horas de meses anteriores no liquidados para acumular el saldo
+// Suma las horas de meses anteriores no liquidados para acumular el saldo,
+// incluyendo los días posteriores al corte del último mes liquidado (arrastre)
 const calculateAccumulatedHours = (workerId: string): number => {
    // Buscar el último mes liquidado anterior al mes actual
-   const settledMonths = planning.workerControls
+   const settledRecs = planning.workerControls
       .filter(c => c.worker_id === workerId && c.id === `${workerId}-${c.month}-settled` && c.value === 'L' && c.month < selectedMonth)
-      .map(c => c.month)
-      .sort();
-   const lastSettledMonth = settledMonths.length > 0 ? settledMonths[settledMonths.length - 1] : null;
+      .sort((a, b) => (a.month < b.month ? -1 : a.month > b.month ? 1 : 0));
+   const lastSettled = settledRecs.length > 0 ? settledRecs[settledRecs.length - 1] : null;
+   const lastSettledMonth = lastSettled ? lastSettled.month : null;
 
    // Sumar horas numéricas de todos los meses no liquidados anteriores al actual
    let accumulated = 0;
@@ -1042,6 +1083,12 @@ const calculateAccumulatedHours = (workerId: string): number => {
          return !isNaN(num);
       })
       .forEach(c => { accumulated += parseFloat(c.value); });
+
+   // Días tras el corte del último mes liquidado: pasan a este período (arrastre)
+   if (lastSettled?.settledUntil) {
+      const cutoffDay = parseInt(lastSettled.settledUntil.split('-')[2], 10);
+      accumulated += postCutoffHours(workerId, lastSettledMonth!, cutoffDay);
+   }
 
    return accumulated;
 };
@@ -5865,11 +5912,19 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                                           const accumulated = calculateAccumulatedHours(worker.id);
                                           const displayTotal = totals.totalHours + accumulated;
                                           const hasAccumulated = accumulated !== 0;
+                                          const cutoff = getSettledUntil(worker.id, selectedMonth);
+                                          const lastDay = getMonthDays(selectedMonth).length;
+                                          const pendingHours = settled && cutoff !== null && cutoff < lastDay
+                                             ? postCutoffHours(worker.id, selectedMonth, cutoff)
+                                             : 0;
+                                          const fmt = (n: number) => `${n >= 0 ? '+' : ''}${Math.round(n * 100) / 100}h`;
                                           const tooltipText = settled
-                                             ? `Liquidadas ✓ | Mes: ${totals.totalHours >= 0 ? '+' : ''}${totals.totalHours}h`
+                                             ? pendingHours !== 0
+                                                ? `Liquidado hasta el día ${cutoff} ✓ | Pagado: ${fmt(displayTotal - pendingHours)} | Pendiente: ${fmt(pendingHours)} (días ${cutoff + 1}-${lastDay}) → próxima nómina`
+                                                : `Liquidadas ✓ | Mes: ${fmt(totals.totalHours)}`
                                              : hasAccumulated
-                                                ? `Mes: ${totals.totalHours >= 0 ? '+' : ''}${totals.totalHours}h | Acumulado anterior: ${accumulated >= 0 ? '+' : ''}${accumulated}h | Total: ${displayTotal >= 0 ? '+' : ''}${displayTotal}h`
-                                                : `Mes: ${totals.totalHours >= 0 ? '+' : ''}${totals.totalHours}h | Pulsar para liquidar`;
+                                                ? `Mes: ${fmt(totals.totalHours)} | Acumulado anterior: ${fmt(accumulated)} | Total: ${fmt(displayTotal)} | Pulsar para liquidar`
+                                                : `Mes: ${fmt(totals.totalHours)} | Pulsar para liquidar`;
                                           return (
                                              <button
                                                 onClick={() => toggleHoursSettled(worker.id)}
@@ -5880,6 +5935,11 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                                                    {displayTotal >= 0 ? '+' : ''}{displayTotal}
                                                 </span>
                                                 {settled && <CheckCircle className="w-3 h-3 flex-shrink-0" />}
+                                                {settled && pendingHours !== 0 && (
+                                                   <span className="text-[9px] font-black text-amber-600">
+                                                      {fmt(pendingHours)}→
+                                                   </span>
+                                                )}
                                                 {!settled && hasAccumulated && <span className="text-[9px] opacity-60">↑</span>}
                                              </button>
                                           );
@@ -6257,6 +6317,82 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                </div>
             </div>
          )}
+         {/* Modal: liquidar horas con día de corte */}
+         {settleTarget && (() => {
+            const worker = planning.workers.find(w => w.id === settleTarget.workerId);
+            const lastDay = getMonthDays(selectedMonth).length;
+            const cutoff = Math.max(1, Math.min(lastDay, settleCutoff));
+            const accumulated = calculateAccumulatedHours(settleTarget.workerId);
+            const monthData = workerControlData[selectedMonth] || {};
+            const wd = monthData[settleTarget.workerId] || {};
+            let paid = accumulated, pending = 0;
+            getMonthDays(selectedMonth).forEach(d => {
+               const v = wd[d];
+               if (v !== '' && !isNaN(Number(v))) {
+                  if (d <= cutoff) paid += Number(v); else pending += Number(v);
+               }
+            });
+            const [y, m] = selectedMonth.split('-').map(Number);
+            const nextMonthName = new Date(y, m, 1).toLocaleDateString('es-ES', { month: 'long' });
+            const fmt = (n: number) => `${n >= 0 ? '+' : ''}${Math.round(n * 100) / 100}h`;
+            return (
+               <div className="fixed inset-0 z-[350] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4" onClick={() => setSettleTarget(null)}>
+                  <div className="bg-white w-full max-w-sm rounded-[32px] p-6 shadow-2xl animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
+                     <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-lg font-black text-slate-900 italic uppercase">Liquidar Horas</h3>
+                        <button onClick={() => setSettleTarget(null)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+                           <X className="w-5 h-5 text-slate-400" />
+                        </button>
+                     </div>
+
+                     <p className="text-sm text-slate-600 mb-1">
+                        Operario: <span className="font-black text-slate-900">{worker?.name}</span>
+                     </p>
+                     <p className="text-xs text-slate-500 mb-5">
+                        La nómina se cierra antes de fin de mes. Los días posteriores al corte pasan automáticamente a la nómina siguiente.
+                     </p>
+
+                     <label className="block text-xs font-black text-slate-700 mb-2 uppercase tracking-wider">
+                        Liquidar hasta el día
+                     </label>
+                     <input
+                        type="number"
+                        min={1}
+                        max={lastDay}
+                        value={settleCutoff}
+                        onChange={e => setSettleCutoff(parseInt(e.target.value, 10) || lastDay)}
+                        className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
+                     />
+
+                     <div className="rounded-xl bg-slate-50 border border-slate-200 p-3 text-xs space-y-1 mb-6">
+                        <p className="font-bold text-slate-700">
+                           Se pagan: <span className="text-green-700">{fmt(paid)}</span> <span className="text-slate-400 font-medium">(hasta día {cutoff}{accumulated !== 0 ? ' + arrastre' : ''})</span>
+                        </p>
+                        {pending !== 0 && cutoff < lastDay && (
+                           <p className="font-bold text-amber-700">
+                              Pendiente: {fmt(pending)} → nómina de {nextMonthName} <span className="text-slate-400 font-medium">(días {cutoff + 1}-{lastDay})</span>
+                           </p>
+                        )}
+                     </div>
+
+                     <div className="flex gap-3">
+                        <button
+                           onClick={() => setSettleTarget(null)}
+                           className="flex-1 py-3 rounded-2xl bg-slate-100 text-slate-600 font-black text-[11px] uppercase tracking-widest hover:bg-slate-200 transition-all"
+                        >
+                           Cancelar
+                        </button>
+                        <button
+                           onClick={() => { toggleHoursSettled(settleTarget.workerId, cutoff); setSettleTarget(null); }}
+                           className="flex-1 py-3 rounded-2xl bg-green-600 text-white font-black text-[11px] uppercase tracking-widest hover:bg-green-700 transition-all"
+                        >
+                           Liquidar
+                        </button>
+                     </div>
+                  </div>
+               </div>
+            );
+         })()}
          {view === 'stats' && <StatisticsPanel planning={cleanedPlanning} />}
       </div>
 

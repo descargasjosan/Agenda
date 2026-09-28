@@ -36,12 +36,13 @@ function formatMonthName(month: string) {
   return `${MONTH_NAMES[m - 1]} ${year}`;
 }
 
-function StatusBadge({ settled, advance }: { settled: boolean; advance: { amount: number; paid: boolean } }) {
+function StatusBadge({ settled, settledUntil, lastDay, advance }: { settled: boolean; settledUntil?: number | null; lastDay?: number; advance: { amount: number; paid: boolean } }) {
   if (settled) {
+    const partial = settledUntil != null && lastDay != null && settledUntil < lastDay;
     return (
       <div className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-700">
         <CheckCircle2 size={14} />
-        Liquidado
+        {partial ? `Liquidado hasta el ${settledUntil}` : 'Liquidado'}
       </div>
     );
   }
@@ -175,7 +176,7 @@ function LoginForm({ onLogin, loading, error }: { onLogin: (dni: string, pin: st
   );
 }
 
-function DayList({ days }: { days: WorkerSummary['days'] }) {
+function DayList({ days, pendingDays }: { days: WorkerSummary['days']; pendingDays?: Set<number> }) {
   return (
     <div className="space-y-2">
       {days.map((day) => (
@@ -198,6 +199,9 @@ function DayList({ days }: { days: WorkerSummary['days'] }) {
                 })}
               </p>
               {day.isWeekend && <p className="text-xs text-slate-500">Fin de semana</p>}
+              {pendingDays?.has(day.day) && (
+                <p className="text-xs font-medium text-amber-600">Nómina del mes siguiente</p>
+              )}
             </div>
           </div>
 
@@ -284,12 +288,26 @@ function SummaryView({
 
       <main className="mx-auto max-w-md px-4 pt-4">
         <div className="mb-4 flex items-center justify-between">
-          <StatusBadge settled={summary.isSettled} advance={summary.advance} />
+          <StatusBadge
+            settled={summary.isSettled}
+            settledUntil={summary.settledUntil}
+            lastDay={summary.days.length}
+            advance={summary.advance}
+          />
         </div>
 
         <div className="mb-4 grid grid-cols-2 gap-3">
           <SummaryCard label="Horas mes" value={`${summary.totals.totalHours}h`} color="blue" />
-          <SummaryCard label="Acumulado" value={`${summary.accumulated}h`} sub="Meses anteriores" color="amber" />
+          <SummaryCard
+            label="Acumulado"
+            value={`${summary.accumulated}h`}
+            sub={
+              summary.carryIn
+                ? `Meses anteriores (incluye ${summary.carryIn}h de ${summary.carryFromMonth})`
+                : 'Meses anteriores'
+            }
+            color="amber"
+          />
           <SummaryCard label="Total" value={`${summary.total}h`} color="green" />
           <SummaryCard
             label="Anticipo"
@@ -298,6 +316,18 @@ function SummaryView({
             color={summary.advance.amount > 0 ? (summary.advance.paid ? 'green' : 'red') : 'slate'}
           />
         </div>
+
+        {(summary.pendingDays?.length ?? 0) > 0 && (
+          <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3">
+            <p className="text-xs font-semibold text-amber-800">
+              Nómina cerrada el día {summary.settledUntil}
+            </p>
+            <p className="mt-0.5 text-xs text-amber-700">
+              Los días {summary.pendingDays!.join(', ')} ({summary.pendingHours}h) se pagan en la
+              nómina de {summary.nextMonthName}.
+            </p>
+          </div>
+        )}
 
         <div className="mb-3 flex items-center gap-2">
           <Clock size={18} className="text-slate-500" />
@@ -315,7 +345,7 @@ function SummaryView({
             <Loader2 size={32} className="animate-spin text-blue-600" />
           </div>
         ) : (
-          <DayList days={summary.days} />
+          <DayList days={summary.days} pendingDays={new Set(summary.pendingDays)} />
         )}
       </main>
     </div>
