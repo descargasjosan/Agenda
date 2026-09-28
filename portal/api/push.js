@@ -12,7 +12,7 @@ import {
 } from './_shared.js';
 
 // Piloto: solo estos DNI reciben avisos (misma lista que clock.js)
-const CLOCK_PILOT_DNIS = ['24368437Y'];
+const CLOCK_PILOT_DNIS = ['24368437Y', '24371414Q', '44855273Y'];
 
 function initWebPush() {
   const pub = process.env.VAPID_PUBLIC_KEY;

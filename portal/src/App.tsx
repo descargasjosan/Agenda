@@ -8,7 +8,7 @@ import AdminApp from './AdminApp';
 const AUTH_KEY = 'dj-portal-auth';
 
 // Piloto del fichaje: solo estos DNI ven la pestaña "Fichar"
-const CLOCK_PILOT_DNIS = new Set(['24368437Y']);
+const CLOCK_PILOT_DNIS = new Set(['24368437Y', '24371414Q', '44855273Y']);
 
 const API_URL = import.meta.env.VITE_API_URL || '/api/worker-hours';
 const FUEL_API_URL = import.meta.env.VITE_API_FUEL_URL || '/api/fuel';
