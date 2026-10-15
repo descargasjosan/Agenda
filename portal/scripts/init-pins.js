@@ -1,7 +1,9 @@
-// Script para regenerar los PIN del portal (6 dígitos aleatorios) para todos
-// los operarios ACTIVOS. Los operarios archivados quedan sin PIN (sin acceso).
+// Script para asignar PIN del portal (6 dígitos aleatorios) a los operarios
+// ACTIVOS que aún no tienen. Los que ya tienen PIN conservan el suyo.
+// Los operarios archivados quedan sin PIN (sin acceso).
 //
-// Uso: node scripts/init-pins.js
+// Uso: node scripts/init-pins.js          -> solo genera PIN a quien no tenga
+//      node scripts/init-pins.js --all    -> REGENERA todos los PIN (incidente de seguridad)
 // Lee SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY de portal/.env.local
 // Genera pins-lista.html (listado imprimible Nombre-DNI-PIN) — NO subirlo a git.
 
@@ -32,6 +34,9 @@ if (!url || !serviceKey) {
 
 const supabase = createClient(url, serviceKey);
 
+// Por defecto solo se genera PIN a quien no tenga. --all regenera todos.
+const regenAll = process.argv.includes('--all');
+
 function generatePin() {
   return String(randomInt(0, 1000000)).padStart(6, '0');
 }
@@ -46,6 +51,7 @@ async function main() {
 
   const results = [];
   const archived = [];
+  let created = 0;
   let errors = 0;
 
   for (const row of rows || []) {
@@ -64,6 +70,12 @@ async function main() {
       continue;
     }
 
+    if (worker.portalPin && !regenAll) {
+      // Ya tiene PIN: conservar y listar tal cual
+      results.push({ name: worker.name, dni: worker.dni, pin: worker.portalPin });
+      continue;
+    }
+
     const pin = generatePin();
     const updated = { ...worker, portalPin: pin };
 
@@ -78,11 +90,12 @@ async function main() {
     }
 
     results.push({ name: worker.name, dni: worker.dni, pin });
+    created++;
   }
 
   results.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
-  console.log(`\n🎉 ${results.length} PINs regenerados (6 dígitos)`);
+  console.log(`\n🎉 ${created} PINs nuevos generados · ${results.length - created} conservados`);
   if (archived.length > 0) {
     console.log(`🚫 ${archived.length} archivados sin acceso: ${archived.join(', ')}`);
   }
