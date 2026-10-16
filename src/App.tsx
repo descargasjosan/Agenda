@@ -12,7 +12,7 @@ import StatisticsPanel from './components/StatisticsPanel';
 import CompactPlanningView from './components/CompactPlanningView';
 import FleetManager from './components/FleetManager';
 import { PlanningState, Worker, Client, Job, Holiday, Vehicle, FuelRecord, DailyNote, MedicalCourse, Course, StandardTask, VehicleAssignment, ContractType, WorkerStatus, WorkerStatusRecord, ViewType, JobType, NoteType, WorkerControlData, WorkerControl, TerminationReason, TerminationNotificationStatus } from './lib/types';
-import { formatDateDMY, isHoliday, getWorkerDisplayName, getCurrentWorkerStatus, getCurrentWorkerStatusForDate, getNextStatusChange, addOrUpdateStatusRecord, removeStatusRecord, validateAssignment, getWorkerSSFormat } from './lib/utils';
+import { formatDateDMY, isHoliday, isWorkingDay, getWorkerDisplayName, getCurrentWorkerStatus, getCurrentWorkerStatusForDate, getNextStatusChange, addOrUpdateStatusRecord, removeStatusRecord, validateAssignment, getWorkerSSFormat } from './lib/utils';
 import { WORKER_ROLES, GENERAL_NOTE_WORKER_ID } from './lib/constants';
 
 // Funciones para Supabase (Opción B - JSONB) - ELIMINADAS
@@ -1934,9 +1934,13 @@ const [planningFilter, setPlanningFilter] = useState('');
   };
 
   const handleOpenDuplicate = (job: Job) => { 
-    // Calcular el día siguiente
+    // Calcular el siguiente día LABORAL (saltar fines de semana y festivos)
     const nextDay = new Date(job.date);
-    nextDay.setDate(nextDay.getDate() + 1);
+    let guard = 0;
+    do {
+      nextDay.setDate(nextDay.getDate() + 1);
+      guard++;
+    } while (!isWorkingDay(nextDay.toISOString().split('T')[0], planning.customHolidays) && guard < 60);
     const nextDayStr = nextDay.toISOString().split('T')[0];
     
     setDuplicatingJob(job); 
