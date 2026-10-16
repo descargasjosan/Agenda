@@ -5982,10 +5982,21 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                                           <input
                                              type="text"
                                              placeholder="0"
-                                             value={getWorkerAdvance(worker.id)}
-                                             onChange={(e) => {
+                                             key={`adv-${worker.id}-${selectedMonth}-${getWorkerAdvance(worker.id)}`}
+                                             defaultValue={getWorkerAdvance(worker.id)}
+                                             onKeyDown={(e) => {
+                                                if (e.key === 'Enter') e.currentTarget.blur();
+                                                else if (e.key === 'Escape') {
+                                                   e.currentTarget.value = getWorkerAdvance(worker.id);
+                                                   e.currentTarget.blur();
+                                                }
+                                             }}
+                                             onBlur={(e) => {
                                                 const value = e.target.value.replace(/[^0-9]/g, '').slice(0, 4);
-                                                saveWorkerAdvance(worker.id, value);
+                                                e.target.value = value;
+                                                if (value !== getWorkerAdvance(worker.id)) {
+                                                   saveWorkerAdvance(worker.id, value);
+                                                }
                                              }}
                                              className={`px-1 py-0.5 text-[10px] text-center border rounded focus:outline-none focus:ring-1 focus:ring-blue-500 ${
                                                 (() => {
@@ -6055,11 +6066,20 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                                        <input
                                           type="number"
                                           placeholder="0"
-                                          value={worker.salary || ''}
-                                          onChange={(e) => {
-                                             const value = e.target.value;
-                                             const updatedWorker = { ...worker, salary: value ? parseFloat(value) : undefined };
-                                             saveWorker(updatedWorker);
+                                          key={`sal-${worker.id}-${worker.salary ?? ''}`}
+                                          defaultValue={worker.salary || ''}
+                                          onKeyDown={(e) => {
+                                             if (e.key === 'Enter') e.currentTarget.blur();
+                                             else if (e.key === 'Escape') {
+                                                e.currentTarget.value = String(worker.salary ?? '');
+                                                e.currentTarget.blur();
+                                             }
+                                          }}
+                                          onBlur={(e) => {
+                                             const num = e.target.value ? parseFloat(e.target.value) : undefined;
+                                             if (num !== worker.salary) {
+                                                saveWorker({ ...worker, salary: num });
+                                             }
                                           }}
                                           className={`w-16 px-1 py-0.5 text-[10px] text-center border rounded focus:outline-none focus:ring-1 focus:ring-blue-500 [-moz-appearance:_textfield] [&::-webkit-inner-spin-button]:m-0 [&::-webkit-outer-spin-button]:m-0 [&::-webkit-inner-spin-button]:hidden [&::-webkit-outer-spin-button]:hidden ${
                                              worker.salary && worker.salary > 0 
@@ -6074,11 +6094,20 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                                        <input
                                           type="number"
                                           placeholder="0"
-                                          value={worker.netSalary || ''}
-                                          onChange={(e) => {
-                                             const value = e.target.value;
-                                             const updatedWorker = { ...worker, netSalary: value ? parseFloat(value) : undefined };
-                                             saveWorker(updatedWorker);
+                                          key={`net-${worker.id}-${worker.netSalary ?? ''}`}
+                                          defaultValue={worker.netSalary || ''}
+                                          onKeyDown={(e) => {
+                                             if (e.key === 'Enter') e.currentTarget.blur();
+                                             else if (e.key === 'Escape') {
+                                                e.currentTarget.value = String(worker.netSalary ?? '');
+                                                e.currentTarget.blur();
+                                             }
+                                          }}
+                                          onBlur={(e) => {
+                                             const num = e.target.value ? parseFloat(e.target.value) : undefined;
+                                             if (num !== worker.netSalary) {
+                                                saveWorker({ ...worker, netSalary: num });
+                                             }
                                           }}
                                           className={`w-16 px-1 py-0.5 text-[10px] text-center border rounded focus:outline-none focus:ring-1 focus:ring-green-500 [-moz-appearance:_textfield] [&::-webkit-inner-spin-button]:m-0 [&::-webkit-outer-spin-button]:m-0 [&::-webkit-inner-spin-button]:hidden [&::-webkit-outer-spin-button]:hidden ${
                                              worker.netSalary && worker.netSalary > 0 
