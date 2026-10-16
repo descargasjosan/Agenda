@@ -736,7 +736,20 @@ const PlanningBoard: React.FC<PlanningBoardProps> = ({
                                         <div className="flex flex-wrap gap-1.5 items-center">
                                             {groupedWorkerIds[timeGroup].map(workerId => {
                                                 const worker = planning.workers.find(w => w.id === workerId);
-                                                if (!worker) return null;
+                                                // ID huérfano (cuenta en el total pero no existe el operario):
+                                                // chip fantasma para poder eliminarlo
+                                                if (!worker) {
+                                                   return (
+                                                      <div
+                                                        key={workerId}
+                                                        title={`Referencia sin operario: ${workerId}`}
+                                                        className="flex items-center gap-1 pl-1.5 pr-0.5 py-0.5 rounded-lg border border-dashed border-red-300 bg-red-50 text-red-400 text-[10px] font-black"
+                                                      >
+                                                         <span>?</span>
+                                                         <button onClick={() => !isCancelled && onRemoveWorker(workerId, job.id)} disabled={isCancelled} className={`p-0.5 ml-0.5 ${isCancelled ? 'opacity-0' : 'hover:text-red-600'}`}><X className="w-2.5 h-2.5" /></button>
+                                                      </div>
+                                                   );
+                                                }
 
                                                 const dailyNote = planning.dailyNotes?.find(n => n.workerId === worker.id && n.date === date);
                                                 
