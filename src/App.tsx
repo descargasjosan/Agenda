@@ -1959,11 +1959,19 @@ const [planningFilter, setPlanningFilter] = useState('');
       ...restOfJob 
     } = duplicatingJob;
     
+    // Los refuerzos no se arrastran: son miembros de reinforcementGroups del
+    // original (van dentro de assignedWorkerIds) y los grupos no se copian
+    const reinforcementIds = new Set(
+      (duplicatingJob.reinforcementGroups || []).flatMap(g => g.workerIds)
+    );
+
     const newJob: Job = { 
       ...restOfJob, // Copiar todo excepto las propiedades excluidas arriba
       id: `j-${Date.now()}`, 
       date: duplicationDate, 
-      assignedWorkerIds: keepWorkersOnDuplicate ? duplicatingJob.assignedWorkerIds : [],
+      assignedWorkerIds: keepWorkersOnDuplicate
+        ? duplicatingJob.assignedWorkerIds.filter(id => !reinforcementIds.has(id))
+        : [],
       ref: keepDeliveryNoteOnDuplicate ? (duplicatingJob.ref || '') : '', // Control explícito del ref
       deliveryNote: keepDeliveryNoteOnDuplicate ? (duplicatingJob.deliveryNote || '') : '', // Control explícito del deliveryNote
       reinforcementGroups: [], // 🛡️ FORZAR: Siempre vacío en duplicación
