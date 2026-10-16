@@ -257,6 +257,13 @@ const handleMonthChange = (newMonth: string) => {
    // No limpiar datos, solo cambiar el mes
 };
 
+// Mover al mes anterior/siguiente (las flechas del selector de Control de Operarios)
+const shiftMonth = (delta: number) => {
+   const [y, m] = selectedMonth.split('-').map(Number);
+   const d = new Date(y, m - 1 + delta, 1);
+   handleMonthChange(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+};
+
 // Función para obtener días del mes según el mes seleccionado
 const getMonthDays = (monthString: string) => {
    const [year, month] = monthString.split('-').map(Number);
@@ -5653,6 +5660,14 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                   </div>
                   <div className="flex items-center gap-4">
                      <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-xl border border-slate-200">
+                        <button
+                           onClick={() => shiftMonth(-1)}
+                           disabled={selectedMonth <= '2026-01'}
+                           title="Mes anterior"
+                           className="p-1 -ml-1 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-30 disabled:hover:bg-transparent"
+                        >
+                           <ChevronLeft className="w-4 h-4 text-slate-600" />
+                        </button>
                         <CalendarDays className="w-4 h-4 text-slate-600" />
                         <select 
                            className="font-black text-sm text-slate-700 outline-none bg-transparent"
@@ -5672,6 +5687,14 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                            <option value="2026-11">Noviembre 2026</option>
                            <option value="2026-12">Diciembre 2026</option>
                         </select>
+                        <button
+                           onClick={() => shiftMonth(1)}
+                           disabled={selectedMonth >= '2026-12'}
+                           title="Mes siguiente"
+                           className="p-1 -mr-1 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-30 disabled:hover:bg-transparent"
+                        >
+                           <ChevronRight className="w-4 h-4 text-slate-600" />
+                        </button>
                      </div>
                      <button 
                         onClick={exportWorkerControlData}
