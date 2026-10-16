@@ -1501,7 +1501,7 @@ const [planningFilter, setPlanningFilter] = useState('');
       if (daysUntilExpiry > 30) return; // Solo alertar si caduca en 30 días o menos
       const alertLevel: 'critical' | 'warning' = daysUntilExpiry < 0 ? 'critical' : 'warning';
       const worker = workers.find(w => w.id === workerId);
-      if (worker) {
+      if (worker && !worker.isArchived) {
         alerts.push({ 
           id: `${course.id}-${workerId}`, 
           workerId: worker.id, 
