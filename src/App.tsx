@@ -1777,7 +1777,11 @@ const [planningFilter, setPlanningFilter] = useState('');
     const worker = planning.workers.find(w => w.id === workerId);
     const workerTimes = { ...job.workerTimes };
     if (workerTimes[workerId]) delete workerTimes[workerId];
-    const updatedJob = { ...job, assignedWorkerIds: job.assignedWorkerIds.filter(id => id !== workerId), workerTimes };
+    // Quitar también de los grupos de refuerzo para que no reaparezca al guardarlos
+    const reinforcementGroups = (job.reinforcementGroups || [])
+      .map(g => ({ ...g, workerIds: g.workerIds.filter(id => id !== workerId) }))
+      .filter(g => g.workerIds.length > 0);
+    const updatedJob = { ...job, assignedWorkerIds: job.assignedWorkerIds.filter(id => id !== workerId), workerTimes, reinforcementGroups };
     await persistJob(updatedJob);
     if (worker) {
       showNotification(`${worker.name} eliminado de la tarea`, "info");
@@ -1815,10 +1819,12 @@ const [planningFilter, setPlanningFilter] = useState('');
     // Combinar workerTimes principales + de refuerzo
     const finalWorkerTimes = { ...mainWorkerTimes, ...newWorkerTimes };
     
-    // CORRECCIÓN: Si no hay grupos de refuerzo, solo mantener operarios principales (sin horarios especiales)
-    const mainWorkerIds = groups.length === 0 
-      ? job.assignedWorkerIds.filter(id => !job.workerTimes || job.workerTimes[id] === job.startTime)
-      : job.assignedWorkerIds.filter(id => !reinforcementWorkerIds.includes(id));
+    // Operarios principales = los asignados que no están ni en los grupos
+    // antiguos ni en los nuevos (los refuerzos eliminados se desasignan)
+    const previousReinforcementIds = (job.reinforcementGroups || []).flatMap(g => g.workerIds);
+    const mainWorkerIds = job.assignedWorkerIds.filter(id =>
+      !reinforcementWorkerIds.includes(id) && !previousReinforcementIds.includes(id)
+    );
     
     // CORRECCIÓN: Limpiar workerTimes de operarios eliminados
     const cleanedWorkerTimes: Record<string, string> = {};
