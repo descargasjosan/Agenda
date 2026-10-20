@@ -282,7 +282,7 @@ const PlanningBoard: React.FC<PlanningBoardProps> = ({
   };
 
   return (
-    <div className="flex-1 bg-slate-50 overflow-y-auto p-4 space-y-4 pb-32 custom-scrollbar relative">
+    <div id="planning-board-scroll" className="flex-1 bg-slate-50 overflow-y-auto p-4 space-y-4 pb-32 custom-scrollbar relative">
       
       {/* MENÚ CONTEXTUAL */}
       {contextMenu && (

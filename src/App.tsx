@@ -819,47 +819,6 @@ useEffect(() => {
 // eslint-disable-next-line react-hooks/exhaustive-deps
 }, [planning.workers, planning.workerControls, isSyncingFromGrid]);
 
-// Detector de visibilidad para identificar throttling
-useEffect(() => {
-   const handleVisibilityChange = () => {
-      console.log(`👁️ [VISIBILITY] Cambio de estado: ${document.hidden ? 'BACKGROUND' : 'FOREGROUND'}`);
-      if (!document.hidden) {
-         console.log('👁️ [VISIBILITY] App volvió a primer plano - Forzando sincronización completa');
-         
-         // Forzar sincronización inmediata al volver
-         if (view === 'workerControl' && selectedMonth && planning.workers.length > 0 && !isSyncingFromGrid) {
-            syncFromStatusRecords();
-         }
-         
-         // 🔄 FORZAR ACTUALIZACIÓN COMPLETA para vista de planificación
-         if (view === 'planning') {
-            console.log('🔄 [FORCE] Forzando actualización completa de planning');
-            
-            // Forzar una actualización del estado para romper cualquier cache de React
-            setPlanning(prev => ({ ...prev }));
-            
-            // También forzar recarga de datos si hace más de 30 segundos en background
-            const now = Date.now();
-            const lastBackgroundTime = parseInt(localStorage.getItem('lastBackgroundTime') || '0');
-            
-            if (now - lastBackgroundTime > 90000) { // 90 segundos
-               console.log('🔄 [FORCE] Tiempo en background > 30s, forzando recarga completa');
-               window.location.reload(); // Recarga completa como último recurso
-            }
-         }
-      } else {
-         // Guardar timestamp cuando pasa a background
-         localStorage.setItem('lastBackgroundTime', Date.now().toString());
-      }
-   };
-
-   document.addEventListener('visibilitychange', handleVisibilityChange);
-   
-   return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-   };
-}, [view, selectedMonth, planning.workers, planning.workerControls, isSyncingFromGrid, syncFromStatusRecords]);
-
 // Función para obtener color de celda según valor
 const getCellColor = (value: string) => {
    if (value === '') return 'bg-white border border-slate-200';
@@ -1349,6 +1308,99 @@ const [planningFilter, setPlanningFilter] = useState('');
     const timeout = setTimeout(() => { setHighlightedWorker(null); setHighlightTimeout(null); }, 10000);
     setHighlightTimeout(timeout);
   }, [highlightedWorker, highlightTimeout]);
+
+  // Detector de visibilidad para identificar throttling
+  useEffect(() => {
+   const handleVisibilityChange = () => {
+      console.log(`👁️ [VISIBILITY] Cambio de estado: ${document.hidden ? 'BACKGROUND' : 'FOREGROUND'}`);
+      if (!document.hidden) {
+         console.log('👁️ [VISIBILITY] App volvió a primer plano - Forzando sincronización completa');
+         
+         // Forzar sincronización inmediata al volver
+         if (view === 'workerControl' && selectedMonth && planning.workers.length > 0 && !isSyncingFromGrid) {
+            syncFromStatusRecords();
+         }
+         
+         // 🔄 FORZAR ACTUALIZACIÓN COMPLETA para vista de planificación
+         if (view === 'planning') {
+            console.log('🔄 [FORCE] Forzando actualización completa de planning');
+            
+            // Forzar una actualización del estado para romper cualquier cache de React
+            setPlanning(prev => ({ ...prev }));
+            
+            // También forzar recarga de datos si hace más de 90 segundos en background
+            const now = Date.now();
+            const lastBackgroundTime = parseInt(localStorage.getItem('lastBackgroundTime') || '0');
+            
+            if (now - lastBackgroundTime > 90000) { // 90 segundos
+               // Si hay una ventana/edición abierta, posponer (el próximo ciclo lo reintenta)
+               if (editingJob || duplicatingJob || selectedCell || settleTarget || vacationModal || editingWorker) {
+                  console.log('🔄 [FORCE] Recarga pospuesta: hay una ventana abierta');
+                  showNotification('Actualización pospuesta: hay una ventana abierta', 'info');
+               } else {
+                  console.log('🔄 [FORCE] Tiempo en background > 90s, recargando y restaurando punto de trabajo');
+                  // Guardar "foto" del punto de trabajo para restaurar tras la recarga
+                  sessionStorage.setItem('dj-ui-restore', JSON.stringify({
+                     viewMode,
+                     currentDate: planning.currentDate,
+                     rangeStartDate,
+                     rangeEndDate,
+                     planningFilter,
+                     highlightedWorker,
+                     selectedWorkerId,
+                     scrollTop: document.getElementById('planning-board-scroll')?.scrollTop || 0
+                  }));
+                  window.location.reload(); // Recarga completa como último recurso
+               }
+            }
+         }
+      } else {
+         // Guardar timestamp cuando pasa a background
+         localStorage.setItem('lastBackgroundTime', Date.now().toString());
+      }
+   };
+
+   document.addEventListener('visibilitychange', handleVisibilityChange);
+   
+   return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+   };
+  }, [view, selectedMonth, planning, viewMode, rangeStartDate, rangeEndDate, planningFilter, highlightedWorker, selectedWorkerId, editingJob, duplicatingJob, selectedCell, settleTarget, vacationModal, editingWorker, isSyncingFromGrid, syncFromStatusRecords]);
+
+  // ── Restaurar punto de trabajo tras la recarga automática por background ──
+  const restoreRef = useRef<any>(undefined);
+  if (restoreRef.current === undefined) {
+   try {
+      const raw = sessionStorage.getItem('dj-ui-restore');
+      restoreRef.current = raw ? JSON.parse(raw) : null;
+      sessionStorage.removeItem('dj-ui-restore');
+   } catch { restoreRef.current = null; }
+  }
+
+  // Aplicar la restauración cuando llegan los datos (la carga inicial es async)
+  useEffect(() => {
+   const r = restoreRef.current;
+   if (!r || r.applied || planning.workers.length === 0) return;
+   r.applied = true;
+   if (r.viewMode) setViewMode(r.viewMode);
+   if (r.rangeStartDate) setRangeStartDate(r.rangeStartDate);
+   if (r.rangeEndDate) setRangeEndDate(r.rangeEndDate);
+   if (r.planningFilter) setPlanningFilter(r.planningFilter);
+   if (r.highlightedWorker) setHighlightedWorker(r.highlightedWorker);
+   if (r.selectedWorkerId) setSelectedWorkerId(r.selectedWorkerId);
+   if (r.currentDate) setPlanning(prev => ({ ...prev, currentDate: r.currentDate }));
+  }, [planning.workers]);
+
+  // Devolver el scroll a su posición cuando el tablero esté renderizado
+  useEffect(() => {
+   const r = restoreRef.current;
+   if (!r || !r.applied || r.scrollApplied || view !== 'planning') return;
+   const el = document.getElementById('planning-board-scroll');
+   if (el) {
+      r.scrollApplied = true;
+      requestAnimationFrame(() => { el.scrollTop = r.scrollTop || 0; });
+   }
+  }, [view, planning.jobs]);
 
   // ── Exportar listado de acceso ─────────────────────────────────────────────
   const exportWorkerAccessList = useCallback((job: Job) => {
