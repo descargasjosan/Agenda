@@ -2,6 +2,11 @@ import { Job, Worker, WorkerStatus, WorkerStatusRecord, Holiday, ContractType, C
 import { HOLIDAYS } from './constants';
 import * as XLSX from 'xlsx';
 
+// Date local → 'YYYY-MM-DD'. NO usar toISOString() para esto: convierte a UTC
+// y desplaza el día al cruzar el cambio de horario (o cerca de medianoche).
+export const toLocalISODate = (d: Date): string =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
 export const formatDateDMY = (dateStr?: string): string => {
   if (!dateStr) return '';
   const [year, month, day] = dateStr.split('-');
@@ -62,7 +67,7 @@ export const getPreviousWorkingDay = (dateStr: string, customHolidays: Holiday[]
   while (true) {
     const checkDate = new Date(date);
     checkDate.setDate(date.getDate() - daysToSubtract);
-    const checkStr = checkDate.toISOString().split('T')[0];
+    const checkStr = toLocalISODate(checkDate);
     if (isWorkingDay(checkStr, customHolidays)) return checkStr;
     daysToSubtract++;
     if (daysToSubtract > 30) break;
@@ -78,7 +83,7 @@ export const getPreviousWeekday = (dateStr: string): string => {
     prevDate.setDate(date.getDate() - daysToSubtract);
     const day = prevDate.getDay();
     if (day !== 0 && day !== 6) {
-      return prevDate.toISOString().split('T')[0];
+      return toLocalISODate(prevDate);
     }
     daysToSubtract++;
   }
@@ -91,7 +96,7 @@ export const getNonWorkingDaysBetween = (startStr: string, endStr: string, custo
   const end = new Date(endStr);
   current.setDate(current.getDate() + 1);
   while (current < end) {
-    const dateStr = current.toISOString().split('T')[0];
+    const dateStr = toLocalISODate(current);
     if (!isWorkingDay(dateStr, customHolidays)) {
       const holiday = isHoliday(dateStr, customHolidays);
       gaps.push(holiday ? holiday.name : (new Date(dateStr).getDay() === 0 ? 'Domingo' : 'Sábado'));
@@ -235,7 +240,7 @@ export const getCurrentWorkerStatus = (worker: Worker): { status: WorkerStatus, 
     return { status: WorkerStatus.DISPONIBLE };
   }
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = toLocalISODate(new Date());
   const activeRecord = worker.statusRecords.find(record => {
     const startDate = new Date(record.startDate);
     const endDate = record.endDate ? new Date(record.endDate) : new Date('9999-12-31'); // INDEFINIDO
@@ -284,7 +289,7 @@ export const getNextStatusChange = (worker: Worker): { date: string, status: Wor
     return null;
   }
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = toLocalISODate(new Date());
   const currentStatus = getCurrentWorkerStatus(worker);
   
   // Si está en estado no disponible, buscar cuándo vuelve a Disponible
@@ -308,7 +313,7 @@ export const getNextStatusChange = (worker: Worker): { date: string, status: Wor
       endDate.setDate(endDate.getDate() + 1);
       
       return {
-        date: endDate.toISOString().split('T')[0],
+        date: toLocalISODate(endDate),
         status: WorkerStatus.DISPONIBLE
       };
     }
@@ -363,7 +368,7 @@ export const addOrUpdateStatusRecord = (
     // Verificar si hay festivos en el rango de vacaciones
     const holidaysInRange: string[] = [];
     for (let date = new Date(start); date <= end; date.setDate(date.getDate() + 1)) {
-      const dateStr = date.toISOString().split('T')[0];
+      const dateStr = toLocalISODate(date);
       if (isHoliday(dateStr, customHolidays)) {
         holidaysInRange.push(dateStr);
       }

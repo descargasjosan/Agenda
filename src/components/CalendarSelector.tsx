@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Holiday, Job } from '../lib/types';
-import { isHoliday, formatDateDisplay } from '../lib/utils';
+import { isHoliday, formatDateDisplay, toLocalISODate } from '../lib/utils';
 
 interface CalendarSelectorProps {
   currentDate: string;
@@ -47,7 +47,7 @@ const CalendarSelector: React.FC<CalendarSelectorProps> = ({
     // Añadir días del mes
     for (let day = 1; day <= daysInMonth; day++) {
       const date = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth(), day);
-      const dateStr = date.toISOString().split('T')[0];
+      const dateStr = toLocalISODate(date);
       const holiday = isHoliday(dateStr, customHolidays);
       const hasJobs = jobs.filter((job: Job) => job.date === dateStr && !job.isCancelled).length > 0;
       
@@ -79,7 +79,7 @@ const CalendarSelector: React.FC<CalendarSelectorProps> = ({
   };
 
   const handleGoToToday = () => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = toLocalISODate(new Date());
     onSelect(today);
     onClose();
   };

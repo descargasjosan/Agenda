@@ -3,7 +3,7 @@ import * as React from 'react';
 import { useState, useEffect, useRef } from 'react';
 import { Clock, MapPin, Users, Plus, Edit2, X, AlertCircle, Search, Move, AlertTriangle, Euro, ArrowRightLeft, CheckCircle2, MoreHorizontal, CalendarPlus, Ban, Flag, Briefcase, Award, TrendingUp, UserCheck, StickyNote, Stethoscope, FileText, List, FileSpreadsheet } from 'lucide-react';
 import { Job, PlanningState, Worker, WorkerStatus, ContractType, ReinforcementGroup } from '../lib/types';
-import { isTimeOverlap, checkContinuityRisk, formatDateDMY, getWorkerDisplayName } from '../lib/utils';
+import { isTimeOverlap, checkContinuityRisk, formatDateDMY, getWorkerDisplayName, toLocalISODate } from '../lib/utils';
 import { GENERAL_NOTE_WORKER_ID } from '../lib/constants';
 
 interface PlanningBoardProps {
@@ -198,7 +198,7 @@ const PlanningBoard: React.FC<PlanningBoardProps> = ({
 
     // 3. Lógica de Estado - verificar disponibilidad para la fecha de la tarea específica
     const targetJob = planning.jobs.find(j => j.id === selectorJobId);
-    const currentDate = targetJob ? targetJob.date : (datesToShow.length > 0 ? datesToShow[0] : new Date().toISOString().split('T')[0]);
+    const currentDate = targetJob ? targetJob.date : (datesToShow.length > 0 ? datesToShow[0] : toLocalISODate(new Date()));
     
     console.log('🔍 [SELECTOR FILTER] Worker:', w.name, 'Code:', w.code, 'Target Date:', currentDate, 'SelectorJobId:', selectorJobId);
     
@@ -259,7 +259,7 @@ const PlanningBoard: React.FC<PlanningBoardProps> = ({
   };
 
   const currentHmm = currentTime.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-  const currentDateStr = currentTime.toISOString().split('T')[0];
+  const currentDateStr = toLocalISODate(currentTime);
 
   // Calcular estadísticas globales
   const referenceDate = datesToShow[0];
@@ -1098,8 +1098,8 @@ const PlanningBoard: React.FC<PlanningBoardProps> = ({
                     .filter(w => {
                       // 🎯 USAR LA MISMA LÓGICA DE DISPONIBILIDAD QUE EL SIDEBAR
                       const currentDate = reinforcementModal?.jobId ? 
-                        planning.jobs.find(j => j.id === reinforcementModal.jobId)?.date || new Date().toISOString().split('T')[0] :
-                        new Date().toISOString().split('T')[0];
+                        planning.jobs.find(j => j.id === reinforcementModal.jobId)?.date || toLocalISODate(new Date()) :
+                        toLocalISODate(new Date());
                       
                       // Si el estado es "NO DISPONIBLE", comprobar si ya ha expirado
                       const isUnavailableStatus = [

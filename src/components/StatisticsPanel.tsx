@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { PlanningState, Job, Worker, NoteType, FuelRecord } from '../lib/types';
-import { formatDateDMY } from '../lib/utils';
+import { formatDateDMY, toLocalISODate } from '../lib/utils';
 
 // Función para formatear horas
 const formatTime = (hours: number): string => {
@@ -24,12 +24,12 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ planning }) => {
   // Estados para filtros
   const [startDate, setStartDate] = useState(() => {
     const today = new Date();
-    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
+    const firstDay = toLocalISODate(new Date(today.getFullYear(), today.getMonth(), 1));
     return firstDay;
   });
   const [endDate, setEndDate] = useState(() => {
     const today = new Date();
-    const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().split('T')[0];
+    const lastDay = toLocalISODate(new Date(today.getFullYear(), today.getMonth() + 1, 0));
     return lastDay;
   });
   const [selectedClientId, setSelectedClientId] = useState<string>('all');
@@ -68,7 +68,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ planning }) => {
     const end = new Date(endDate);
     
     for (let date = new Date(start); date <= end; date.setDate(date.getDate() + 1)) {
-      const dateStr = date.toISOString().split('T')[0];
+      const dateStr = toLocalISODate(date);
       
       // Obtener TODAS las tareas de este día
       const allDayJobs = planning.jobs.filter(job => 
@@ -225,7 +225,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ planning }) => {
     const workersBySiteByDay: Record<string, Record<string, Set<string>>> = {};
     
     for (let date = new Date(start); date <= end; date.setDate(date.getDate() + 1)) {
-      const dateStr = date.toISOString().split('T')[0];
+      const dateStr = toLocalISODate(date);
       
       // Obtener TODAS las tareas de este día (sin filtrar por operario)
       const allDayJobs = planning.jobs.filter(job => 

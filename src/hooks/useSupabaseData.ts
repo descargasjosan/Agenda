@@ -12,6 +12,7 @@
 import * as React from 'react';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../../supabaseClient';
+import { toLocalISODate } from '../lib/utils';
 import {
   PlanningState, Worker, Client, Job, StandardTask,
   Vehicle, VehicleAssignment, FuelRecord, DailyNote,
@@ -20,7 +21,7 @@ import {
 
 // ─── Estado inicial vacío ──────────────────────────────────────────────────
 const EMPTY_STATE: PlanningState = {
-  currentDate: new Date().toISOString().split('T')[0],
+  currentDate: toLocalISODate(new Date()),
   workers: [],
   clients: [],
   jobs: [],
@@ -293,7 +294,7 @@ if (typeof window !== 'undefined') {
           ...EMPTY_STATE,
           ...loadedData,
           notifications,
-          currentDate: new Date().toISOString().split('T')[0],
+          currentDate: toLocalISODate(new Date()),
         });
 
         setDbStatus('connected');

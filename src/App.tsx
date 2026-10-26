@@ -12,7 +12,7 @@ import StatisticsPanel from './components/StatisticsPanel';
 import CompactPlanningView from './components/CompactPlanningView';
 import FleetManager from './components/FleetManager';
 import { PlanningState, Worker, Client, Job, Holiday, Vehicle, FuelRecord, DailyNote, MedicalCourse, Course, StandardTask, VehicleAssignment, ContractType, WorkerStatus, WorkerStatusRecord, ViewType, JobType, NoteType, WorkerControlData, WorkerControl, TerminationReason, TerminationNotificationStatus } from './lib/types';
-import { formatDateDMY, isHoliday, isWorkingDay, getWorkerDisplayName, getCurrentWorkerStatus, getCurrentWorkerStatusForDate, getNextStatusChange, addOrUpdateStatusRecord, removeStatusRecord, validateAssignment, getWorkerSSFormat } from './lib/utils';
+import { formatDateDMY, isHoliday, isWorkingDay, getPreviousWorkingDay, toLocalISODate, getWorkerDisplayName, getCurrentWorkerStatus, getCurrentWorkerStatusForDate, getNextStatusChange, addOrUpdateStatusRecord, removeStatusRecord, validateAssignment, getWorkerSSFormat } from './lib/utils';
 import { WORKER_ROLES, GENERAL_NOTE_WORKER_ID } from './lib/constants';
 
 // Funciones para Supabase (Opción B - JSONB) - ELIMINADAS
@@ -66,7 +66,7 @@ const SimpleCalendarSelector: React.FC<SimpleCalendarSelectorProps> = ({ current
   for (let i = 1; i <= currentMonthDays; i++) {
     const dateStr = `${viewDate.getFullYear()}-${String(viewDate.getMonth() + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
     const isSelected = currentDate === dateStr;
-    const isToday = new Date().toISOString().split('T')[0] === dateStr;
+    const isToday = toLocalISODate(new Date()) === dateStr;
     const hasJobs = jobs.some(j => j.date === dateStr);
     const holiday = isHoliday(dateStr, customHolidays);
     
@@ -113,7 +113,7 @@ const SimpleCalendarSelector: React.FC<SimpleCalendarSelectorProps> = ({ current
              {dayElements}
          </div>
          <div className="flex flex-col gap-2">
-             <button onClick={() => { onSelect(new Date().toISOString().split('T')[0]); onClose(); }} className="w-full py-2 bg-blue-50 text-blue-600 rounded-lg font-black text-[10px] uppercase tracking-widest hover:bg-blue-100 transition-colors">Ir a Hoy</button>
+             <button onClick={() => { onSelect(toLocalISODate(new Date())); onClose(); }} className="w-full py-2 bg-blue-50 text-blue-600 rounded-lg font-black text-[10px] uppercase tracking-widest hover:bg-blue-100 transition-colors">Ir a Hoy</button>
          </div>
       </div>
     </div>
@@ -210,8 +210,8 @@ const App: React.FC = () => {
   // ── Estado de UI ───────────────────────────────────────────────────────────
   const [view, setView] = useState<ViewType>('planning');
   const [viewMode, setViewMode] = useState<'day' | 'range'>('day');
-  const [rangeStartDate, setRangeStartDate] = useState(new Date().toISOString().split('T')[0]);
-  const [rangeEndDate, setRangeEndDate] = useState(new Date().toISOString().split('T')[0]);
+  const [rangeStartDate, setRangeStartDate] = useState(toLocalISODate(new Date()));
+  const [rangeEndDate, setRangeEndDate] = useState(toLocalISODate(new Date()));
 
   const backupInputRef = useRef<HTMLInputElement>(null);
   const [draggedWorkerId, setDraggedWorkerId] = useState<string | null>(null);
@@ -648,7 +648,7 @@ const syncToStatusRecords = useCallback(async (workerId: string, day: number, va
                
                // Recorrer cada día del rango
                for (let date = start; date <= end; date.setDate(date.getDate() + 1)) {
-                  const dateStr = date.toISOString().split('T')[0];
+                  const dateStr = toLocalISODate(date);
                   const jobsForDay = planning.jobs.filter(job => job.date === dateStr && !job.isCancelled);
                   
                   for (const job of jobsForDay) {
@@ -1152,7 +1152,7 @@ const saveVacationConfig = async () => {
     'info': true, 'time': true, 'medical': true
   });
   const [newFuelRecord, setNewFuelRecord] = useState<{liters: string, cost: string, odometer: string, date: string}>({
-    liters: '', cost: '', odometer: '', date: new Date().toISOString().split('T')[0]
+    liters: '', cost: '', odometer: '', date: toLocalISODate(new Date())
   });
   const [availableCourses, setAvailableCourses] = useState<string[]>([
     'Curso de Manipulador de Alimentos', 'Curso de Carretillero',
@@ -1211,7 +1211,7 @@ const [planningFilter, setPlanningFilter] = useState('');
         const link = document.createElement('a');
         link.href = url;
         const now = new Date();
-        const timestamp = now.toISOString().split('T')[0] + '_' + now.toTimeString().split(' ')[0].replace(/:/g, '-');
+        const timestamp = toLocalISODate(now) + '_' + now.toTimeString().split(' ')[0].replace(/:/g, '-');
         link.download = `AUTO_BACKUP_${timestamp}.json`;
         link.click();
         URL.revokeObjectURL(url);
@@ -1250,7 +1250,7 @@ const [planningFilter, setPlanningFilter] = useState('');
   // ── Auto-actualización de estados de operarios ─────────────────────────────
   useEffect(() => {
     if (!planning.workers.length) return;
-    const today = new Date().toISOString().split('T')[0];
+    const today = toLocalISODate(new Date());
     const workersNeedingUpdate = planning.workers.filter(worker => {
       if (worker.status === WorkerStatus.DISPONIBLE || !worker.statusStartDate || !worker.statusEndDate) return false;
       return new Date(today) > new Date(worker.statusEndDate);
@@ -1409,7 +1409,7 @@ const [planningFilter, setPlanningFilter] = useState('');
       const client = planning.clients.find(c => c.id === clientId);
       const isArteRegal = client?.name?.trim().toUpperCase() === 'ARTE REGAL IMPORT, S.L.';
       const center = client?.centers.find(ct => ct.id === centerId);
-      const today = new Date().toISOString().split('T')[0];
+      const today = toLocalISODate(new Date());
       const exportKey = isArteRegal ? `${jobId}_${date}` : `${centerId}_${date}`;
       const currentHistory = exportHistory;
       const previousExport = currentHistory[exportKey];
@@ -1992,8 +1992,8 @@ const [planningFilter, setPlanningFilter] = useState('');
     do {
       nextDay.setDate(nextDay.getDate() + 1);
       guard++;
-    } while (!isWorkingDay(nextDay.toISOString().split('T')[0], planning.customHolidays) && guard < 60);
-    const nextDayStr = nextDay.toISOString().split('T')[0];
+    } while (!isWorkingDay(toLocalISODate(nextDay), planning.customHolidays) && guard < 60);
+    const nextDayStr = toLocalISODate(nextDay);
     
     setDuplicatingJob(job); 
     setDuplicationDate(nextDayStr); // ✅ Usa el día siguiente
@@ -2537,7 +2537,7 @@ const [planningFilter, setPlanningFilter] = useState('');
     const fin = new Date(fechaFin);
     
     for (let dia = new Date(inicio); dia <= fin; dia.setDate(dia.getDate() + 1)) {
-      dias.push(dia.toISOString().split('T')[0]);
+      dias.push(toLocalISODate(dia));
     }
     
     return dias;
@@ -2883,7 +2883,7 @@ const [planningFilter, setPlanningFilter] = useState('');
       XLSX.utils.book_append_sheet(wb, ws, 'Clientes y Sedes');
       
       // Generar nombre de archivo
-      const fileName = `Clientes y Sedes ${new Date().toISOString().split('T')[0]}.xlsx`;
+      const fileName = `Clientes y Sedes ${toLocalISODate(new Date())}.xlsx`;
       
       // Descargar archivo
       XLSX.writeFile(wb, fileName);
@@ -3039,7 +3039,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
         const holidaysInRange: string[] = [];
         
         for (let date = new Date(start); date <= end; date.setDate(date.getDate() + 1)) {
-          const dateStr = date.toISOString().split('T')[0];
+          const dateStr = toLocalISODate(date);
           if (isHoliday(dateStr, planning.customHolidays)) {
             const holiday = planning.customHolidays.find(h => h.date === dateStr) || isHoliday(dateStr, planning.customHolidays);
             holidaysInRange.push(`${dateStr} (${holiday?.name || 'Festivo'})`);
@@ -3105,7 +3105,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
   }, [editingWorker, planning.workers, persistWorker, showNotification]);
 
   const handleCheckWorkerStatuses = useCallback(async () => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = toLocalISODate(new Date());
     const workersNeedingUpdate = planning.workers.filter(w => w.status !== WorkerStatus.DISPONIBLE && w.statusEndDate && w.statusEndDate < today);
     if (workersNeedingUpdate.length > 0) {
       await Promise.all(workersNeedingUpdate.map(w => persistWorker({ ...w, status: WorkerStatus.DISPONIBLE, statusStartDate: undefined, statusEndDate: undefined })));
@@ -3254,7 +3254,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
     if (!editingWorker || !newFuelRecord.cost) return;
     const rec: FuelRecord = { id: `f-${Date.now()}`, workerId: editingWorker.id, date: newFuelRecord.date, liters: parseFloat(newFuelRecord.liters) || 0, cost: parseFloat(newFuelRecord.cost), odometer: parseFloat(newFuelRecord.odometer) || 0 };
     await persistFuelRecord(rec);
-    setNewFuelRecord({ liters: '', cost: '', odometer: '', date: new Date().toISOString().split('T')[0] });
+    setNewFuelRecord({ liters: '', cost: '', odometer: '', date: toLocalISODate(new Date()) });
     showNotification("Repostaje guardado", "success");
   }, [editingWorker, newFuelRecord, persistFuelRecord, showNotification]);
 
@@ -3285,11 +3285,11 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
   const shiftDate = (days: number) => {
     const d = new Date(planning.currentDate);
     d.setDate(d.getDate() + days);
-    handleDateChange(d.toISOString().split('T')[0]);
+    handleDateChange(toLocalISODate(d));
   };
 
   const goToToday = () => {
-    handleDateChange(new Date().toISOString().split('T')[0]);
+    handleDateChange(toLocalISODate(new Date()));
   };
 
   // ── Notificaciones SS ──────────────────────────────────────────────────────
@@ -3370,7 +3370,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
     const link = document.createElement('a');
     link.href = url;
     const now = new Date();
-    link.download = `backup_${now.toISOString().split('T')[0]}_${now.toTimeString().split(' ')[0].replace(/:/g, '-')}.json`;
+    link.download = `backup_${toLocalISODate(now)}_${now.toTimeString().split(' ')[0].replace(/:/g, '-')}.json`;
     link.click();
     showNotification(`Backup exportado: ${Math.round(dataStr.length / 1024)}KB`, 'success');
   };
@@ -3638,7 +3638,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
     const d = [];
     let c = new Date(rangeStartDate);
     const end = new Date(rangeEndDate);
-    while (c <= end) { d.push(c.toISOString().split('T')[0]); c.setDate(c.getDate() + 1); }
+    while (c <= end) { d.push(toLocalISODate(c)); c.setDate(c.getDate() + 1); }
     return d;
   }, [viewMode, planning.currentDate, rangeStartDate, rangeEndDate]);
 
@@ -3703,7 +3703,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
 
   // Función de compatibilidad para el botón "Capturar Hoy"
   const captureTodaySnapshot = () => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = toLocalISODate(new Date());
     captureDaySnapshotAsImage(today);
   };
 
@@ -3825,41 +3825,13 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
 
   // ─── Reporte SS ─────────────────────────────────────────────────────────────
   const ssReport = useMemo(() => {
-    // Función para obtener el día laborable anterior
-    const getPreviousWorkday = (date: Date): Date => {
-      const prevDay = new Date(date);
-      prevDay.setDate(prevDay.getDate() - 1);
-      
-      // Retroceder hasta encontrar un día laborable (no fin de semana ni festivo)
-      while (true) {
-        const dayOfWeek = prevDay.getDay();
-        const dateStr = prevDay.toISOString().split('T')[0];
-        
-        // Si es sábado (6) o domingo (0), seguir retrocediendo
-        if (dayOfWeek === 0 || dayOfWeek === 6) {
-          prevDay.setDate(prevDay.getDate() - 1);
-          continue;
-        }
-        
-        // Si es festivo, seguir retrocediendo
-        if (isHoliday(dateStr, cleanedPlanning.holidays || [])) {
-          prevDay.setDate(prevDay.getDate() - 1);
-          continue;
-        }
-        
-        break;
-      }
-      
-      return prevDay;
-    };
-    
-    const currentDate = new Date(planning.currentDate);
-    const prevWorkday = getPreviousWorkday(currentDate);
+    const currentDateStr = planning.currentDate;
+    // Día laborable anterior (salta fines de semana y festivos de empresa).
+    // Usa fechas locales: toISOString() desplazaba el día al cruzar el cambio de horario.
+    const prevWorkdayStr = getPreviousWorkingDay(currentDateStr, cleanedPlanning.customHolidays);
     
     // Obtener operarios fijos discontinuos que trabajaron cada día
-    const getWorkersForDate = (date: Date): Worker[] => {
-      const dateStr = date.toISOString().split('T')[0];
-      
+    const getWorkersForDate = (dateStr: string): Worker[] => {
       // 🛡️ EXCLUIR "RECONOCIMIENTO MÉDICO" - No es trabajo real para Previsión Social
       const dayJobs = cleanedPlanning.jobs.filter(job => {
         if (job.date !== dateStr || job.isCancelled) return false;
@@ -3883,8 +3855,8 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
       );
     };
     
-    const todayWorkers = getWorkersForDate(currentDate);
-    const yesterdayWorkers = getWorkersForDate(prevWorkday);
+    const todayWorkers = getWorkersForDate(currentDateStr);
+    const yesterdayWorkers = getWorkersForDate(prevWorkdayStr);
     
     // ALTAS: trabajan hoy pero no ayer
     const altas = todayWorkers.filter(worker => !yesterdayWorkers.some(w => w.id === worker.id));
@@ -3893,11 +3865,11 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
     const bajas = yesterdayWorkers.filter(worker => !todayWorkers.some(w => w.id === worker.id));
     
     return { 
-      prevDate: prevWorkday.toISOString().split('T')[0], 
+      prevDate: prevWorkdayStr, 
       altas, 
       bajas 
     };
-  }, [cleanedPlanning.workers, cleanedPlanning.jobs, cleanedPlanning.holidays, planning.currentDate]);
+  }, [cleanedPlanning.workers, cleanedPlanning.jobs, cleanedPlanning.clients, cleanedPlanning.customHolidays, planning.currentDate]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
   if (isAuthLoading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin w-8 h-8 text-blue-600" /></div>;
@@ -4953,7 +4925,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                              
                              // Si está disponible, mostrar el próximo registro futuro
                              if (currentStatus.status === WorkerStatus.DISPONIBLE) {
-                               const today = new Date().toISOString().split('T')[0];
+                               const today = toLocalISODate(new Date());
                                const futureRecords = worker.statusRecords?.filter(record => 
                                  new Date(record.startDate) > new Date(today)
                                ).sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
@@ -4977,7 +4949,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                         <td className="px-6 py-3 text-center">
                            {worker.contractType === ContractType.FIJO_DISCONTINUO ? (
                               <button 
-                                onClick={() => setWorkerDaysModal({worker, month: new Date().toISOString().slice(0, 7)})}
+                                onClick={() => setWorkerDaysModal({worker, month: toLocalISODate(new Date()).slice(0, 7)})}
                                 className="p-2 hover:bg-blue-50 text-slate-400 hover:text-blue-600 rounded-xl transition-colors"
                                 title="Calcular días trabajados"
                               >
@@ -5021,8 +4993,8 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                        name: '', // Vacío para reconocimientos, se llenará para cursos
                        type: 'recognition',
                        provider: 'Mutua',
-                       issueDate: new Date().toISOString().split('T')[0],
-                       expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                       issueDate: toLocalISODate(new Date()),
+                       expiryDate: toLocalISODate(new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)),
                        status: 'active',
                        assignedWorkerIds: [],
                        createdAt: new Date().toISOString(),
@@ -7187,7 +7159,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                 </div>
                 <button
                   onClick={() => {
-                    const today = new Date().toISOString().split('T')[0];
+                    const today = toLocalISODate(new Date());
                     const newRecord = {
                       status: WorkerStatus.VACACIONES,
                       startDate: today,
@@ -7455,7 +7427,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                             ...editingWorker,
                             termination: {
                               reason,
-                              date: prev?.date || new Date().toISOString().split('T')[0],
+                              date: prev?.date || toLocalISODate(new Date()),
                               notificationStatus: prev?.notificationStatus || 'Pendiente de enviar',
                               notificationSentAt: prev?.notificationSentAt,
                               notificationSignedAt: prev?.notificationSignedAt,
@@ -7507,7 +7479,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                           key={status}
                           onClick={() => {
                             const t = editingWorker.termination!;
-                            const today = new Date().toISOString().split('T')[0];
+                            const today = toLocalISODate(new Date());
                             setEditingWorker({
                               ...editingWorker,
                               termination: {
@@ -8658,7 +8630,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                     if (issueDate) {
                       const issue = new Date(issueDate);
                       issue.setFullYear(issue.getFullYear() + 1);
-                      expiryDate = issue.toISOString().split('T')[0];
+                      expiryDate = toLocalISODate(issue);
                     }
                     
                     setPlanning(prev => ({ 

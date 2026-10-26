@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { CalendarDays, Search, Download, Table, ArrowRight, Clock, ChevronLeft, ChevronRight, X, Filter, ArrowUpDown } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { PlanningState, Worker, ContractType, Job, Holiday } from '../lib/types';
-import { formatDateDMY, isHoliday, getWorkerDisplayName } from '../lib/utils';
+import { formatDateDMY, isHoliday, getWorkerDisplayName, toLocalISODate } from '../lib/utils';
 
 interface CompactPlanningViewProps {
   planning: PlanningState;
@@ -41,7 +41,7 @@ const CalendarSelector: React.FC<CalendarSelectorProps> = ({ currentDate, custom
   for (let i = 1; i <= currentMonthDays; i++) {
     const dateStr = `${viewDate.getFullYear()}-${String(viewDate.getMonth() + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
     const isSelected = currentDate === dateStr;
-    const isToday = new Date().toISOString().split('T')[0] === dateStr;
+    const isToday = toLocalISODate(new Date()) === dateStr;
     const hasJobs = jobs.some(j => j.date === dateStr);
     const holiday = isHoliday(dateStr, customHolidays);
     
@@ -124,7 +124,7 @@ const CompactPlanningView: React.FC<CompactPlanningViewProps> = ({ planning }) =
           if (startDate === endDate) {
               const end = new Date(startDate);
               end.setDate(end.getDate() + 6);
-              setEndDate(end.toISOString().split('T')[0]);
+              setEndDate(toLocalISODate(end));
           }
       }
   }, [viewMode]);
@@ -205,7 +205,7 @@ const CompactPlanningView: React.FC<CompactPlanningViewProps> = ({ planning }) =
                 }}
                 onClose={() => setShowCalendar(false)}
                 onGoToToday={() => { 
-                    const today = new Date().toISOString().split('T')[0];
+                    const today = toLocalISODate(new Date());
                     if (viewMode === 'day') {
                         setStartDate(today);
                         setEndDate(today);
@@ -255,7 +255,7 @@ const CompactPlanningView: React.FC<CompactPlanningViewProps> = ({ planning }) =
                 {viewMode === 'day' && (
                     <button 
                         onClick={() => {
-                            const today = new Date().toISOString().split('T')[0];
+                            const today = toLocalISODate(new Date());
                             setStartDate(today);
                             setEndDate(today);
                         }}
