@@ -1494,7 +1494,8 @@ const [planningFilter, setPlanningFilter] = useState('');
         if (isFirstExport) {
           const fixedWorkers = [
             { dni: '24371414Q', name: 'JOSE LUIS RUIZ TARREGA' },
-            { dni: '48581091P', name: 'VICENTE CARRATALA ANASTASIO' }
+            { dni: '48581091P', name: 'VICENTE CARRATALA ANASTASIO' },
+            { dni: 'X9076060F', name: 'MARIAN TOMA' }
           ];
 
           // Combinar operarios fijos + resto (evitando duplicados)
