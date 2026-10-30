@@ -4038,27 +4038,29 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
         )}
       </div>
 
-      {/* Indicador de Sincronización - Crítico para seguridad de datos */}
-      {dbStatus === 'loading' && (
-        <div className="fixed top-6 right-20 z-[400] px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-2 border shadow-sm transition-all bg-orange-50 text-orange-600 border-orange-100">
-          <RefreshCw className="w-3 h-3 animate-spin" />
-          Sincronizando...
-        </div>
-      )}
-      
-      {dbStatus === 'connected' && (
-        <div className="fixed top-6 right-20 z-[400] px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-2 border shadow-sm transition-all bg-green-50 text-green-600 border-green-100">
-          <CheckCircle2 className="w-3 h-3" />
-          Sincronizado
-        </div>
-      )}
-      
-      {dbStatus === 'error' && (
-        <div className="fixed top-6 right-20 z-[400] px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-2 border shadow-sm transition-all bg-red-50 text-red-600 border-red-100">
-          <AlertCircle className="w-3 h-3" />
-          Sin conexión
-        </div>
-      )}
+      {/* Indicador de Sincronización (encima del icono de backup) */}
+      <div
+        className={`fixed bottom-[120px] left-4 z-[400] w-8 h-8 rounded-full flex items-center justify-center border shadow-sm transition-all ${
+          dbStatus === 'connected' || dbStatus === 'saved' ? 'bg-green-50 text-green-600 border-green-100' :
+          dbStatus === 'loading' || dbStatus === 'saving' ? 'bg-orange-50 text-orange-600 border-orange-100' :
+          'bg-red-50 text-red-600 border-red-100'
+        }`}
+        title={
+          dbStatus === 'connected' ? 'Sincronizado' :
+          dbStatus === 'saved' ? 'Datos guardados' :
+          dbStatus === 'loading' ? 'Sincronizando...' :
+          dbStatus === 'saving' ? 'Guardando...' :
+          'Sin conexión'
+        }
+      >
+        {dbStatus === 'loading' || dbStatus === 'saving' ? (
+          <RefreshCw className="w-4 h-4 animate-spin" />
+        ) : dbStatus === 'connected' || dbStatus === 'saved' ? (
+          <CheckCircle2 className="w-4 h-4" />
+        ) : (
+          <AlertCircle className="w-4 h-4" />
+        )}
+      </div>
 
       {/* SIDEBAR NAVIGATION */}
       <aside className="w-20 bg-slate-900 flex flex-col items-center py-8 gap-8 shrink-0 z-50 shadow-2xl">
@@ -5754,13 +5756,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                         <Download className="w-4 h-4" />
                         Exportar
                      </button>
-                     <button 
-                        onClick={() => syncFromStatusRecords(true)}
-                        className="px-4 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors flex items-center gap-2 text-sm font-black"
-                     >
-                        <RotateCcw className="w-4 h-4" />
-                        Sincronizar Estados
-                     </button>
+                     {/* Botón "Sincronizar Estados" eliminado: la sincronización es automática */}
                   </div>
                </div>
 
