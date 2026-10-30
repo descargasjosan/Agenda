@@ -842,6 +842,10 @@ const getCellColor = (value: string) => {
 
 // Motivos de baja y estados de la notificación de baja
 const TERMINATION_REASONS: TerminationReason[] = ['Baja Voluntaria', 'Periodo Prueba No Superado', 'Despido'];
+
+// Columnas S. Bruto / S. Neto del Control de Operarios: ocultas en el grid
+// (siguen existiendo los datos y salen en la exportación Excel).
+const SHOW_SALARY_COLUMNS = false;
 const TERMINATION_NOTIF_STATUSES: { status: TerminationNotificationStatus; label: string; color: string }[] = [
    { status: 'Pendiente de enviar', label: 'Pendiente', color: 'bg-red-100 text-red-700' },
    { status: 'Enviada', label: 'Enviada', color: 'bg-amber-100 text-amber-700' },
@@ -5890,8 +5894,12 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                            <th className="p-1 text-xs font-black text-white uppercase text-center border-r border-slate-600 min-w-[35px]">Vac. Mes</th>
                            <th className="p-1 text-xs font-black text-white uppercase text-center border-r border-slate-600 min-w-[40px]">Saldo Vac.</th>
                            <th className="p-1 text-xs font-black text-white uppercase text-center border-r border-slate-600 min-w-[35px]">Anticipo</th>
-                           <th className="p-1 text-xs font-black text-white uppercase text-center border-r border-slate-600 min-w-[45px]">S. Bruto</th>
-                           <th className="p-1 text-xs font-black text-white uppercase text-center min-w-[45px]">S. Neto</th>
+                           {SHOW_SALARY_COLUMNS && (
+                              <>
+                                 <th className="p-1 text-xs font-black text-white uppercase text-center border-r border-slate-600 min-w-[45px]">S. Bruto</th>
+                                 <th className="p-1 text-xs font-black text-white uppercase text-center min-w-[45px]">S. Neto</th>
+                              </>
+                           )}
                         </tr>
                      </thead>
                      
@@ -6141,6 +6149,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                                        </div>
                                     </td>
                                     {/* Columna Salario Bruto */}
+                                    {SHOW_SALARY_COLUMNS && (<>
                                     <td className="p-1 text-center border-r border-slate-200 bg-white">
                                        <input
                                           type="number"
@@ -6196,6 +6205,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                                           title="Salario Neto (€)"
                                        />
                                     </td>
+                                    </>)}
                                  </tr>
                               );
                            });
@@ -6271,6 +6281,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                               </span>
                            </td>
                            
+                           {SHOW_SALARY_COLUMNS && (<>
                            {/* Columna S. Bruto */}
                            <td className="p-1 text-center border-r border-slate-200">
                               <span className="text-xs text-blue-600 font-bold">
@@ -6284,6 +6295,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                                  {planning.workers.filter(w => !w.isArchived).reduce((sum, w) => sum + (w.netSalary || 0), 0)}€
                               </span>
                            </td>
+                           </>)}
                         </tr>
                      </tbody>
                   </table>
