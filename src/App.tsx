@@ -1185,7 +1185,6 @@ const [planningFilter, setPlanningFilter] = useState('');
   });
   const [highlightedWorker, setHighlightedWorker] = useState<string | null>(null);
   const [highlightTimeout, setHighlightTimeout] = useState<NodeJS.Timeout | null>(null);
-  const APP_VERSION = 'v2.0.0';
   const [autoBackupEnabled, setAutoBackupEnabled] = useState(true);
   const [lastAutoBackupTime, setLastAutoBackupTime] = useState<Date | null>(null);
 
@@ -4029,6 +4028,11 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
           <DownloadCloud className="w-4 h-4" />
         </div>
       )}
+
+      {/* Versión de la aplicación (bajo el botón de conexión) */}
+      <div className="fixed bottom-0.5 left-4 z-[400] text-[8px] text-slate-400 font-mono select-none">
+        {import.meta.env.VITE_APP_VERSION}
+      </div>
 
       {/* Indicador de Sincronización - Crítico para seguridad de datos */}
       {dbStatus === 'loading' && (
@@ -8781,10 +8785,6 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
       </div>
     )}
 
-    {/* INDICADOR DE VERSIÓN */}
-    <div className="fixed bottom-2 right-2 text-[8px] text-slate-400 font-mono z-[999]">
-      v2.0.0
-    </div>
   </div>
 );
 };
