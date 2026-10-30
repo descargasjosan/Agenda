@@ -1185,6 +1185,7 @@ const [planningFilter, setPlanningFilter] = useState('');
   });
   const [highlightedWorker, setHighlightedWorker] = useState<string | null>(null);
   const [highlightTimeout, setHighlightTimeout] = useState<NodeJS.Timeout | null>(null);
+  const appVersionParts = (import.meta.env.VITE_APP_VERSION || 'dev').split('+');
   const [autoBackupEnabled, setAutoBackupEnabled] = useState(true);
   const [lastAutoBackupTime, setLastAutoBackupTime] = useState<Date | null>(null);
 
@@ -3999,7 +4000,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
 
       <button
         type="button"
-        className={`fixed bottom-4 left-4 z-[400] w-8 h-8 rounded-full flex items-center justify-center border shadow-sm transition-all cursor-pointer ${
+        className={`fixed bottom-10 left-4 z-[400] w-8 h-8 rounded-full flex items-center justify-center border shadow-sm transition-all cursor-pointer ${
           dbStatus === 'connected' ? 'bg-green-50 text-green-600 border-green-100 hover:bg-green-100' : 
           dbStatus === 'saving' ? 'bg-blue-50 text-blue-600 border-blue-100' : 
           dbStatus === 'loading' ? 'bg-amber-50 text-amber-600 border-amber-100' : 
@@ -4022,7 +4023,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
 
       {autoBackupEnabled && (
         <div
-          className="fixed bottom-14 left-4 z-[400] w-8 h-8 rounded-full flex items-center justify-center border shadow-sm transition-all bg-amber-50 text-amber-600 border-amber-100 cursor-help"
+          className="fixed bottom-20 left-4 z-[400] w-8 h-8 rounded-full flex items-center justify-center border shadow-sm transition-all bg-amber-50 text-amber-600 border-amber-100 cursor-help"
           title="Backup automático activo: todos los días a las 08:00"
         >
           <DownloadCloud className="w-4 h-4" />
@@ -4030,8 +4031,11 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
       )}
 
       {/* Versión de la aplicación (bajo el botón de conexión) */}
-      <div className="fixed bottom-0.5 left-4 z-[400] text-[8px] text-slate-400 font-mono select-none">
-        {import.meta.env.VITE_APP_VERSION}
+      <div className="fixed bottom-1 left-4 z-[400] font-mono select-none leading-tight">
+        <div className="text-[10px] font-bold text-slate-500">{appVersionParts[0]}</div>
+        {appVersionParts[1] && (
+          <div className="text-[9px] text-slate-400">+{appVersionParts[1]}</div>
+        )}
       </div>
 
       {/* Indicador de Sincronización - Crítico para seguridad de datos */}
