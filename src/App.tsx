@@ -1647,7 +1647,7 @@ const [planningFilter, setPlanningFilter] = useState('');
     
     await persistMedicalCourse(updated);
     showNotification('Registro médico actualizado', 'success');
-  }, [persistMedicalCourse, showNotification]);
+  }, [planning.medicalCourses, persistMedicalCourse, showNotification]);
 
   const deleteMedicalCourseHandler = useCallback(async (courseOrId: MedicalCourse | string) => {
     const course = typeof courseOrId === 'string' ? undefined : courseOrId;
@@ -3061,7 +3061,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
     } catch (error) {
       showNotification(error instanceof Error ? error.message : "Error al añadir registro de estado", "error");
     }
-  }, [editingWorker, persistWorker, showNotification]);
+  }, [editingWorker, planning.customHolidays, persistWorker, showNotification]);
 
   const handleEditStatusRecord = useCallback((recordId: string) => {
     const worker = planning.workers.find(w => w.id === editingWorker?.id);
