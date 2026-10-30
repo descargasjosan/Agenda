@@ -49,7 +49,8 @@ function extractRows<T>(rows: any[] | null): T[] {
 // ─── Helper específico para medical_courses (preserva ID) ───────────────────
 function extractMedicalCourses(rows: any[] | null): (MedicalCourse & { id: string })[] {
   if (!rows) return [];
-  return rows.map((r) => ({ ...r.data, id: r.id }));
+  // Fallback a data.id por si alguna consulta no trae la columna id
+  return rows.map((r) => ({ ...r.data, id: r.id ?? r.data?.id }));
 }
 
 // ─── Tipos del hook ────────────────────────────────────────────────────────
@@ -190,7 +191,7 @@ if (typeof window !== 'undefined') {
           supabase.from('vehicle_assignments').select('data'),
           supabase.from('fuel_records').select('data'),
           supabase.from('daily_notes').select('data'),
-          supabase.from('medical_courses').select('data'),
+          supabase.from('medical_courses').select('id, data'),
           supabase.from('custom_holidays').select('data'),
           supabase.from('courses').select('data'),
           supabase.from('app_settings').select('key, value'),
