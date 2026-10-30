@@ -114,7 +114,8 @@ function calculateMonthTotals(dayList) {
     totalFaltas: 0,
     totalBajaMedica: 0,
     totalReposo: 0,
-    totalVacaciones: 0
+    totalVacaciones: 0,
+    totalPermisos: 0
   };
 
   for (const day of dayList) {
@@ -126,8 +127,8 @@ function calculateMonthTotals(dayList) {
         case 'F': totals.totalFaltas++; break;
         case 'B': totals.totalBajaMedica++; break;
         case 'R': totals.totalReposo++; break;
-        case 'V':
-        case 'D': totals.totalVacaciones++; break;
+        case 'V': totals.totalVacaciones++; break;
+        case 'D': totals.totalPermisos++; break;
       }
     }
   }

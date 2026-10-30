@@ -863,6 +863,7 @@ const calculateWorkerTotals = (workerId: string) => {
    let totalBajaMedica = 0;
    let totalReposo = 0;
    let totalVacaciones = 0;
+   let totalPermisos = 0;
    
    days.forEach(day => {
       const value = workerData[day] || '';
@@ -875,12 +876,12 @@ const calculateWorkerTotals = (workerId: string) => {
             case 'B': totalBajaMedica++; break;
             case 'R': totalReposo++; break;
             case 'V': totalVacaciones++; break;
-            case 'D': totalVacaciones++; break; // Permiso retribuido cuenta como vacaciones
+            case 'D': totalPermisos++; break; // Permiso retribuido: contador propio, NO vacaciones
          }
       }
    });
    
-   return { totalHours, totalFaltas, totalBajaMedica, totalReposo, totalVacaciones };
+   return { totalHours, totalFaltas, totalBajaMedica, totalReposo, totalVacaciones, totalPermisos };
 };
 
 // Función para calcular totales generales de todos los operarios
@@ -893,6 +894,7 @@ const calculateGrandTotals = (month: string) => {
    let grandTotalBajaMedica = 0;
    let grandTotalReposo = 0;
    let grandTotalVacaciones = 0;
+   let grandTotalPermisos = 0;
    
    // Iterar sobre todos los operarios del mes
    Object.keys(monthData).forEach(workerId => {
@@ -909,7 +911,7 @@ const calculateGrandTotals = (month: string) => {
                case 'B': grandTotalBajaMedica++; break;
                case 'R': grandTotalReposo++; break;
                case 'V': grandTotalVacaciones++; break;
-               case 'D': grandTotalVacaciones++; break; // Permiso retribuido cuenta como vacaciones
+               case 'D': grandTotalPermisos++; break; // Permiso retribuido: contador propio, NO vacaciones
             }
          }
       });
@@ -920,7 +922,8 @@ const calculateGrandTotals = (month: string) => {
       totalFaltas: grandTotalFaltas, 
       totalBajaMedica: grandTotalBajaMedica, 
       totalReposo: grandTotalReposo, 
-      totalVacaciones: grandTotalVacaciones 
+      totalVacaciones: grandTotalVacaciones,
+      totalPermisos: grandTotalPermisos
    };
 };
 
@@ -1071,7 +1074,7 @@ const calculateVacationBalance = (workerId: string) => {
       const yearStart = `${year}-01-01`;
       const yearEnd = `${year}-12-31`;
       worker.statusRecords
-         .filter(r => r.status === WorkerStatus.VACACIONES || r.status === WorkerStatus.PERMISO_RETRIBUIDO || (r.status as string) === 'Vacaciones' || (r.status as string) === 'VACACIONES')
+         .filter(r => r.status === WorkerStatus.VACACIONES || (r.status as string) === 'Vacaciones' || (r.status as string) === 'VACACIONES')
          .forEach(r => {
             const start = new Date(Math.max(new Date(r.startDate + 'T00:00:00').getTime(), new Date(yearStart + 'T00:00:00').getTime()));
             const end = new Date(Math.min(new Date((r.endDate || r.startDate) + 'T00:00:00').getTime(), new Date(yearEnd + 'T00:00:00').getTime()));
@@ -3422,7 +3425,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
       });
       
       // Añadir columnas de totales
-      headers.push('Faltas', 'Baja Médica', 'Reposo', 'Vacaciones', 'Horas', 'Saldo Vacaciones', 'Anticipo', 'S. Bruto', 'S. Neto');
+      headers.push('Faltas', 'Baja Médica', 'Reposo', 'Vacaciones', 'Permisos', 'Horas', 'Saldo Vacaciones', 'Anticipo', 'S. Bruto', 'S. Neto');
       
       excelData.push(headers);
       excelData.push([]); // Fila vacía después de cabeceras
@@ -3454,6 +3457,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
           totals.totalBajaMedica || 0,
           totals.totalReposo || 0,
           totals.totalVacaciones || 0,
+          totals.totalPermisos || 0,
           displayTotal || 0, // 🎯 CORREGIDO: Usar displayTotal como en el grid
           vac.remaining || 0,
           advance || 0,
@@ -3480,6 +3484,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
         grandTotals.totalBajaMedica || 0,
         grandTotals.totalReposo || 0,
         grandTotals.totalVacaciones || 0,
+        grandTotals.totalPermisos || 0,
         grandTotals.totalHours || 0,
         '',
         '',
@@ -3505,6 +3510,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
         { wch: 10 }, // Baja Médica
         { wch: 8 },  // Reposo
         { wch: 10 }, // Vacaciones
+        { wch: 9 },  // Permisos
         { wch: 8 },  // Horas
         { wch: 12 }, // Saldo Vacaciones
         { wch: 8 },  // Anticipo
@@ -6025,9 +6031,12 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                                           {totals.totalReposo}
                                        </div>
                                     </td>
-                                    <td className="p-1 text-center border-r border-slate-200 bg-white">
+                                    <td className="p-1 text-center border-r border-slate-200 bg-white" title={totals.totalPermisos > 0 ? `${totals.totalPermisos} día(s) de permiso retribuido` : undefined}>
                                        <div className="text-xs font-black text-green-600">
                                           {totals.totalVacaciones}
+                                          {totals.totalPermisos > 0 && (
+                                             <span className="text-[9px] font-bold text-gray-500 ml-0.5">+{totals.totalPermisos}D</span>
+                                          )}
                                        </div>
                                     </td>
                                     {/* Saldo vacaciones anual */}
@@ -6237,8 +6246,11 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                            </td>
                            
                            {/* Columna Vac. Mes */}
-                           <td className="p-1 text-center border-r border-slate-200">
+                           <td className="p-1 text-center border-r border-slate-200" title={calculateGrandTotals(selectedMonth).totalPermisos > 0 ? `${calculateGrandTotals(selectedMonth).totalPermisos} día(s) de permiso retribuido` : undefined}>
                               <span className="text-xs text-green-600">{calculateGrandTotals(selectedMonth).totalVacaciones}</span>
+                              {calculateGrandTotals(selectedMonth).totalPermisos > 0 && (
+                                 <span className="text-[9px] font-bold text-gray-500 ml-0.5">+{calculateGrandTotals(selectedMonth).totalPermisos}D</span>
+                              )}
                            </td>
                            
                            {/* Columna Saldo Vac. */}
