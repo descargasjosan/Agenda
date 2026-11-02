@@ -391,27 +391,63 @@ export const addOrUpdateStatusRecord = (
   };
 
   const existingRecords = worker.statusRecords || [];
-  
-  // Buscar si existe un registro que solape con el nuevo período
-  const overlappingRecord = existingRecords.find(record => {
-    const existingStart = new Date(record.startDate);
-    const existingEnd = record.endDate ? new Date(record.endDate) : new Date('9999-12-31'); // INDEFINIDO
-    const newStart = new Date(startDate);
-    const newEnd = endDate === 'IND.' ? new Date('9999-12-31') : new Date(endDate);
-    
-    return newStart <= existingEnd && newEnd >= existingStart;
-  });
 
-  let updatedRecords: WorkerStatusRecord[];
-  
-  if (overlappingRecord) {
-    // Reemplazar el registro solapado
-    updatedRecords = existingRecords.map(record => 
-      record.id === overlappingRecord.id ? newRecord : record
-    );
-  } else {
-    // Añadir nuevo registro
-    updatedRecords = [...existingRecords, newRecord];
+  const newStart = new Date(startDate + 'T00:00:00');
+  const newEnd = endDate === 'IND.' ? new Date('9999-12-31T00:00:00') : new Date(endDate + 'T00:00:00');
+  const dayMs = 86400000;
+  const shiftDate = (d: Date, days: number): string => {
+    const c = new Date(d);
+    c.setDate(c.getDate() + days);
+    return toLocalISODate(c);
+  };
+
+  // Procesar registros existentes: solo se reemplazan solapes del MISMO
+  // estado. Con estados distintos se recorta el nuevo rango del registro
+  // existente (truncandolo o dividiendolo en dos), sin borrar el resto.
+  let updatedRecords: WorkerStatusRecord[] = [];
+  let replacedSameStatus = false;
+
+  for (const record of existingRecords) {
+    const existingStart = new Date((record.startDate || startDate) + 'T00:00:00');
+    const existingEnd = record.endDate ? new Date(record.endDate + 'T00:00:00') : new Date('9999-12-31T00:00:00');
+    const overlaps = newStart <= existingEnd && newEnd >= existingStart;
+
+    if (!overlaps) {
+      updatedRecords.push(record);
+      continue;
+    }
+
+    if (record.status === status) {
+      // Mismo estado: el nuevo registro lo sustituye (comportamiento anterior)
+      if (!replacedSameStatus) {
+        updatedRecords.push(newRecord);
+        replacedSameStatus = true;
+      }
+      continue;
+    }
+
+    // Estado distinto: recortar la parte solapada del registro existente
+    if (newStart > existingStart) {
+      updatedRecords.push({
+        ...record,
+        endDate: shiftDate(newStart, -1),
+        totalDays: Math.round((newStart.getTime() - existingStart.getTime()) / dayMs)
+      });
+    }
+    if (newEnd < existingEnd) {
+      updatedRecords.push({
+        ...record,
+        id: `${record.id}-s${Date.now()}`,
+        startDate: shiftDate(newEnd, 1),
+        endDate: record.endDate,
+        totalDays: Math.round((existingEnd.getTime() - newEnd.getTime()) / dayMs)
+      });
+    }
+    // Si el nuevo rango cubre el registro entero, no queda nada -> se descarta
+  }
+
+  if (!replacedSameStatus) {
+    updatedRecords.push(newRecord);
   }
 
   // Ordenar registros por fecha de inicio
