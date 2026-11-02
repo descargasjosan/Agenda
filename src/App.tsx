@@ -1070,6 +1070,10 @@ const calculateAccumulatedHours = (workerId: string): number => {
 const calculateVacationBalance = (workerId: string) => {
    const year = selectedMonth.split('-')[0];
    const worker = planning.workers.find(w => w.id === workerId);
+   // Fijo discontinuo: sin derecho a vacaciones -> saldo cero
+   if (worker?.contractType === ContractType.FIJO_DISCONTINUO) {
+      return { totalDays: 0, carryOver: 0, entitled: 0, usedDays: 0, remaining: 0 };
+   }
    const config = worker?.vacationConfig?.[year] || { totalDays: 34, carryOver: 0 };
 
    // Contar días V del año desde statusRecords (fuente de verdad)
