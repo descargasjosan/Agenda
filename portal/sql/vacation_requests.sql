@@ -20,7 +20,8 @@ create table if not exists public.vacation_requests (
 
 alter table public.vacation_requests enable row level security;
 
--- La app principal (rol anon, herramienta interna) lee pendientes y resuelve.
+-- La app principal lee pendientes y resuelve. Usa Supabase Auth, asi que
+-- sus peticiones van con el rol AUTHENTICATED (no anon).
 create policy "vacation_requests_anon_select"
   on public.vacation_requests for select
   to anon using (true);
@@ -28,6 +29,14 @@ create policy "vacation_requests_anon_select"
 create policy "vacation_requests_anon_update"
   on public.vacation_requests for update
   to anon using (true) with check (true);
+
+create policy "vacation_requests_auth_select"
+  on public.vacation_requests for select
+  to authenticated using (true);
+
+create policy "vacation_requests_auth_update"
+  on public.vacation_requests for update
+  to authenticated using (true) with check (true);
 
 -- Las escrituras del operario van por la API (service role, omite RLS).
 
