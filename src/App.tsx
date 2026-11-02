@@ -1101,6 +1101,78 @@ const openVacationModal = (workerId: string) => {
    setVacationModal({ workerId });
 };
 
+// ── Solicitudes de vacaciones del portal ──────────────────────────────────
+const VACATION_REQUESTS_API = 'https://horas-descargasjosan.vercel.app/api/vacation-requests';
+
+const fetchVacationRequests = useCallback(async () => {
+   const { data, error } = await supabase
+      .from('vacation_requests')
+      .select('*')
+      .eq('status', 'pending')
+      .order('created_at', { ascending: true });
+   if (!error) setVacationRequests(data || []);
+}, []);
+
+useEffect(() => {
+   fetchVacationRequests();
+   const channel = supabase
+      .channel('vacation-requests-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'vacation_requests' }, () => {
+         fetchVacationRequests();
+      })
+      .subscribe();
+   return () => { supabase.removeChannel(channel); };
+}, [fetchVacationRequests]);
+
+const notifyWorkerPortal = async (workerId: string, title: string, body: string) => {
+   try {
+      const token = session?.access_token;
+      await fetch(VACATION_REQUESTS_API, {
+         method: 'POST',
+         headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {})
+         },
+         body: JSON.stringify({ action: 'notify', workerId, title, body })
+      });
+   } catch { /* el push es best-effort */ }
+};
+
+const resolveVacationRequest = async (request: any, approve: boolean) => {
+   if (resolvingRequestId) return;
+   setResolvingRequestId(request.id);
+   try {
+      if (approve) {
+         const worker = planning.workers.find(w => w.id === request.worker_id);
+         if (!worker) { showNotification('Operario no encontrado', 'error'); return; }
+         const updatedWorker = addOrUpdateStatusRecord(worker, WorkerStatus.VACACIONES, request.start_date, request.end_date, planning.customHolidays);
+         await persistWorker(updatedWorker);
+         const { error } = await supabase
+            .from('vacation_requests')
+            .update({ status: 'approved', resolved_at: new Date().toISOString() })
+            .eq('id', request.id);
+         if (error) throw error;
+         notifyWorkerPortal(request.worker_id, 'Vacaciones aprobadas', `Tu solicitud del ${request.start_date} al ${request.end_date} ha sido aprobada.`);
+         showNotification(`Vacaciones aprobadas a ${request.worker_name}`, 'success');
+      } else {
+         const reason = window.prompt(`Motivo del rechazo para ${request.worker_name} (opcional):`, '') ?? '';
+         const { error } = await supabase
+            .from('vacation_requests')
+            .update({ status: 'rejected', admin_note: reason || null, resolved_at: new Date().toISOString() })
+            .eq('id', request.id);
+         if (error) throw error;
+         notifyWorkerPortal(request.worker_id, 'Vacaciones rechazadas', `Tu solicitud del ${request.start_date} al ${request.end_date} ha sido rechazada.${reason ? ` Motivo: ${reason}` : ''}`);
+         showNotification('Solicitud rechazada', 'info');
+      }
+      fetchVacationRequests();
+   } catch (e: any) {
+      console.error('Error resolviendo solicitud:', e);
+      showNotification(`Error: ${e.message || 'no se pudo resolver'}`, 'error');
+   } finally {
+      setResolvingRequestId(null);
+   }
+};
+
 const saveVacationConfig = async () => {
    if (!vacationModal) return;
    const year = selectedMonth.split('-')[0];
@@ -1194,6 +1266,9 @@ const [planningFilter, setPlanningFilter] = useState('');
   const [highlightTimeout, setHighlightTimeout] = useState<NodeJS.Timeout | null>(null);
   const appVersionParts = (import.meta.env.VITE_APP_VERSION || 'dev').split('+');
   const [autoBackupEnabled, setAutoBackupEnabled] = useState(true);
+  const [vacationRequests, setVacationRequests] = useState<any[]>([]);
+  const [showVacationRequests, setShowVacationRequests] = useState(false);
+  const [resolvingRequestId, setResolvingRequestId] = useState<string | null>(null);
   const [lastAutoBackupTime, setLastAutoBackupTime] = useState<Date | null>(null);
 
   // ── Backup automático diario a las 08:00 ───────────────────────────────────
@@ -5766,6 +5841,23 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                         <Download className="w-4 h-4" />
                         Exportar
                      </button>
+                     <button
+                        onClick={() => setShowVacationRequests(true)}
+                        className={`relative px-4 py-2 rounded-xl transition-colors flex items-center gap-2 text-sm font-black ${
+                           vacationRequests.length > 0
+                              ? 'bg-amber-500 text-white hover:bg-amber-600'
+                              : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                        }`}
+                        title="Solicitudes de vacaciones del portal"
+                     >
+                        <Bell className="w-4 h-4" />
+                        Solicitudes
+                        {vacationRequests.length > 0 && (
+                           <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-600 text-white rounded-full text-[10px] font-black flex items-center justify-center">
+                              {vacationRequests.length}
+                           </span>
+                        )}
+                     </button>
                      {/* Botón "Sincronizar Estados" eliminado: la sincronización es automática */}
                   </div>
                </div>
@@ -6303,6 +6395,59 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
             </div>
          )}
          
+         {/* Modal de solicitudes de vacaciones del portal */}
+         {showVacationRequests && (
+            <div className="fixed inset-0 z-[400] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4" onClick={() => setShowVacationRequests(false)}>
+               <div className="bg-white w-full max-w-lg rounded-[28px] p-6 shadow-2xl animate-in zoom-in-95 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                  <div className="flex items-center justify-between mb-5">
+                     <h3 className="text-base font-black text-slate-900 uppercase italic">Solicitudes de vacaciones</h3>
+                     <button onClick={() => setShowVacationRequests(false)} className="p-2 rounded-xl hover:bg-slate-100 transition-colors">
+                        <X className="w-4 h-4 text-slate-500" />
+                     </button>
+                  </div>
+                  {vacationRequests.length === 0 ? (
+                     <p className="text-sm text-slate-500 text-center py-6">No hay solicitudes pendientes</p>
+                  ) : (
+                     <div className="space-y-3">
+                        {vacationRequests.map(req => (
+                           <div key={req.id} className="rounded-xl bg-slate-50 p-4 ring-1 ring-slate-200">
+                              <div className="flex items-start justify-between gap-3">
+                                 <div className="min-w-0">
+                                    <p className="text-sm font-black text-slate-900">{req.worker_name}</p>
+                                    <p className="text-xs font-bold text-slate-600 mt-0.5">
+                                       {formatDateDMY(req.start_date)} → {formatDateDMY(req.end_date)}
+                                       <span className="text-slate-400 font-medium"> · {req.days} día{req.days !== 1 ? 's' : ''}</span>
+                                    </p>
+                                    {req.note && <p className="text-xs text-slate-500 mt-1 italic">"{req.note}"</p>}
+                                    <p className="text-[10px] text-slate-400 mt-1">
+                                       Pedida el {formatDateDMY((req.created_at || '').slice(0, 10))}
+                                    </p>
+                                 </div>
+                              </div>
+                              <div className="flex gap-2 mt-3">
+                                 <button
+                                    onClick={() => resolveVacationRequest(req, true)}
+                                    disabled={resolvingRequestId === req.id}
+                                    className="flex-1 py-2 bg-green-600 text-white rounded-lg text-xs font-black hover:bg-green-700 transition-colors disabled:opacity-50"
+                                 >
+                                    {resolvingRequestId === req.id ? 'Resolviendo...' : 'Aprobar'}
+                                 </button>
+                                 <button
+                                    onClick={() => resolveVacationRequest(req, false)}
+                                    disabled={resolvingRequestId === req.id}
+                                    className="flex-1 py-2 bg-red-100 text-red-700 rounded-lg text-xs font-black hover:bg-red-200 transition-colors disabled:opacity-50"
+                                 >
+                                    Rechazar
+                                 </button>
+                              </div>
+                           </div>
+                        ))}
+                     </div>
+                  )}
+               </div>
+            </div>
+         )}
+
          {/* Modal de vacaciones */}
          {vacationModal && (() => {
             const worker = planning.workers.find(w => w.id === vacationModal.workerId);

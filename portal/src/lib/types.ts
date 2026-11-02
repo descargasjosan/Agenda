@@ -24,6 +24,23 @@ export interface MonthTotals {
   totalBajaMedica: number;
   totalReposo: number;
   totalVacaciones: number;
+  totalPermisos?: number;
+}
+
+export type VacationRequestStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
+
+export interface VacationRequest {
+  id: string;
+  workerId: string;
+  workerName: string;
+  startDate: string;
+  endDate: string;
+  days: number;
+  status: VacationRequestStatus;
+  note: string | null;
+  adminNote: string | null;
+  createdAt: string;
+  resolvedAt: string | null;
 }
 
 export interface AdvanceInfo {

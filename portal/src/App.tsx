@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 import { useState, useCallback, useEffect } from 'react';
-import { Calendar, ChevronLeft, ChevronRight, LogOut, LogIn, Clock, Wallet, PiggyBank, AlertCircle, CheckCircle2, Loader2, Fuel, Sun, Timer } from 'lucide-react';
-import type { WorkerSummary, FuelSummary, FuelRecord, VacationSummary, WorkerInfo } from './lib/types';
+import { Calendar, ChevronLeft, ChevronRight, LogOut, LogIn, Clock, Wallet, PiggyBank, AlertCircle, CheckCircle2, Loader2, Fuel, Sun, Timer, Send } from 'lucide-react';
+import type { WorkerSummary, FuelSummary, FuelRecord, VacationSummary, WorkerInfo, VacationRequest } from './lib/types';
 import ClockView from './ClockView';
 import AdminApp from './AdminApp';
 
@@ -13,6 +13,7 @@ const CLOCK_PILOT_DNIS = new Set(['24368437Y', '24371414Q', '44855273Y']);
 const API_URL = import.meta.env.VITE_API_URL || '/api/worker-hours';
 const FUEL_API_URL = import.meta.env.VITE_API_FUEL_URL || '/api/fuel';
 const VACATIONS_API_URL = import.meta.env.VITE_API_VACATIONS_URL || '/api/vacations';
+const VACATION_REQUESTS_API_URL = import.meta.env.VITE_API_VACATION_REQUESTS_URL || '/api/vacation-requests';
 
 const MONTH_NAMES = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -34,6 +35,11 @@ function addMonths(month: string, delta: number) {
 function formatMonthName(month: string) {
   const [year, m] = month.split('-').map(Number);
   return `${MONTH_NAMES[m - 1]} ${year}`;
+}
+
+function formatDateEs(dateStr: string) {
+  const [y, m, d] = dateStr.split('-');
+  return `${d}/${m}/${y}`;
 }
 
 function StatusBadge({ settled, settledUntil, lastDay, advance }: { settled: boolean; settledUntil?: number | null; lastDay?: number; advance: { amount: number; paid: boolean } }) {
@@ -575,6 +581,84 @@ function VacationsView({
     fetchVacations();
   }, [fetchVacations]);
 
+  // ── Solicitudes de vacaciones ──
+  const [requests, setRequests] = useState<VacationRequest[]>([]);
+  const [showForm, setShowForm] = useState(false);
+  const [reqStart, setReqStart] = useState('');
+  const [reqEnd, setReqEnd] = useState('');
+  const [reqNote, setReqNote] = useState('');
+  const [reqBusy, setReqBusy] = useState(false);
+  const [reqMsg, setReqMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const fetchRequests = useCallback(async () => {
+    try {
+      const res = await fetch(VACATION_REQUESTS_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'list', dni, pin })
+      });
+      const result = await res.json();
+      if (res.ok) setRequests(result.requests || []);
+    } catch { /* silencioso: el listado es secundario */ }
+  }, [dni, pin]);
+
+  useEffect(() => { fetchRequests(); }, [fetchRequests]);
+
+  const reqDays = reqStart && reqEnd && reqEnd >= reqStart
+    ? Math.floor((Date.parse(reqEnd) - Date.parse(reqStart)) / 86400000) + 1
+    : 0;
+
+  const submitRequest = async () => {
+    if (!reqStart || !reqEnd || reqDays <= 0 || reqBusy) return;
+    setReqBusy(true);
+    setReqMsg(null);
+    try {
+      const res = await fetch(VACATION_REQUESTS_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'create', dni, pin, startDate: reqStart, endDate: reqEnd, note: reqNote })
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.message || result.error || 'Error al enviar la solicitud');
+      setReqMsg({ ok: true, text: 'Solicitud enviada. Te avisaremos cuando se resuelva.' });
+      setShowForm(false);
+      setReqStart(''); setReqEnd(''); setReqNote('');
+      fetchRequests();
+    } catch (e) {
+      setReqMsg({ ok: false, text: e instanceof Error ? e.message : 'Error desconocido' });
+    } finally {
+      setReqBusy(false);
+    }
+  };
+
+  const cancelRequest = async (requestId: string) => {
+    if (reqBusy) return;
+    setReqBusy(true);
+    try {
+      const res = await fetch(VACATION_REQUESTS_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'cancel', dni, pin, requestId })
+      });
+      if (res.ok) fetchRequests();
+    } finally {
+      setReqBusy(false);
+    }
+  };
+
+  const statusStyle: Record<string, string> = {
+    pending: 'bg-amber-100 text-amber-700',
+    approved: 'bg-green-100 text-green-700',
+    rejected: 'bg-red-100 text-red-700',
+    cancelled: 'bg-slate-100 text-slate-500'
+  };
+  const statusLabel: Record<string, string> = {
+    pending: 'Pendiente',
+    approved: 'Aprobada',
+    rejected: 'Rechazada',
+    cancelled: 'Cancelada'
+  };
+
   const [year, monthNum] = month.split('-').map(Number);
   const daysInMonth = new Date(year, monthNum, 0).getDate();
   const firstWeekday = new Date(year, monthNum - 1, 1).getDay();
@@ -700,6 +784,112 @@ function VacationsView({
             )}
           </div>
         ) : null}
+
+        {/* ── Solicitudes de vacaciones ── */}
+        <div className="mt-4 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-slate-900">Mis solicitudes</h3>
+            <button
+              onClick={() => setShowForm(v => !v)}
+              className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 transition"
+            >
+              {showForm ? 'Cerrar' : '+ Solicitar'}
+            </button>
+          </div>
+
+          {reqMsg && (
+            <div className={`mt-3 rounded-xl p-3 text-sm ring-1 ${reqMsg.ok ? 'bg-green-50 text-green-700 ring-green-200' : 'bg-red-50 text-red-700 ring-red-200'}`}>
+              {reqMsg.text}
+            </div>
+          )}
+
+          {showForm && (
+            <div className="mt-3 rounded-xl bg-slate-50 p-3 space-y-3 ring-1 ring-slate-200">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">Desde</label>
+                  <input
+                    type="date"
+                    value={reqStart}
+                    onChange={e => setReqStart(e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">Hasta</label>
+                  <input
+                    type="date"
+                    value={reqEnd}
+                    min={reqStart || undefined}
+                    onChange={e => setReqEnd(e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+              <input
+                type="text"
+                value={reqNote}
+                onChange={e => setReqNote(e.target.value)}
+                maxLength={300}
+                placeholder="Comentario (opcional)"
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+              {reqDays > 0 && (
+                <p className="text-xs text-slate-600">
+                  Esta solicitud consume <span className="font-bold">{reqDays} día{reqDays !== 1 ? 's' : ''}</span> naturales
+                  {data ? ` — te quedarían ${data.remaining - reqDays}` : ''}
+                </p>
+              )}
+              <button
+                onClick={submitRequest}
+                disabled={reqDays <= 0 || reqBusy}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50 transition"
+              >
+                {reqBusy ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                Enviar solicitud
+              </button>
+            </div>
+          )}
+
+          {requests.length > 0 && (
+            <div className="mt-3 space-y-2">
+              {requests.map(r => (
+                <div key={r.id} className="rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-slate-900">
+                        {r.startDate === r.endDate
+                          ? formatDateEs(r.startDate)
+                          : `${formatDateEs(r.startDate)} → ${formatDateEs(r.endDate)}`}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        {r.days} día{r.days !== 1 ? 's' : ''}
+                        {r.note ? ` · ${r.note}` : ''}
+                      </p>
+                      {r.status === 'rejected' && r.adminNote && (
+                        <p className="mt-1 text-xs text-red-600">Motivo: {r.adminNote}</p>
+                      )}
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${statusStyle[r.status] || statusStyle.pending}`}>
+                        {statusLabel[r.status] || r.status}
+                      </span>
+                      {r.status === 'pending' && (
+                        <button
+                          onClick={() => cancelRequest(r.id)}
+                          disabled={reqBusy}
+                          className="text-xs font-bold text-red-600 hover:text-red-700 disabled:opacity-50"
+                        >
+                          Cancelar
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </main>
     </div>
   );
