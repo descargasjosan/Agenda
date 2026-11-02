@@ -8,7 +8,8 @@ import AdminApp from './AdminApp';
 const AUTH_KEY = 'dj-portal-auth';
 
 // Piloto del fichaje: solo estos DNI ven la pestaña "Fichar"
-const CLOCK_PILOT_DNIS = new Set(['24368437Y', '24371414Q', '44855273Y']);
+// Fichaje abierto a todos los operarios
+const CLOCK_ALL_WORKERS = true;
 
 const API_URL = import.meta.env.VITE_API_URL || '/api/worker-hours';
 const FUEL_API_URL = import.meta.env.VITE_API_FUEL_URL || '/api/fuel';
@@ -993,7 +994,7 @@ export default function App() {
 
       setSummary(data as WorkerSummary);
       setView('summary');
-      setActiveTab(CLOCK_PILOT_DNIS.has(String(data.worker?.dni || '').toUpperCase()) ? 'clock' : 'hours');
+      setActiveTab('clock');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error desconocido');
       setSummary(null);
@@ -1053,7 +1054,7 @@ export default function App() {
     return <LoginForm onLogin={handleLogin} loading={loading} error={error} />;
   }
 
-  const canClock = CLOCK_PILOT_DNIS.has(String(summary.worker.dni || '').toUpperCase());
+  const canClock = CLOCK_ALL_WORKERS;
   // Los fijos discontinuos no tienen derecho a vacaciones: se oculta la pestaña
   const hideVacations = summary.worker.contractType === 'Fijo Discontinuo';
   const requestedTab = canClock ? activeTab : 'hours';

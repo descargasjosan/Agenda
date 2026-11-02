@@ -13,9 +13,6 @@ import {
 
 const PUNCH_TYPES = ['in', 'out', 'pause_start', 'pause_end'];
 
-// Piloto: solo estos DNI pueden fichar. Quitar la lista (o el check) para abrirlo a todos.
-const CLOCK_PILOT_DNIS = ['24368437Y', '24371414Q', '44855273Y'];
-
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -36,12 +33,7 @@ export default async function handler(req, res) {
     const { worker, error } = await authenticateWorker(supabase, res, dni, pin);
     if (error) return;
 
-    if (!CLOCK_PILOT_DNIS.includes(String(worker.dni || '').toUpperCase())) {
-      return res.status(403).json({
-        error: 'No disponible',
-        message: 'El registro de jornada aún no está activo para tu usuario'
-      });
-    }
+    if (!worker) return;
 
     const today = madridDateStr();
     const [dayStart, dayEnd] = madridDayRangeUtc(today);

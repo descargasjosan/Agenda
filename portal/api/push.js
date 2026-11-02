@@ -11,9 +11,6 @@ import {
   jobWorkerStart
 } from './_shared.js';
 
-// Piloto: solo estos DNI reciben avisos (misma lista que clock.js)
-const CLOCK_PILOT_DNIS = ['24368437Y', '24371414Q', '44855273Y'];
-
 function initWebPush() {
   const pub = process.env.VAPID_PUBLIC_KEY;
   const priv = process.env.VAPID_PRIVATE_KEY;
@@ -59,21 +56,16 @@ async function runPlan(supabase) {
 
   if (starts.size === 0) return { planned: 0, removed: 0 };
 
-  // Filtrar por piloto (DNI) y por tener suscripcion activa
+  // Solo operarios con suscripcion push activa
   const ids = [...starts.keys()];
-  const [{ data: workerRows }, { data: subRows }] = await Promise.all([
-    supabase.from('workers').select('id, data->>dni').in('id', ids),
-    supabase.from('push_subscriptions').select('worker_id').in('worker_id', ids)
-  ]);
+  const { data: subRows } = await supabase
+    .from('push_subscriptions')
+    .select('worker_id')
+    .in('worker_id', ids);
 
-  const pilotIds = new Set(
-    (workerRows || [])
-      .filter(w => CLOCK_PILOT_DNIS.includes(String(w.dni || '').toUpperCase()))
-      .map(w => w.id)
-  );
   const subbedIds = new Set((subRows || []).map(s => s.worker_id));
 
-  const eligible = ids.filter(id => pilotIds.has(id) && subbedIds.has(id));
+  const eligible = ids.filter(id => subbedIds.has(id));
 
   // Limpiar filas pendientes de hoy que ya no procedan (reasignaciones)
   const { data: pending } = await supabase
