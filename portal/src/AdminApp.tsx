@@ -460,6 +460,7 @@ function OverviewPanel({ workers, loading, onRefresh, onOpenHistory, graceMin, n
                 <tr>
                   <th className="px-4 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest w-16">Cód.</th>
                   <th className="px-4 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Operario</th>
+                  <th className="px-4 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Inicio</th>
                   <th className="px-4 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Entrada</th>
                   <th className="px-4 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Pausa</th>
                   <th className="px-4 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Salida</th>
@@ -535,6 +536,13 @@ function OverviewPanel({ workers, loading, onRefresh, onOpenHistory, graceMin, n
                       <td className="px-4 py-3">
                         <p className="font-semibold text-slate-800 text-sm">{w.name}</p>
                         <p className="text-[10px] text-slate-400 uppercase tracking-tight">{w.dni}</p>
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        {w.taskStart ? (
+                          <span className="font-black tabular-nums text-slate-800">{w.taskStart}</span>
+                        ) : (
+                          <span className="text-slate-300 font-bold">—</span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-sm">
                         {entries.length === 0 ? (
