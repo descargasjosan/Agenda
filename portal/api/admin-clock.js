@@ -92,7 +92,7 @@ export default async function handler(req, res) {
       const [workersRes, logsRes, jobsRes] = await Promise.all([
         supabase.from('workers').select('id, data'),
         supabase.from('clock_logs').select('*').gte('ts', start).lt('ts', end).order('ts', { ascending: true }),
-        supabase.from('jobs').select('data').eq('data->>date', today)
+        supabase.from('jobs').select('id, data').eq('data->>date', today)
       ]);
 
       if (workersRes.error) throw workersRes.error;
@@ -158,7 +158,21 @@ export default async function handler(req, res) {
           return (hasTask(a) - hasTask(b)) || (order[a.state] - order[b.state]) || String(a.name).localeCompare(String(b.name));
         });
 
-      return res.status(200).json({ success: true, date: today, workers });
+      return res.status(200).json({
+        success: true, date: today, workers, graceMin,
+        jobs: (jobsRes.data || []).map(r => ({ id: r.id, data: r.data }))
+      });
+    }
+
+    // ---------- Sonda ligera: total de fichajes de hoy (para detectar cambios) ----------
+    if (action === 'count') {
+      const [s, e] = madridDayRangeUtc(madridDateStr());
+      const { count, error: cErr } = await supabase
+        .from('clock_logs')
+        .select('id', { count: 'exact', head: true })
+        .gte('ts', s).lt('ts', e);
+      if (cErr) throw cErr;
+      return res.status(200).json({ success: true, count: count || 0 });
     }
 
     // ---------- Historial de un operario en un mes ----------

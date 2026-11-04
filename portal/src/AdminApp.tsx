@@ -3,10 +3,88 @@ import {
   Activity, CalendarDays, FileDown, LogOut, RefreshCw, Plus, Pencil, Ban,
   AlertCircle, AlertTriangle, Loader2, Lock, Mail, ArrowRight, Clock, ShieldCheck, Settings, MapPin, Bell
 } from 'lucide-react';
+import { createClient } from '@supabase/supabase-js';
 
 const AUTH_API_URL = import.meta.env.VITE_API_ADMIN_AUTH_URL || '/api/admin-auth';
 const ADMIN_API_URL = import.meta.env.VITE_API_ADMIN_CLOCK_URL || '/api/admin-clock';
 const TOKEN_KEY = 'dj-portal-admin-token';
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+
+// ---------- Helpers locales (réplicas de _shared.js, para aplicar eventos sin refetch) ----------
+const MADRID_TZ = 'Europe/Madrid';
+const CLOCK_LABELS_LOCAL: Record<string, string> = {
+  in: 'Entrada', out: 'Salida', pause_start: 'Inicio pausa', pause_end: 'Fin pausa', void: 'Anulado'
+};
+const madridDateStrLocal = (d: Date = new Date()) =>
+  d.toLocaleDateString('en-CA', { timeZone: MADRID_TZ });
+const madridTimeStrLocal = (ts: string | Date) =>
+  new Date(ts).toLocaleTimeString('es-ES', { timeZone: MADRID_TZ, hour: '2-digit', minute: '2-digit' });
+const minutesOf = (hhmm: string) => { const [h, m] = hhmm.split(':').map(Number); return h * 60 + m; };
+const madridNowMinutes = () => minutesOf(madridTimeStrLocal(new Date()));
+
+const serializeLogLocal = (l: any): AdminLog => ({
+  id: l.id,
+  workerId: l.worker_id,
+  type: l.type,
+  label: CLOCK_LABELS_LOCAL[l.type] || l.type,
+  ts: l.ts,
+  time: madridTimeStrLocal(l.ts),
+  date: madridDateStrLocal(new Date(l.ts)),
+  source: l.source,
+  correctsId: l.corrects_id ?? null,
+  correctionReason: l.correction_reason ?? null,
+  createdBy: l.created_by ?? null,
+  lat: l.lat ?? null,
+  lng: l.lng ?? null,
+  accuracy: l.accuracy ?? null
+});
+
+const applyLogFlags = (logs: AdminLog[]) => {
+  const superseded = new Set(logs.filter(l => l.correctsId).map(l => l.correctsId));
+  const voided = new Set(logs.filter(l => l.type === 'void' && l.correctsId).map(l => l.correctsId));
+  return logs.map(l => ({ ...l, superseded: superseded.has(l.id), voided: voided.has(l.id) }));
+};
+
+const isEffective = (l: AdminLog) => !l.superseded && !l.voided && l.type !== 'void';
+
+const lastStateLocal = (logs: AdminLog[]): OverviewWorker['state'] => {
+  const eff = logs.filter(isEffective);
+  const last = eff[eff.length - 1];
+  if (!last) return 'none';
+  if (last.type === 'pause_start') return 'paused';
+  if (last.type === 'out') return 'out';
+  return 'in';
+};
+
+const jobWorkerStartLocal = (d: any, wid: string): string | null => {
+  const groupTimes = (d?.reinforcementGroups || [])
+    .filter((g: any) => (g.workerIds || []).includes(wid))
+    .map((g: any) => g.startTime)
+    .filter(Boolean)
+    .sort();
+  if (groupTimes.length) return groupTimes[0];
+  if (!(d?.assignedWorkerIds || []).includes(wid)) return null;
+  return (d.workerTimes && d.workerTimes[wid]) || d.startTime || null;
+};
+
+// Primera hora de inicio del operario entre las tareas (no canceladas) del día indicado
+const computeTaskStart = (jobsData: { id: string; data: any }[], wid: string, today: string) => {
+  let best: string | null = null;
+  for (const j of jobsData) {
+    const d = j.data || {};
+    if (d.date !== today || d.isCancelled) continue;
+    const t = jobWorkerStartLocal(d, wid);
+    if (t && (!best || t < best)) best = t;
+  }
+  return best;
+};
+
+const sortOverview = (ws: OverviewWorker[]) => [...ws].sort((a, b) => {
+  const hasTask = (w: OverviewWorker) => (w.taskStart ? 0 : 1);
+  const order: Record<string, number> = { in: 0, paused: 1, out: 2, none: 3 };
+  return (hasTask(a) - hasTask(b)) || (order[a.state] - order[b.state]) || String(a.name).localeCompare(String(b.name));
+});
 
 interface AdminLog {
   id: string;
@@ -297,11 +375,13 @@ const STATE_DOT: Record<OverviewWorker['state'], string> = {
   none: 'bg-slate-300'
 };
 
-function OverviewPanel({ workers, loading, onRefresh, onOpenHistory }: {
+function OverviewPanel({ workers, loading, onRefresh, onOpenHistory, graceMin, nowMin }: {
   workers: OverviewWorker[];
   loading: boolean;
   onRefresh: () => void;
   onOpenHistory: (workerId: string) => void;
+  graceMin: number;
+  nowMin: number;
 }) {
   const [filter, setFilter] = useState('');
   const [stateFilter, setStateFilter] = useState<OverviewFilter>('all');
@@ -510,19 +590,25 @@ function OverviewPanel({ workers, loading, onRefresh, onOpenHistory }: {
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        {w.state === 'none' && w.taskDue ? (
-                          <span
-                            title={`Tarea desde las ${w.taskStart} — debería haber fichado hace ${formatMinutes(w.sinceStartMin ?? 0)}`}
-                            className={`inline-flex items-center gap-1.5 ${w.late ? 'text-rose-600' : 'text-amber-600'}`}
-                          >
-                            <AlertTriangle className="w-3.5 h-3.5" />
-                            <span className="text-[10px] font-black uppercase tracking-widest">
-                              Sin fichar · hace {formatMinutes(w.sinceStartMin ?? 0)}
+                        {(() => {
+                          const sinceMin = w.state === 'none' && w.taskStart
+                            ? nowMin - minutesOf(w.taskStart) : null;
+                          if (sinceMin === null || sinceMin <= 0) {
+                            return <span className="text-slate-300 font-bold">—</span>;
+                          }
+                          const isLate = sinceMin > graceMin;
+                          return (
+                            <span
+                              title={`Tarea desde las ${w.taskStart} — debería haber fichado hace ${formatMinutes(sinceMin)}`}
+                              className={`inline-flex items-center gap-1.5 ${isLate ? 'text-rose-600' : 'text-amber-600'}`}
+                            >
+                              <AlertTriangle className="w-3.5 h-3.5" />
+                              <span className="text-[10px] font-black uppercase tracking-widest">
+                                Sin fichar · hace {formatMinutes(sinceMin)}
+                              </span>
                             </span>
-                          </span>
-                        ) : (
-                          <span className="text-slate-300 font-bold">—</span>
-                        )}
+                          );
+                        })()}
                       </td>
                     </tr>
                   );
@@ -1088,6 +1174,10 @@ export default function AdminApp() {
   const [modal, setModal] = useState<ModalState | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [jobsData, setJobsData] = useState<{ id: string; data: any }[]>([]);
+  const [graceMin, setGraceMin] = useState(15);
+  const [todayStr, setTodayStr] = useState(madridDateStrLocal());
+  const [, setTick] = useState(0);
 
   const apiCall = useCallback(async (payload: Record<string, unknown>) => {
     const res = await fetch(ADMIN_API_URL, {
@@ -1112,6 +1202,8 @@ export default function AdminApp() {
     try {
       const data = await apiCall({ action: 'overview' });
       setWorkers(data.workers || []);
+      setJobsData(data.jobs || []);
+      setGraceMin(Number(data.graceMin ?? 15));
     } catch (err) {
       if (err instanceof Error && err.message !== 'Sesión caducada') setError(err.message);
     } finally {
@@ -1134,6 +1226,67 @@ export default function AdminApp() {
 
   useEffect(() => { loadOverview(); }, [loadOverview]);
   useEffect(() => { loadHistory(); }, [loadHistory]);
+
+  // ── Realtime de bajo coste: aplica fichajes y tareas en local, sin refetch ──
+  useEffect(() => {
+    if (!token || !SUPABASE_URL || !SUPABASE_ANON_KEY) return;
+    const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    sb.realtime.setAuth(token);
+
+    const channel = sb.channel('admin-clock-live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'clock_logs' }, (p) => {
+        const row = p.new as any;
+        if (!row?.worker_id) return;
+        const log = serializeLogLocal(row);
+        setWorkers(prev => sortOverview(prev.map(w => {
+          if (w.id !== row.worker_id) return w;
+          const logs = applyLogFlags(
+            [...w.logs.filter(l => l.id !== log.id), log].sort((a, b) => a.ts.localeCompare(b.ts))
+          );
+          return { ...w, logs, count: logs.filter(isEffective).length, state: lastStateLocal(logs) };
+        })));
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'jobs' }, (p) => {
+        setJobsData(prev => {
+          const next = p.eventType === 'DELETE'
+            ? prev.filter(j => j.id !== (p.old as any)?.id)
+            : [...prev.filter(j => j.id !== (p.new as any)?.id), { id: (p.new as any).id, data: (p.new as any).data }];
+          const today = madridDateStrLocal();
+          const nowMin = madridNowMinutes();
+          setWorkers(ws => sortOverview(ws.map(w => {
+            const taskStart = computeTaskStart(next, w.id, today);
+            return { ...w, taskStart, taskDue: Boolean(taskStart && minutesOf(taskStart) <= nowMin) };
+          })));
+          return next;
+        });
+      })
+      .subscribe();
+
+    return () => { sb.removeChannel(channel); };
+  }, [token]);
+
+  // Timer de 1 min: repinta contadores ("hace Xm") y detecta el cambio de día
+  useEffect(() => {
+    const iv = setInterval(() => {
+      const d = madridDateStrLocal();
+      if (d !== todayStr) { setTodayStr(d); loadOverview(); return; }
+      setTick(t => t + 1);
+    }, 60000);
+    return () => clearInterval(iv);
+  }, [todayStr, loadOverview]);
+
+  // Sonda ligera cada 2 min: refetch solo si el conteo de fichajes difiere
+  useEffect(() => {
+    if (!token) return;
+    const iv = setInterval(async () => {
+      try {
+        const { count } = await apiCall({ action: 'count' });
+        const total = workers.reduce((n, w) => n + w.logs.length, 0);
+        if (total !== count) loadOverview();
+      } catch { /* la sonda falla en silencio */ }
+    }, 120000);
+    return () => clearInterval(iv);
+  }, [token, apiCall, loadOverview, workers]);
 
   const handleModalSubmit = async ({ type, ts, reason }: { type?: string; ts?: string; reason: string }) => {
     if (!modal) return;
@@ -1243,6 +1396,8 @@ export default function AdminApp() {
               loading={overviewLoading}
               onRefresh={loadOverview}
               onOpenHistory={(id) => { setHistoryWorker(id); setView('history'); }}
+              graceMin={graceMin}
+              nowMin={madridNowMinutes()}
             />
           )}
           {view === 'history' && (
