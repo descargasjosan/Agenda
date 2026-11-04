@@ -37,6 +37,7 @@ interface OverviewWorker {
   taskDue?: boolean;
   late?: boolean;
   lateMin?: number | null;
+  sinceStartMin?: number | null;
   logs: AdminLog[];
 }
 
@@ -509,13 +510,15 @@ function OverviewPanel({ workers, loading, onRefresh, onOpenHistory }: {
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        {w.late ? (
+                        {w.state === 'none' && w.taskDue ? (
                           <span
-                            title={`Tarea desde las ${w.taskStart} — lleva ${w.lateMin} min sin fichar pasado el margen`}
-                            className="inline-flex items-center gap-1.5 text-rose-600"
+                            title={`Tarea desde las ${w.taskStart} — debería haber fichado hace ${formatMinutes(w.sinceStartMin ?? 0)}`}
+                            className={`inline-flex items-center gap-1.5 ${w.late ? 'text-rose-600' : 'text-amber-600'}`}
                           >
                             <AlertTriangle className="w-3.5 h-3.5" />
-                            <span className="text-[10px] font-black uppercase tracking-widest">Sin fichar</span>
+                            <span className="text-[10px] font-black uppercase tracking-widest">
+                              Sin fichar · hace {formatMinutes(w.sinceStartMin ?? 0)}
+                            </span>
                           </span>
                         ) : (
                           <span className="text-slate-300 font-bold">—</span>

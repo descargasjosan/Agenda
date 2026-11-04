@@ -128,10 +128,12 @@ export default async function handler(req, res) {
 
           // Minutos que lleva sin fichar pasado el margen (negativo = aun a tiempo)
           let lateMin = null;
+          let sinceStartMin = null;
           if (taskStart) {
             const [sh, sm] = taskStart.split(':').map(Number);
             const [nh, nm] = nowStr.split(':').map(Number);
-            lateMin = (nh * 60 + nm) - (sh * 60 + sm) - graceMin;
+            sinceStartMin = (nh * 60 + nm) - (sh * 60 + sm);
+            lateMin = sinceStartMin - graceMin;
           }
 
           return {
@@ -145,12 +147,15 @@ export default async function handler(req, res) {
             taskDue: Boolean(taskStart && taskStart <= nowStr),
             late: Boolean(state === 'none' && lateMin !== null && lateMin > 0),
             lateMin,
+            sinceStartMin,
             logs: logs.map(serializeLog)
           };
         })
         .sort((a, b) => {
+          // Primero los que tienen tarea asignada hoy; dentro, por estado y nombre
+          const hasTask = (w) => (w.taskStart ? 0 : 1);
           const order = { in: 0, paused: 1, out: 2, none: 3 };
-          return (order[a.state] - order[b.state]) || String(a.name).localeCompare(String(b.name));
+          return (hasTask(a) - hasTask(b)) || (order[a.state] - order[b.state]) || String(a.name).localeCompare(String(b.name));
         });
 
       return res.status(200).json({ success: true, date: today, workers });
