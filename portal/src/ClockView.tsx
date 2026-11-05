@@ -213,7 +213,7 @@ export default function ClockView({
 
         {/* Reloj y estado */}
         <div className="mb-4 rounded-2xl bg-white p-6 text-center shadow-sm ring-1 ring-slate-200">
-          <p className="text-5xl font-black tabular-nums tracking-tight text-slate-900">
+          <p className="text-4xl font-black tabular-nums tracking-tight text-slate-900">
             {now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
           </p>
           <p className="mt-1 text-sm font-medium capitalize text-slate-500">
@@ -238,7 +238,7 @@ export default function ClockView({
           </div>
         ) : !hasWorkToday ? (
           <div className="mb-6">
-            <div className="flex items-center justify-center gap-3 rounded-2xl bg-slate-200 px-4 py-6 text-slate-400 cursor-not-allowed select-none">
+            <div className="flex items-center justify-center gap-3 rounded-2xl bg-slate-200 px-4 py-[18px] text-slate-400 cursor-not-allowed select-none">
               <LogIn size={26} className="opacity-50" />
               <span className="text-lg font-black uppercase tracking-wider">Fichar</span>
             </div>
@@ -252,7 +252,7 @@ export default function ClockView({
               <button
                 onClick={() => callClock('in')}
                 disabled={punching}
-                className="col-span-2 flex items-center justify-center gap-3 rounded-2xl bg-green-600 px-4 py-6 text-lg font-black uppercase tracking-wider text-white shadow-lg shadow-green-200 transition hover:bg-green-700 active:scale-[0.98] disabled:opacity-60"
+                className="col-span-2 flex items-center justify-center gap-3 rounded-2xl bg-green-600 px-4 py-[18px] text-lg font-black uppercase tracking-wider text-white shadow-lg shadow-green-200 transition hover:bg-green-700 active:scale-[0.98] disabled:opacity-60"
               >
                 {punching ? <Loader2 size={26} className="animate-spin" /> : <LogIn size={26} />}
                 Fichar Entrada
@@ -264,7 +264,7 @@ export default function ClockView({
                 <button
                   onClick={() => callClock('pause_start')}
                   disabled={punching}
-                  className="flex items-center justify-center gap-2 rounded-2xl bg-amber-500 px-4 py-6 text-sm font-black uppercase tracking-wider text-white shadow-lg shadow-amber-200 transition hover:bg-amber-600 active:scale-[0.98] disabled:opacity-60"
+                  className="flex items-center justify-center gap-2 rounded-2xl bg-amber-500 px-4 py-[18px] text-sm font-black uppercase tracking-wider text-white shadow-lg shadow-amber-200 transition hover:bg-amber-600 active:scale-[0.98] disabled:opacity-60"
                 >
                   {punching ? <Loader2 size={22} className="animate-spin" /> : <Coffee size={22} />}
                   Iniciar Pausa
@@ -272,7 +272,7 @@ export default function ClockView({
                 <button
                   onClick={() => callClock('out')}
                   disabled={punching}
-                  className="flex items-center justify-center gap-2 rounded-2xl bg-rose-600 px-4 py-6 text-sm font-black uppercase tracking-wider text-white shadow-lg shadow-rose-200 transition hover:bg-rose-700 active:scale-[0.98] disabled:opacity-60"
+                  className="flex items-center justify-center gap-2 rounded-2xl bg-rose-600 px-4 py-[18px] text-sm font-black uppercase tracking-wider text-white shadow-lg shadow-rose-200 transition hover:bg-rose-700 active:scale-[0.98] disabled:opacity-60"
                 >
                   {punching ? <Loader2 size={22} className="animate-spin" /> : <LogOut size={22} />}
                   Fichar Salida
@@ -285,7 +285,7 @@ export default function ClockView({
                 <button
                   onClick={() => callClock('pause_end')}
                   disabled={punching}
-                  className="flex items-center justify-center gap-2 rounded-2xl bg-amber-500 px-4 py-6 text-sm font-black uppercase tracking-wider text-white shadow-lg shadow-amber-200 transition hover:bg-amber-600 active:scale-[0.98] disabled:opacity-60"
+                  className="flex items-center justify-center gap-2 rounded-2xl bg-amber-500 px-4 py-[18px] text-sm font-black uppercase tracking-wider text-white shadow-lg shadow-amber-200 transition hover:bg-amber-600 active:scale-[0.98] disabled:opacity-60"
                 >
                   {punching ? <Loader2 size={22} className="animate-spin" /> : <Play size={22} />}
                   Fin Pausa
@@ -293,7 +293,7 @@ export default function ClockView({
                 <button
                   onClick={() => callClock('out')}
                   disabled={punching}
-                  className="flex items-center justify-center gap-2 rounded-2xl bg-rose-600 px-4 py-6 text-sm font-black uppercase tracking-wider text-white shadow-lg shadow-rose-200 transition hover:bg-rose-700 active:scale-[0.98] disabled:opacity-60"
+                  className="flex items-center justify-center gap-2 rounded-2xl bg-rose-600 px-4 py-[18px] text-sm font-black uppercase tracking-wider text-white shadow-lg shadow-rose-200 transition hover:bg-rose-700 active:scale-[0.98] disabled:opacity-60"
                 >
                   {punching ? <Loader2 size={22} className="animate-spin" /> : <LogOut size={22} />}
                   Fichar Salida
