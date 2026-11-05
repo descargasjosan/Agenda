@@ -121,8 +121,13 @@ export function jobWorkerStart(jobData, workerId) {
 // (corrección o anulación). Las filas 'void' son solo marcadores: se excluyen.
 
 export function effectiveLogs(logs) {
-  const superseded = new Set(logs.filter(l => l.corrects_id).map(l => l.corrects_id));
-  return logs.filter(l => !superseded.has(l.id) && l.type !== 'void');
+  // Un corrector anulado ya no sustituye a su objetivo: el fichaje
+  // anterior "resucita" (cadena de correcciones, nada se borra).
+  const voided = new Set(logs.filter(l => l.type === 'void' && l.corrects_id).map(l => l.corrects_id));
+  const superseded = new Set(
+    logs.filter(l => l.corrects_id && l.type !== 'void' && !voided.has(l.id)).map(l => l.corrects_id)
+  );
+  return logs.filter(l => !superseded.has(l.id) && l.type !== 'void' && !voided.has(l.id));
 }
 
 export function lastState(logs) {

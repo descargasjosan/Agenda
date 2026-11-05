@@ -41,8 +41,10 @@ const serializeLogLocal = (l: any): AdminLog => ({
 });
 
 const applyLogFlags = (logs: AdminLog[]) => {
-  const superseded = new Set(logs.filter(l => l.correctsId).map(l => l.correctsId));
   const voided = new Set(logs.filter(l => l.type === 'void' && l.correctsId).map(l => l.correctsId));
+  const superseded = new Set(
+    logs.filter(l => l.correctsId && l.type !== 'void' && !voided.has(l.id)).map(l => l.correctsId)
+  );
   return logs.map(l => ({ ...l, superseded: superseded.has(l.id), voided: voided.has(l.id) }));
 };
 
@@ -812,33 +814,59 @@ function HistoryPanel({
                       </td>
                       <td className="px-4 py-3 align-top">
                         {(() => {
-                          const correctionByTarget: Record<string, AdminLog> = {};
-                          for (const l of dayLogs) if (l.correctsId) correctionByTarget[l.correctsId] = l;
-                          const orphanCorrections = corrections.filter(c => !c.correctsId);
+                          const byTarget: Record<string, AdminLog> = {};
+                          for (const l of dayLogs) if (l.correctsId) byTarget[l.correctsId] = l;
+                          const chains: AdminLog[][] = dayLogs
+                            .filter(l => !l.correctsId)
+                            .map(root => {
+                              const chain = [root];
+                              let cur = root;
+                              while (byTarget[cur.id]) { cur = byTarget[cur.id]; chain.push(cur); }
+                              return chain;
+                            })
+                            .filter(ch => ch.length > 1);
+                          const orphans = corrections.filter(c => !c.correctsId);
                           return (
                             <div className="space-y-1">
-                              {supersededLogs.map(l => {
-                                const c = correctionByTarget[l.id];
+                              {chains.map(chain => {
+                                const head = chain[chain.length - 1];
+                                if (head.type === 'void') {
+                                  // La anulación invalida al penúltimo; el anterior vuelve a valer
+                                  const effIdx = chain.length - 3;
+                                  return (
+                                    <p key={chain[0].id} className="text-[10px] text-slate-400" title={head.createdBy || ''}>
+                                      {chain.slice(0, -1).map((m, i) => (
+                                        <span key={m.id}>
+                                          {i > 0 && ' → '}
+                                          <span className={i === effIdx ? 'text-slate-600' : 'line-through'}>
+                                            {i === 0 ? `${m.label} ` : ''}{m.time}
+                                          </span>
+                                        </span>
+                                      ))}
+                                      <span className="ml-1 text-slate-500">— Anulación: {head.correctionReason}</span>
+                                    </p>
+                                  );
+                                }
                                 return (
-                                  <p key={l.id} className="text-[10px] text-slate-400" title={c?.createdBy || ''}>
-                                    <span className="line-through">{l.label} {l.time}</span>
-                                    <span className="ml-1">{l.voided ? 'anulado' : 'sustituido'}</span>
-                                    {c && (
-                                      <span className="ml-1 text-slate-500">
-                                        {c.type === 'void'
-                                          ? `— Anulación: ${c.correctionReason}`
-                                          : `→ ${c.time} · Corrección: ${c.correctionReason}`}
+                                  <p key={chain[0].id} className="text-[10px] text-slate-400" title={head.createdBy || ''}>
+                                    {chain.map((m, i) => (
+                                      <span key={m.id}>
+                                        {i > 0 && ' → '}
+                                        <span className={i === chain.length - 1 ? 'text-slate-600 font-semibold' : 'line-through'}>
+                                          {i === 0 ? `${m.label} ` : ''}{m.time}
+                                        </span>
                                       </span>
-                                    )}
+                                    ))}
+                                    <span className="ml-1 text-slate-500">· Corrección: {head.correctionReason}</span>
                                   </p>
                                 );
                               })}
-                              {orphanCorrections.map(l => (
+                              {orphans.map(l => (
                                 <p key={`r-${l.id}`} className="text-[10px] text-slate-400" title={l.createdBy || ''}>
                                   {l.type === 'void' ? 'Anulación' : 'Corrección'}: {l.correctionReason}
                                 </p>
                               ))}
-                              {supersededLogs.length === 0 && orphanCorrections.length === 0 && (
+                              {chains.length === 0 && orphans.length === 0 && (
                                 <span className="text-slate-200">—</span>
                               )}
                             </div>

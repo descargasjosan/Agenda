@@ -201,8 +201,8 @@ export default async function handler(req, res) {
 
       if (error) throw error;
 
-      const superseded = new Set((data || []).filter(l => l.corrects_id).map(l => l.corrects_id));
-      const voidIds = new Set((data || []).filter(l => l.type === 'void').map(l => l.corrects_id));
+      const voidIds = new Set((data || []).filter(l => l.type === 'void' && l.corrects_id).map(l => l.corrects_id));
+      const superseded = new Set((data || []).filter(l => l.corrects_id && l.type !== 'void' && !voidIds.has(l.id)).map(l => l.corrects_id));
 
       return res.status(200).json({
         success: true,
@@ -299,8 +299,8 @@ export default async function handler(req, res) {
         workerMap[r.id] = { name: r.data.name, dni: r.data.dni };
       }
 
-      const superseded = new Set((logsRes.data || []).filter(l => l.corrects_id).map(l => l.corrects_id));
-      const voidIds = new Set((logsRes.data || []).filter(l => l.type === 'void').map(l => l.corrects_id));
+      const voidIds = new Set((logsRes.data || []).filter(l => l.type === 'void' && l.corrects_id).map(l => l.corrects_id));
+      const superseded = new Set((logsRes.data || []).filter(l => l.corrects_id && l.type !== 'void' && !voidIds.has(l.id)).map(l => l.corrects_id));
 
       return res.status(200).json({
         success: true,
