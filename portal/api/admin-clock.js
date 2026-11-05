@@ -129,6 +129,13 @@ export default async function handler(req, res) {
         (byWorker[l.worker_id] = byWorker[l.worker_id] || []).push(l);
       }
 
+      // Flags de auditoria: un corrector anulado no sustituye a su objetivo
+      const allLogs = logsRes.data || [];
+      const voidIds = new Set(allLogs.filter(l => l.type === 'void' && l.corrects_id).map(l => l.corrects_id));
+      const supersededIds = new Set(
+        allLogs.filter(l => l.corrects_id && l.type !== 'void' && !voidIds.has(l.id)).map(l => l.corrects_id)
+      );
+
       const workers = (workersRes.data || [])
         .filter(r => !r.data.isArchived)
         .map(r => {
@@ -158,7 +165,11 @@ export default async function handler(req, res) {
             late: Boolean(state === 'none' && lateMin !== null && lateMin > 0),
             lateMin,
             sinceStartMin,
-            logs: logs.map(serializeLog)
+            logs: logs.map(l => ({
+              ...serializeLog(l),
+              superseded: supersededIds.has(l.id),
+              voided: voidIds.has(l.id)
+            }))
           };
         })
         .sort((a, b) => {
