@@ -778,7 +778,7 @@ function HistoryPanel({
                   return (
                     <tr key={date} className="hover:bg-slate-50/60 transition-colors">
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <p className="font-medium text-slate-800 text-sm capitalize">
+                        <p className="font-medium text-slate-800 text-[17px] capitalize">
                           {d.toLocaleDateString('es-ES', { weekday: 'short' })}
                           <span className="text-slate-400"> · </span>
                           {d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
