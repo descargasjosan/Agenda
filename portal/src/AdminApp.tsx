@@ -457,7 +457,7 @@ function OverviewPanel({ workers, loading, onRefresh, onOpenHistory, graceMin, n
       </div>
 
       {/* Tabla */}
-      <div className="bg-white rounded-2xl ring-1 ring-slate-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-2xl ring-1 ring-slate-200 shadow-sm overflow-clip">
         {loading && workers.length === 0 ? (
           <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-blue-600" /></div>
         ) : (
