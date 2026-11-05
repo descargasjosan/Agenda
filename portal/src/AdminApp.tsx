@@ -21,6 +21,9 @@ const madridDateStrLocal = (d: Date = new Date()) =>
 const madridTimeStrLocal = (ts: string | Date) =>
   new Date(ts).toLocaleTimeString('es-ES', { timeZone: MADRID_TZ, hour: '2-digit', minute: '2-digit' });
 const minutesOf = (hhmm: string) => { const [h, m] = hhmm.split(':').map(Number); return h * 60 + m; };
+const fmtWhen = (ts?: string) => ts
+  ? new Date(ts).toLocaleString('es-ES', { timeZone: 'Europe/Madrid', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+  : '';
 const madridNowMinutes = () => minutesOf(madridTimeStrLocal(new Date()));
 
 const serializeLogLocal = (l: any): AdminLog => ({
@@ -37,7 +40,8 @@ const serializeLogLocal = (l: any): AdminLog => ({
   createdBy: l.created_by ?? null,
   lat: l.lat ?? null,
   lng: l.lng ?? null,
-  accuracy: l.accuracy ?? null
+  accuracy: l.accuracy ?? null,
+  createdAt: l.created_at
 });
 
 const applyLogFlags = (logs: AdminLog[]) => {
@@ -102,6 +106,7 @@ interface AdminLog {
   createdBy: string | null;
   superseded?: boolean;
   voided?: boolean;
+  createdAt?: string;
   workerName?: string;
   workerDni?: string;
 }
@@ -826,6 +831,13 @@ function HistoryPanel({
                             })
                             .filter(ch => ch.length > 1);
                           const orphans = corrections.filter(c => !c.correctsId);
+                          // Tooltip con la cadena completa: cada paso con motivo, autor y cuándo
+                          const chainTitle = (chain: AdminLog[]) =>
+                            chain.slice(1).map(m =>
+                              m.type === 'void'
+                                ? `Anulación — "${m.correctionReason}" · ${m.createdBy || '?'} · ${fmtWhen(m.createdAt)}`
+                                : `${m.label} ${m.time} — "${m.correctionReason}" · ${m.createdBy || '?'} · ${fmtWhen(m.createdAt)}`
+                            ).join('\n');
                           return (
                             <div className="space-y-1">
                               {chains.map(chain => {
@@ -834,7 +846,7 @@ function HistoryPanel({
                                   // La anulación invalida al penúltimo; el anterior vuelve a valer
                                   const effIdx = chain.length - 3;
                                   return (
-                                    <p key={chain[0].id} className="text-[10px] text-slate-400" title={head.createdBy || ''}>
+                                    <p key={chain[0].id} className="text-[10px] text-slate-400" title={chainTitle(chain)}>
                                       {chain.slice(0, -1).map((m, i) => (
                                         <span key={m.id}>
                                           {i > 0 && ' → '}
@@ -848,7 +860,7 @@ function HistoryPanel({
                                   );
                                 }
                                 return (
-                                  <p key={chain[0].id} className="text-[10px] text-slate-400" title={head.createdBy || ''}>
+                                  <p key={chain[0].id} className="text-[10px] text-slate-400" title={chainTitle(chain)}>
                                     {chain.map((m, i) => (
                                       <span key={m.id}>
                                         {i > 0 && ' → '}
@@ -862,7 +874,7 @@ function HistoryPanel({
                                 );
                               })}
                               {orphans.map(l => (
-                                <p key={`r-${l.id}`} className="text-[10px] text-slate-400" title={l.createdBy || ''}>
+                                <p key={`r-${l.id}`} className="text-[10px] text-slate-400" title={`${l.createdBy || '?'} · ${fmtWhen(l.createdAt)}`}>
                                   {l.type === 'void' ? 'Anulación' : 'Corrección'}: {l.correctionReason}
                                 </p>
                               ))}

@@ -40,7 +40,8 @@ function serializeLog(l) {
     createdBy: l.created_by,
     lat: l.lat ?? null,
     lng: l.lng ?? null,
-    accuracy: l.accuracy ?? null
+    accuracy: l.accuracy ?? null,
+    createdAt: l.created_at
   };
 }
 
