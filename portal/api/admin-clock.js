@@ -7,6 +7,7 @@ import {
   madridTimeStr,
   madridDayRangeUtc,
   madridMonthRangeUtc,
+  madridOffsetMinutes,
   effectiveLogs,
   lastState,
   jobWorkerStart,
@@ -14,6 +15,15 @@ import {
 } from './_shared.js';
 
 const PUNCH_TYPES = ['in', 'out', 'pause_start', 'pause_end'];
+
+// datetime-local llega sin zona horaria: interpretarlo como hora de Madrid.
+// (En el servidor new Date() lo trataría como UTC -> desfase de 1h/2h)
+const madridLocalToUtcIso = (ts) => {
+  const s = String(ts);
+  if (/[zZ]|[+-]\d{2}:?\d{2}$/.test(s)) return new Date(s).toISOString();
+  const guess = new Date(`${s.length === 16 ? s + ':00' : s}Z`);
+  return new Date(guess.getTime() - madridOffsetMinutes(guess) * 60000).toISOString();
+};
 
 function serializeLog(l) {
   return {
@@ -215,7 +225,7 @@ export default async function handler(req, res) {
       const { error } = await supabase.from('clock_logs').insert({
         worker_id: workerId,
         type,
-        ts: new Date(ts).toISOString(),
+        ts: madridLocalToUtcIso(ts),
         source: 'admin',
         correction_reason: reason.trim(),
         created_by: adminEmail
@@ -237,7 +247,7 @@ export default async function handler(req, res) {
       const { error } = await supabase.from('clock_logs').insert({
         worker_id: orig.worker_id,
         type: orig.type,
-        ts: new Date(ts).toISOString(),
+        ts: madridLocalToUtcIso(ts),
         source: 'admin',
         corrects_id: orig.id,
         correction_reason: reason.trim(),
