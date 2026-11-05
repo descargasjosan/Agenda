@@ -952,10 +952,12 @@ function BottomNav({
 }
 
 export default function App() {
-  const [isAdmin, setIsAdmin] = useState(() => window.location.hash === '#admin');
+  const [isAdmin, setIsAdmin] = useState(
+    () => window.location.pathname.startsWith('/admin') || window.location.hash === '#admin'
+  );
 
   useEffect(() => {
-    const onHash = () => setIsAdmin(window.location.hash === '#admin');
+    const onHash = () => setIsAdmin(window.location.pathname.startsWith('/admin') || window.location.hash === '#admin');
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
