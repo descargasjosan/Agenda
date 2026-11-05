@@ -461,7 +461,7 @@ function OverviewPanel({ workers, loading, onRefresh, onOpenHistory, graceMin, n
         {loading && workers.length === 0 ? (
           <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-blue-600" /></div>
         ) : (
-          <div className="overflow-x-auto">
+          <div>
             <table className="w-full text-left border-collapse">
               <thead className="bg-slate-100 border-b border-slate-200 sticky top-16 z-20">
                 <tr>
