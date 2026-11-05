@@ -4940,6 +4940,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                      <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest w-60">Nombre</th>
                      <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest w-80">Apellidos</th>
                      <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest w-24">DNI</th>
+                     <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest w-28">ID</th>
                      <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest w-24">Teléfono</th>
                      <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest text-center">Vehículo</th>
                      <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Estado</th>
@@ -4986,6 +4987,15 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                            </p>
                         </td>
                         <td className="px-6 py-3 text-xs font-bold text-slate-500 uppercase">{worker.dni}</td>
+                        <td className="px-6 py-3">
+                          <button
+                            onClick={() => { navigator.clipboard?.writeText(worker.id); showNotification(`ID copiado: ${worker.id}`, 'success'); }}
+                            title="Clic para copiar el ID"
+                            className="text-[10px] font-mono font-bold text-slate-400 hover:text-slate-700 hover:bg-slate-100 px-1.5 py-0.5 rounded transition-colors"
+                          >
+                            {worker.id}
+                          </button>
+                        </td>
                         <td className="px-6 py-3 text-xs font-bold text-slate-500">{worker.phone}</td>
                         <td className="px-6 py-3 text-center">
                            {worker.hasVehicle ? <Car className="w-4 h-4 text-green-500 mx-auto" /> : <span className="text-slate-300">-</span>}
