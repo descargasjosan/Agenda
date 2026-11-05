@@ -1401,7 +1401,19 @@ export default function AdminApp() {
       {/* Sidebar oscuro como la app principal */}
       <aside className="w-20 bg-slate-900 flex flex-col items-center py-8 gap-8 shrink-0 z-50 shadow-2xl">
         <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 shadow-sm">
-          <img src="/icons/icon-192.png" alt="Descargas Josan" className="w-8 h-8" />
+          <div
+            className="w-8 h-8 bg-slate-900"
+            style={{
+              WebkitMaskImage: 'url(/icons/icon-192.png)',
+              maskImage: 'url(/icons/icon-192.png)',
+              WebkitMaskSize: 'contain',
+              maskSize: 'contain',
+              WebkitMaskRepeat: 'no-repeat',
+              maskRepeat: 'no-repeat',
+              WebkitMaskPosition: 'center',
+              maskPosition: 'center'
+            }}
+          />
         </div>
         <nav className="flex flex-col gap-4">
           {navItems.map(item => {
