@@ -703,11 +703,11 @@ function HistoryPanel({
             <table className="w-full text-left border-collapse">
               <thead className="bg-slate-100 border-b border-slate-200">
                 <tr>
-                  <th className="px-4 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Fecha</th>
-                  <th className="px-4 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Entrada</th>
-                  <th className="px-4 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Pausa</th>
-                  <th className="px-4 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Salida</th>
-                  <th className="px-4 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest text-right">Total</th>
+                  <th className="px-4 py-4 w-[1%] whitespace-nowrap text-[10px] font-black uppercase text-slate-500 tracking-widest">Fecha</th>
+                  <th className="px-4 py-4 w-[1%] whitespace-nowrap text-[10px] font-black uppercase text-slate-500 tracking-widest">Entrada</th>
+                  <th className="px-4 py-4 w-[1%] whitespace-nowrap text-[10px] font-black uppercase text-slate-500 tracking-widest">Pausa</th>
+                  <th className="px-4 py-4 w-[1%] whitespace-nowrap text-[10px] font-black uppercase text-slate-500 tracking-widest">Salida</th>
+                  <th className="px-4 py-4 w-[1%] whitespace-nowrap text-[10px] font-black uppercase text-slate-500 tracking-widest text-right">Total</th>
                   <th className="px-4 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Observaciones</th>
                   <th className="px-4 py-4 w-12"></th>
                 </tr>
@@ -782,12 +782,12 @@ function HistoryPanel({
                           {d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
                         </p>
                       </td>
-                      <td className="px-4 py-3 text-sm align-top">
+                      <td className="px-4 py-3 text-sm align-top whitespace-nowrap">
                         {entries.length === 0 ? <span className="text-slate-300">—</span> : (
                           <div className="space-y-1">{entries.map(l => <Punch key={l.id} l={l} />)}</div>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-sm align-top">
+                      <td className="px-4 py-3 text-sm align-top whitespace-nowrap">
                         {pauses.length === 0 ? <span className="text-slate-300">—</span> : (
                           <div className="space-y-1">
                             {pauses.map((p, i) => (
@@ -800,12 +800,12 @@ function HistoryPanel({
                           </div>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-sm align-top">
+                      <td className="px-4 py-3 text-sm align-top whitespace-nowrap">
                         {exits.length === 0 ? <span className="text-slate-300">—</span> : (
                           <div className="space-y-1">{exits.map(l => <Punch key={l.id} l={l} />)}</div>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-sm text-right align-top">
+                      <td className="px-4 py-3 text-sm text-right align-top whitespace-nowrap">
                         {mins > 0 ? (
                           <span className="font-medium tabular-nums text-slate-800">{formatMinutes(mins)}</span>
                         ) : <span className="text-slate-300">—</span>}
