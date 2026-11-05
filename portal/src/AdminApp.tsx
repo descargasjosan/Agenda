@@ -811,22 +811,39 @@ function HistoryPanel({
                         ) : <span className="text-slate-300">—</span>}
                       </td>
                       <td className="px-4 py-3 align-top">
-                        <div className="space-y-1">
-                          {supersededLogs.map(l => (
-                            <p key={l.id} className="text-[10px] text-slate-400">
-                              <span className="line-through">{l.label} {l.time}</span>
-                              <span className="ml-1">{l.voided ? 'anulado' : 'sustituido'}</span>
-                            </p>
-                          ))}
-                          {corrections.map(l => (
-                            <p key={`r-${l.id}`} className="text-[10px] text-slate-400" title={l.createdBy || ''}>
-                              {l.type === 'void' ? 'Anulación' : 'Corrección'}: {l.correctionReason}
-                            </p>
-                          ))}
-                          {supersededLogs.length === 0 && corrections.length === 0 && (
-                            <span className="text-slate-200">—</span>
-                          )}
-                        </div>
+                        {(() => {
+                          const correctionByTarget: Record<string, AdminLog> = {};
+                          for (const l of dayLogs) if (l.correctsId) correctionByTarget[l.correctsId] = l;
+                          const orphanCorrections = corrections.filter(c => !c.correctsId);
+                          return (
+                            <div className="space-y-1">
+                              {supersededLogs.map(l => {
+                                const c = correctionByTarget[l.id];
+                                return (
+                                  <p key={l.id} className="text-[10px] text-slate-400" title={c?.createdBy || ''}>
+                                    <span className="line-through">{l.label} {l.time}</span>
+                                    <span className="ml-1">{l.voided ? 'anulado' : 'sustituido'}</span>
+                                    {c && (
+                                      <span className="ml-1 text-slate-500">
+                                        {c.type === 'void'
+                                          ? `— Anulación: ${c.correctionReason}`
+                                          : `→ ${c.time} · Corrección: ${c.correctionReason}`}
+                                      </span>
+                                    )}
+                                  </p>
+                                );
+                              })}
+                              {orphanCorrections.map(l => (
+                                <p key={`r-${l.id}`} className="text-[10px] text-slate-400" title={l.createdBy || ''}>
+                                  {l.type === 'void' ? 'Anulación' : 'Corrección'}: {l.correctionReason}
+                                </p>
+                              ))}
+                              {supersededLogs.length === 0 && orphanCorrections.length === 0 && (
+                                <span className="text-slate-200">—</span>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td className="px-4 py-3 align-top">
                         <button
