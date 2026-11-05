@@ -421,8 +421,8 @@ function OverviewPanel({ workers, loading, onRefresh, onOpenHistory, graceMin, n
 
   return (
     <div className="p-6">
-      {/* Filtros */}
-      <div className="mb-4 flex flex-wrap items-center gap-4">
+      {/* Filtros (anclados arriba al hacer scroll) */}
+      <div className="sticky top-0 z-30 -mx-6 -mt-6 px-6 pt-6 mb-4 pb-4 bg-slate-50 flex flex-wrap items-center gap-4">
         <input
           type="text"
           value={filter}
@@ -463,7 +463,7 @@ function OverviewPanel({ workers, loading, onRefresh, onOpenHistory, graceMin, n
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
-              <thead className="bg-slate-100 border-b border-slate-200 sticky top-0 z-20">
+              <thead className="bg-slate-100 border-b border-slate-200 sticky top-[76px] z-20">
                 <tr>
                   <th className="px-4 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest w-16">Cód.</th>
                   <th className="px-4 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Operario</th>
