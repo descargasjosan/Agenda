@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 import { useState, useCallback, useEffect } from 'react';
-import { Calendar, ChevronLeft, ChevronRight, LogOut, LogIn, Clock, Wallet, PiggyBank, AlertCircle, CheckCircle2, Loader2, Fuel, Sun, Timer, Send } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, LogOut, LogIn, Clock, Wallet, PiggyBank, AlertCircle, CheckCircle2, Loader2, Fuel, Sun, Timer, Send, Info } from 'lucide-react';
 import type { WorkerSummary, FuelSummary, FuelRecord, VacationSummary, WorkerInfo, VacationRequest } from './lib/types';
 import ClockView from './ClockView';
 import AdminApp from './AdminApp';
@@ -250,6 +250,7 @@ function SummaryView({
   loading: boolean;
   error: string | null;
 }) {
+  const [showInfo, setShowInfo] = useState(false);
   return (
     <div className="min-h-screen bg-slate-50 pb-24">
       <header className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-4 shadow-sm">
@@ -301,7 +302,50 @@ function SummaryView({
             lastDay={summary.days.length}
             advance={summary.advance}
           />
+          <button
+            onClick={() => setShowInfo(true)}
+            title="Cómo funciona este apartado"
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-blue-600 hover:bg-blue-200 transition-colors"
+          >
+            <Info size={17} />
+          </button>
         </div>
+
+        {showInfo && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={() => setShowInfo(false)}>
+            <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+              <h3 className="mb-4 text-base font-bold text-slate-900">¿Cómo funcionan tus horas?</h3>
+              <div className="space-y-3 text-sm text-slate-700 leading-relaxed">
+                <p>
+                  Esta aplicación suma las horas de más y de menos que se hacen cada día y que vosotros o vuestros jefes de equipo nos comunican.
+                  A final de mes, esta suma puede ser positiva o negativa.
+                </p>
+                <ul className="space-y-1.5 pl-4">
+                  <li>• Si es <b>positiva</b> (por ejemplo, son 5h extra), se pagan en la nómina y el total se resetea a 0.</li>
+                  <li>• Si es <b>negativa</b> (por ejemplo, hay un déficit de 3h), no se descuenta de la nómina. Se queda acumulada para el mes siguiente.</li>
+                </ul>
+                <p className="font-semibold pt-1">¿Qué representan las casillas de colores?</p>
+                <ul className="space-y-1.5 pl-4">
+                  <li>🔵 <b>Azul</b> — Suma de las horas del mes actual.</li>
+                  <li>🟡 <b>Amarillo</b> — Suma del total de meses anteriores que no se haya liquidado.</li>
+                  <li>🟢 <b>Verde</b> — Total: este mes + los meses anteriores.</li>
+                </ul>
+                <p>
+                  A final de mes, si el valor en verde es positivo, se paga en la nómina. Si es negativo, se acumula y será el valor de la casilla amarilla con la que se empieza el mes siguiente.
+                </p>
+                <p className="rounded-xl bg-slate-100 p-3 text-xs text-slate-600">
+                  <b>NOTA:</b> Las horas pueden tardar hasta 48h en estar actualizadas. Si pasadas 48h detectáis algún error, avisadnos para que lo revisemos.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowInfo(false)}
+                className="mt-5 w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-bold text-white hover:bg-slate-800"
+              >
+                Entendido
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="mb-4 grid grid-cols-2 gap-3">
           <SummaryCard label="Horas mes" value={`${summary.totals.totalHours}h`} color="blue" />
