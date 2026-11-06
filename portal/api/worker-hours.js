@@ -326,7 +326,8 @@ export default async function handler(req, res) {
         lastName: worker.lastName,
         dni: worker.dni,
         phone: worker.phone,
-        contractType: worker.contractType
+        contractType: worker.contractType,
+        hasVehicle: worker.hasVehicle
       },
       month: selectedMonth,
       monthName: `${MONTH_NAMES[m - 1]} ${year}`,
