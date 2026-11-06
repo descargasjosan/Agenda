@@ -902,12 +902,14 @@ function BottomNav({
   activeTab,
   onChange,
   showClock,
-  hideVacations
+  hideVacations,
+  hideFuel
 }: {
   activeTab: PortalTab;
   onChange: (tab: PortalTab) => void;
   showClock: boolean;
   hideVacations?: boolean;
+  hideFuel?: boolean;
 }) {
   const allTabs = [
     { id: 'clock', label: 'Fichar', icon: Timer, color: 'rose' },
@@ -917,7 +919,8 @@ function BottomNav({
   ] as const;
 
   const tabs = (showClock ? allTabs : allTabs.filter(t => t.id !== 'clock'))
-    .filter(t => !(hideVacations && t.id === 'vacations'));
+    .filter(t => !(hideVacations && t.id === 'vacations'))
+    .filter(t => !(hideFuel && t.id === 'fuel'));
 
   const colorMap: Record<typeof tabs[number]['color'], { active: string; inactive: string; activeIcon: string; inactiveIcon: string }> = {
     rose: { active: 'bg-rose-600 text-white shadow-md shadow-rose-200', inactive: 'text-rose-600 hover:bg-rose-50', activeIcon: 'text-white', inactiveIcon: 'text-rose-500' },
@@ -1059,8 +1062,11 @@ export default function App() {
   const canClock = CLOCK_ALL_WORKERS;
   // Los fijos discontinuos no tienen derecho a vacaciones: se oculta la pestaña
   const hideVacations = summary.worker.contractType === 'Fijo Discontinuo';
+  // Sin coche asignado -> sin apartado de combustible
+  const hideFuel = !summary.worker.hasVehicle;
   const requestedTab = canClock ? activeTab : 'hours';
-  const tab = hideVacations && requestedTab === 'vacations' ? 'hours' : requestedTab;
+  const tab = (hideVacations && requestedTab === 'vacations') || (hideFuel && requestedTab === 'fuel')
+    ? 'hours' : requestedTab;
 
   return (
     <div className="relative min-h-screen bg-slate-50">
@@ -1083,7 +1089,7 @@ export default function App() {
       {tab === 'vacations' && (
         <VacationsView dni={dni} pin={pin} worker={summary.worker} onLogout={handleLogout} />
       )}
-      <BottomNav activeTab={tab} onChange={setActiveTab} showClock={canClock} hideVacations={hideVacations} />
+      <BottomNav activeTab={tab} onChange={setActiveTab} showClock={canClock} hideVacations={hideVacations} hideFuel={hideFuel} />
     </div>
   );
 }
