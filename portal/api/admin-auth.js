@@ -30,6 +30,7 @@ export default async function handler(req, res) {
     return res.status(200).json({
       success: true,
       token: data.session.access_token,
+      refreshToken: data.session.refresh_token,
       email: data.user.email
     });
   } catch (error) {

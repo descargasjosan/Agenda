@@ -8,6 +8,7 @@ import { createClient } from '@supabase/supabase-js';
 const AUTH_API_URL = import.meta.env.VITE_API_ADMIN_AUTH_URL || '/api/admin-auth';
 const ADMIN_API_URL = import.meta.env.VITE_API_ADMIN_CLOCK_URL || '/api/admin-clock';
 const TOKEN_KEY = 'dj-portal-admin-token';
+const REFRESH_KEY = 'dj-portal-admin-refresh';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
@@ -161,7 +162,7 @@ function formatMinutes(min: number) {
 
 // ---------- Login ----------
 
-function AdminLogin({ onLogin }: { onLogin: (token: string, email: string) => void }) {
+function AdminLogin({ onLogin }: { onLogin: (token: string, email: string, refreshToken?: string) => void }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -180,7 +181,8 @@ function AdminLogin({ onLogin }: { onLogin: (token: string, email: string) => vo
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Error de acceso');
       localStorage.setItem(TOKEN_KEY, data.token);
-      onLogin(data.token, data.email);
+      if (data.refreshToken) localStorage.setItem(REFRESH_KEY, data.refreshToken);
+      onLogin(data.token, data.email, data.refreshToken);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
@@ -1227,6 +1229,7 @@ function ExportPanel({ apiCall, month, onMonthChange }: {
 
 export default function AdminApp() {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_KEY));
+  const [refreshToken, setRefreshToken] = useState<string | null>(() => localStorage.getItem(REFRESH_KEY));
   const [adminEmail, setAdminEmail] = useState('');
   const [view, setView] = useState<AdminView>('overview');
   const [workers, setWorkers] = useState<OverviewWorker[]>([]);
@@ -1291,6 +1294,30 @@ export default function AdminApp() {
 
   useEffect(() => { loadOverview(); }, [loadOverview]);
   useEffect(() => { loadHistory(); }, [loadHistory]);
+
+  // ── Sesion persistente: renovar el access_token con el refresh_token ──
+  useEffect(() => {
+    if (!token || !refreshToken || !SUPABASE_URL || !SUPABASE_ANON_KEY) return;
+    const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    let dead = false;
+    sb.auth.setSession({ access_token: token, refresh_token: refreshToken }).then(({ error }) => {
+      if (error && !dead) {
+        localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(REFRESH_KEY);
+        setToken(null);
+      }
+    });
+    const { data: { subscription } } = sb.auth.onAuthStateChange((_e, session) => {
+      if (session) {
+        localStorage.setItem(TOKEN_KEY, session.access_token);
+        localStorage.setItem(REFRESH_KEY, session.refresh_token);
+        setToken(session.access_token);
+        setRefreshToken(session.refresh_token);
+      }
+    });
+    return () => { dead = true; subscription.unsubscribe(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Realtime de bajo coste: aplica fichajes y tareas en local, sin refetch ──
   useEffect(() => {
@@ -1375,11 +1402,17 @@ export default function AdminApp() {
 
   const handleLogout = () => {
     localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(REFRESH_KEY);
     setToken(null);
   };
 
   if (!token) {
-    return <AdminLogin onLogin={(t, email) => { setToken(t); setAdminEmail(email); }} />;
+    return <AdminLogin onLogin={(t, email, rt) => {
+      setToken(t);
+      setAdminEmail(email);
+      localStorage.setItem(TOKEN_KEY, t);
+      if (rt) { localStorage.setItem(REFRESH_KEY, rt); setRefreshToken(rt); }
+    }} />;
   }
 
   const navItems: { id: AdminView; label: string; icon: typeof Activity }[] = [
