@@ -5838,10 +5838,22 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                            <option value="2026-10">Octubre 2026</option>
                            <option value="2026-11">Noviembre 2026</option>
                            <option value="2026-12">Diciembre 2026</option>
+                           <option value="2027-01">Enero 2027</option>
+                           <option value="2027-02">Febrero 2027</option>
+                           <option value="2027-03">Marzo 2027</option>
+                           <option value="2027-04">Abril 2027</option>
+                           <option value="2027-05">Mayo 2027</option>
+                           <option value="2027-06">Junio 2027</option>
+                           <option value="2027-07">Julio 2027</option>
+                           <option value="2027-08">Agosto 2027</option>
+                           <option value="2027-09">Septiembre 2027</option>
+                           <option value="2027-10">Octubre 2027</option>
+                           <option value="2027-11">Noviembre 2027</option>
+                           <option value="2027-12">Diciembre 2027</option>
                         </select>
                         <button
                            onClick={() => shiftMonth(1)}
-                           disabled={selectedMonth >= '2026-12'}
+                           disabled={selectedMonth >= '2027-12'}
                            title="Mes siguiente"
                            className="p-1 -mr-1 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-30 disabled:hover:bg-transparent"
                         >

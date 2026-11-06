@@ -130,6 +130,8 @@ export default async function handler(req, res) {
     const vacationDaysSet = new Set();
 
     for (const record of vacationRecords) {
+      if (record.endDate < yearStart || record.startDate > yearEnd) continue;
+
       const rangeStart = clampDate(record.startDate, yearStart, yearEnd);
       const rangeEnd = clampDate(record.endDate, yearStart, yearEnd);
 
