@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import {
   Activity, CalendarDays, FileDown, LogOut, RefreshCw, Plus, Pencil, Ban,
-  AlertCircle, AlertTriangle, Loader2, Lock, Mail, ArrowRight, Clock, ShieldCheck, Settings, MapPin, Bell
+  AlertCircle, AlertTriangle, Loader2, Lock, Mail, ArrowRight, Clock, ShieldCheck, Settings, MapPin, Bell, ChevronRight
 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
@@ -396,6 +396,7 @@ function OverviewPanel({ workers, loading, onRefresh, onOpenHistory, graceMin, n
 }) {
   const [filter, setFilter] = useState('');
   const [stateFilter, setStateFilter] = useState<OverviewFilter>('all');
+  const [idleOpen, setIdleOpen] = useState(false);
   const isToday = date === madridDateStrLocal();
 
   const counts = {
@@ -427,6 +428,13 @@ function OverviewPanel({ workers, loading, onRefresh, onOpenHistory, graceMin, n
     { id: 'none', label: 'Sin fichar', count: counts.none },
     { id: 'notask', label: 'No trabaja', count: counts.notask }
   ];
+
+  // Los que no trabajan van colapsados en un grupo al final (salvo al filtrar por ellos)
+  const idleRows = filtered.filter(w => w.state === 'none' && !w.taskStart);
+  const activeRows = filtered.filter(w => !(w.state === 'none' && !w.taskStart));
+  const display: (OverviewWorker | 'idle-header')[] = stateFilter === 'notask'
+    ? idleRows
+    : [...activeRows, ...(idleRows.length ? (['idle-header'] as const) : []), ...(idleOpen ? idleRows : [])];
 
   return (
     <div className="p-6">
@@ -502,7 +510,24 @@ function OverviewPanel({ workers, loading, onRefresh, onOpenHistory, graceMin, n
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filtered.map(w => {
+                {display.map(item => {
+                  if (item === 'idle-header') {
+                    return (
+                      <tr
+                        key="idle-header"
+                        onClick={(e) => { e.stopPropagation(); setIdleOpen(o => !o); }}
+                        className="bg-slate-50 cursor-pointer hover:bg-slate-100 transition-colors"
+                      >
+                        <td colSpan={9} className="px-4 py-2.5">
+                          <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                            <ChevronRight className={`w-3.5 h-3.5 transition-transform ${idleOpen ? 'rotate-90' : ''}`} />
+                            No trabaja · {idleRows.length}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  }
+                  const w = item;
                   const eff = w.logs.filter(l => !l.superseded && !l.voided && l.type !== 'void');
                   const entries = eff.filter(l => l.type === 'in');
                   const exits = eff.filter(l => l.type === 'out');
@@ -653,7 +678,7 @@ function OverviewPanel({ workers, loading, onRefresh, onOpenHistory, graceMin, n
                     </tr>
                   );
                 })}
-                {filtered.length === 0 && (
+                {display.length === 0 && (
                   <tr>
                     <td colSpan={8} className="px-6 py-16 text-center text-xs font-black uppercase tracking-widest text-slate-400">
                       Sin operarios con ese filtro
