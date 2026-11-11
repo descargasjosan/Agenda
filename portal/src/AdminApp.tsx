@@ -90,7 +90,10 @@ const computeTaskStart = (jobsData: { id: string; data: any }[], wid: string, to
 const sortOverview = (ws: OverviewWorker[]) => [...ws].sort((a, b) => {
   const hasTask = (w: OverviewWorker) => (w.taskStart ? 0 : 1);
   const order: Record<string, number> = { in: 0, paused: 1, out: 2, none: 3 };
-  return (hasTask(a) - hasTask(b)) || (order[a.state] - order[b.state]) || String(a.name).localeCompare(String(b.name));
+  return (hasTask(a) - hasTask(b))
+    || (order[a.state] - order[b.state])
+    || String(a.taskStart || '99:99').localeCompare(String(b.taskStart || '99:99'))
+    || String(a.name).localeCompare(String(b.name));
 });
 
 interface AdminLog {

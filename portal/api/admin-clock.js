@@ -176,10 +176,14 @@ export default async function handler(req, res) {
           };
         })
         .sort((a, b) => {
-          // Primero los que tienen tarea asignada hoy; dentro, por estado y nombre
+          // Primero los que tienen tarea asignada hoy; dentro, por estado,
+          // hora de inicio de la tarea y nombre
           const hasTask = (w) => (w.taskStart ? 0 : 1);
           const order = { in: 0, paused: 1, out: 2, none: 3 };
-          return (hasTask(a) - hasTask(b)) || (order[a.state] - order[b.state]) || String(a.name).localeCompare(String(b.name));
+          return (hasTask(a) - hasTask(b))
+            || (order[a.state] - order[b.state])
+            || String(a.taskStart || '99:99').localeCompare(String(b.taskStart || '99:99'))
+            || String(a.name).localeCompare(String(b.name));
         });
 
       return res.status(200).json({
