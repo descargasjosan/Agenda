@@ -375,7 +375,7 @@ function ActionModal({
 
 // ---------- Vistas ----------
 
-type OverviewFilter = 'all' | OverviewWorker['state'];
+type OverviewFilter = 'all' | OverviewWorker['state'] | 'notask';
 
 const STATE_DOT: Record<OverviewWorker['state'], string> = {
   in: 'bg-green-500',
@@ -402,11 +402,14 @@ function OverviewPanel({ workers, loading, onRefresh, onOpenHistory, graceMin, n
     in: workers.filter(w => w.state === 'in').length,
     paused: workers.filter(w => w.state === 'paused').length,
     out: workers.filter(w => w.state === 'out').length,
-    none: workers.filter(w => w.state === 'none').length
+    none: workers.filter(w => w.state === 'none' && w.taskStart).length,
+    notask: workers.filter(w => w.state === 'none' && !w.taskStart).length
   };
 
   const filtered = workers.filter(w => {
-    if (stateFilter !== 'all' && w.state !== stateFilter) return false;
+    if (stateFilter === 'none' && !(w.state === 'none' && w.taskStart)) return false;
+    else if (stateFilter === 'notask' && !(w.state === 'none' && !w.taskStart)) return false;
+    else if (stateFilter !== 'all' && stateFilter !== 'none' && stateFilter !== 'notask' && w.state !== stateFilter) return false;
     if (!filter) return true;
     const q = filter.toLowerCase();
     return (
@@ -421,7 +424,8 @@ function OverviewPanel({ workers, loading, onRefresh, onOpenHistory, graceMin, n
     { id: 'in', label: 'Trabajando', count: counts.in },
     { id: 'paused', label: 'En pausa', count: counts.paused },
     { id: 'out', label: 'Cerrados', count: counts.out },
-    { id: 'none', label: 'Sin fichar', count: counts.none }
+    { id: 'none', label: 'Sin fichar', count: counts.none },
+    { id: 'notask', label: 'No trabaja', count: counts.notask }
   ];
 
   return (
@@ -616,7 +620,7 @@ function OverviewPanel({ workers, loading, onRefresh, onOpenHistory, graceMin, n
                         <span className="inline-flex items-center gap-1.5">
                           <span className={`h-2 w-2 rounded-full ${STATE_DOT[w.state]}`} />
                           <span className="text-[10px] font-black uppercase tracking-widest text-slate-600">
-                            {STATE_BADGE[w.state].label}
+                            {w.state === 'none' && !w.taskStart ? 'No trabaja' : STATE_BADGE[w.state].label}
                           </span>
                           {lastWithGps && (
                             <span title="Último fichaje con GPS">
