@@ -95,15 +95,17 @@ export default async function handler(req, res) {
     // ---------- Quién está dentro ahora ----------
     if (action === 'overview') {
       const today = madridDateStr();
-      const [start, end] = madridDayRangeUtc(today);
-      const nowStr = madridTimeStr(new Date());
+      const date = typeof body.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.date) ? body.date : today;
+      const [start, end] = madridDayRangeUtc(date);
+      // En dias pasados la jornada ya termino (23:59); en futuros aun no empieza (00:00)
+      const nowStr = date === today ? madridTimeStr(new Date()) : (date < today ? '23:59' : '00:00');
       const settings = await getClockSettings(supabase);
       const graceMin = Math.max(0, Number(settings.notifyDelayMin ?? 15));
 
       const [workersRes, logsRes, jobsRes] = await Promise.all([
         supabase.from('workers').select('id, data'),
         supabase.from('clock_logs').select('*').gte('ts', start).lt('ts', end).order('ts', { ascending: true }),
-        supabase.from('jobs').select('id, data').eq('data->>date', today)
+        supabase.from('jobs').select('id, data').eq('data->>date', date)
       ]);
 
       if (workersRes.error) throw workersRes.error;
@@ -181,7 +183,7 @@ export default async function handler(req, res) {
         });
 
       return res.status(200).json({
-        success: true, date: today, workers, graceMin,
+        success: true, date, workers, graceMin,
         jobs: (jobsRes.data || []).map(r => ({ id: r.id, data: r.data }))
       });
     }

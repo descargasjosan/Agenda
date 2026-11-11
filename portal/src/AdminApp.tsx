@@ -384,16 +384,19 @@ const STATE_DOT: Record<OverviewWorker['state'], string> = {
   none: 'bg-slate-300'
 };
 
-function OverviewPanel({ workers, loading, onRefresh, onOpenHistory, graceMin, nowMin }: {
+function OverviewPanel({ workers, loading, onRefresh, onOpenHistory, graceMin, nowMin, date, onDateChange }: {
   workers: OverviewWorker[];
   loading: boolean;
   onRefresh: () => void;
   onOpenHistory: (workerId: string) => void;
   graceMin: number;
   nowMin: number;
+  date: string;
+  onDateChange: (date: string) => void;
 }) {
   const [filter, setFilter] = useState('');
   const [stateFilter, setStateFilter] = useState<OverviewFilter>('all');
+  const isToday = date === madridDateStrLocal();
 
   const counts = {
     in: workers.filter(w => w.state === 'in').length,
@@ -425,6 +428,22 @@ function OverviewPanel({ workers, loading, onRefresh, onOpenHistory, graceMin, n
     <div className="p-6">
       {/* Filtros (anclados arriba al hacer scroll) */}
       <div className="sticky top-0 z-30 -mx-6 -mt-6 px-6 h-16 mb-4 bg-slate-50 flex items-center gap-4 overflow-x-auto">
+        <div className="flex items-center gap-2">
+          <input
+            type="date"
+            value={date}
+            onChange={e => e.target.value && onDateChange(e.target.value)}
+            className="p-2.5 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+          />
+          {!isToday && (
+            <button
+              onClick={() => onDateChange(madridDateStrLocal())}
+              className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors"
+            >
+              Hoy
+            </button>
+          )}
+        </div>
         <input
           type="text"
           value={filter}
@@ -1245,6 +1264,7 @@ export default function AdminApp() {
   const [jobsData, setJobsData] = useState<{ id: string; data: any }[]>([]);
   const [graceMin, setGraceMin] = useState(15);
   const [todayStr, setTodayStr] = useState(madridDateStrLocal());
+  const [overviewDate, setOverviewDate] = useState(madridDateStrLocal());
   const [, setTick] = useState(0);
 
   const apiCall = useCallback(async (payload: Record<string, unknown>) => {
@@ -1268,7 +1288,7 @@ export default function AdminApp() {
     setOverviewLoading(true);
     setError(null);
     try {
-      const data = await apiCall({ action: 'overview' });
+      const data = await apiCall({ action: 'overview', date: overviewDate });
       setWorkers(data.workers || []);
       setJobsData(data.jobs || []);
       setGraceMin(Number(data.graceMin ?? 15));
@@ -1277,7 +1297,7 @@ export default function AdminApp() {
     } finally {
       setOverviewLoading(false);
     }
-  }, [token, apiCall]);
+  }, [token, apiCall, overviewDate]);
 
   const loadHistory = useCallback(async () => {
     if (!token || !historyWorker) return;
@@ -1330,6 +1350,7 @@ export default function AdminApp() {
         const row = p.new as any;
         if (!row?.worker_id) return;
         const log = serializeLogLocal(row);
+        if (log.date !== overviewDate) return;
         setWorkers(prev => sortOverview(prev.map(w => {
           if (w.id !== row.worker_id) return w;
           const logs = applyLogFlags(
@@ -1343,10 +1364,11 @@ export default function AdminApp() {
           const next = p.eventType === 'DELETE'
             ? prev.filter(j => j.id !== (p.old as any)?.id)
             : [...prev.filter(j => j.id !== (p.new as any)?.id), { id: (p.new as any).id, data: (p.new as any).data }];
-          const today = madridDateStrLocal();
-          const nowMin = madridNowMinutes();
+          const nowMin = overviewDate === madridDateStrLocal()
+            ? madridNowMinutes()
+            : (overviewDate < madridDateStrLocal() ? 1439 : 0);
           setWorkers(ws => sortOverview(ws.map(w => {
-            const taskStart = computeTaskStart(next, w.id, today);
+            const taskStart = computeTaskStart(next, w.id, overviewDate);
             return { ...w, taskStart, taskDue: Boolean(taskStart && minutesOf(taskStart) <= nowMin) };
           })));
           return next;
@@ -1355,22 +1377,27 @@ export default function AdminApp() {
       .subscribe();
 
     return () => { sb.removeChannel(channel); };
-  }, [token]);
+  }, [token, overviewDate]);
 
   // Timer de 1 min: repinta contadores ("hace Xm") y detecta el cambio de día
   useEffect(() => {
     const iv = setInterval(() => {
       const d = madridDateStrLocal();
-      if (d !== todayStr) { setTodayStr(d); loadOverview(); return; }
+      if (d !== todayStr) {
+        setTodayStr(d);
+        if (overviewDate === todayStr) setOverviewDate(d);
+        return;
+      }
       setTick(t => t + 1);
     }, 60000);
     return () => clearInterval(iv);
-  }, [todayStr, loadOverview]);
+  }, [todayStr, overviewDate]);
 
-  // Sonda ligera cada 2 min: refetch solo si el conteo de fichajes difiere
+  // Sonda ligera cada 2 min: refetch solo si el conteo de fichajes difiere (solo en el día actual)
   useEffect(() => {
     if (!token) return;
     const iv = setInterval(async () => {
+      if (overviewDate !== madridDateStrLocal()) return;
       try {
         const { count } = await apiCall({ action: 'count' });
         const total = workers.reduce((n, w) => n + w.logs.length, 0);
@@ -1378,7 +1405,7 @@ export default function AdminApp() {
       } catch { /* la sonda falla en silencio */ }
     }, 120000);
     return () => clearInterval(iv);
-  }, [token, apiCall, loadOverview, workers]);
+  }, [token, apiCall, loadOverview, workers, overviewDate]);
 
   const handleModalSubmit = async ({ type, ts, reason }: { type?: string; ts?: string; reason: string }) => {
     if (!modal) return;
@@ -1495,7 +1522,9 @@ export default function AdminApp() {
               onRefresh={loadOverview}
               onOpenHistory={(id) => { setHistoryWorker(id); setView('history'); }}
               graceMin={graceMin}
-              nowMin={madridNowMinutes()}
+              nowMin={overviewDate === todayStr ? madridNowMinutes() : (overviewDate < todayStr ? 1439 : 0)}
+              date={overviewDate}
+              onDateChange={setOverviewDate}
             />
           )}
           {view === 'history' && (
