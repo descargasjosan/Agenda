@@ -551,7 +551,7 @@ function OverviewPanel({ workers, loading, onRefresh, onOpenHistory, graceMin, n
                   const lastWithGps = [...eff].reverse().find(l => l.lat != null && l.lng != null);
 
                   const Time = ({ t, log }: { t: string; log?: AdminLog }) => (
-                    <span className="inline-flex items-center gap-1 font-medium tabular-nums text-slate-800">
+                    <span className={`inline-flex items-center gap-1 font-medium tabular-nums ${log && (log.source === 'admin' || log.correctsId) ? 'text-blue-600' : 'text-slate-800'}`}>
                       {t}
                       {log && log.lat != null && log.lng != null && (
                         <a
