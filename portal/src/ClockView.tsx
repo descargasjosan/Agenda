@@ -25,6 +25,7 @@ function urlB64ToUint8Array(base64: string) {
 }
 
 type PushState = 'unsupported' | 'loading' | 'subscribed' | 'unsubscribed' | 'denied';
+type GeoState = 'checking' | 'granted' | 'prompt' | 'denied' | 'unsupported';
 
 interface ClockLog {
   id: string;
@@ -67,6 +68,8 @@ export default function ClockView({
   const [now, setNow] = useState(new Date());
   const [pushState, setPushState] = useState<PushState>('loading');
   const [pushBusy, setPushBusy] = useState(false);
+  const [showPushPrompt, setShowPushPrompt] = useState(false);
+  const [geoState, setGeoState] = useState<GeoState>('checking');
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
@@ -120,9 +123,39 @@ export default function ClockView({
     }
     navigator.serviceWorker.ready
       .then(reg => reg.pushManager.getSubscription())
-      .then(sub => setPushState(sub ? 'subscribed' : 'unsubscribed'))
+      .then(sub => {
+        setPushState(sub ? 'subscribed' : 'unsubscribed');
+        if (sub) return;
+        if (Notification.permission === 'granted') {
+          // Permiso concedido pero sin suscripcion (p.ej. borrada): re-suscribir en silencio
+          enablePush();
+        } else if (Notification.permission === 'default') {
+          setShowPushPrompt(true);
+        }
+      })
       .catch(() => setPushState('unsubscribed'));
   }, []);
+
+  // Estado del permiso de ubicacion (para avisar antes de que falle el fichaje)
+  useEffect(() => {
+    if (!('geolocation' in navigator)) { setGeoState('unsupported'); return; }
+    const permissions = (navigator as any).permissions;
+    if (!permissions?.query) { setGeoState('prompt'); return; }
+    permissions.query({ name: 'geolocation' })
+      .then((p: any) => {
+        setGeoState(p.state as GeoState);
+        p.onchange = () => setGeoState(p.state as GeoState);
+      })
+      .catch(() => setGeoState('prompt'));
+  }, []);
+
+  const askGeo = () => {
+    navigator.geolocation.getCurrentPosition(
+      () => setGeoState('granted'),
+      (e) => setGeoState(e.code === e.PERMISSION_DENIED ? 'denied' : 'prompt'),
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
 
   const enablePush = useCallback(async () => {
     setPushBusy(true);
@@ -207,6 +240,61 @@ export default function ClockView({
             <div className="flex items-start gap-2">
               <AlertCircle size={18} className="mt-0.5 shrink-0" />
               <span>{error}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Aviso: activar notificaciones (solo si aun no decidio el permiso) */}
+        {showPushPrompt && (
+          <div className="mb-4 rounded-2xl bg-blue-600 p-4 text-white shadow-lg">
+            <div className="flex items-start gap-3">
+              <Bell size={22} className="mt-0.5 shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm font-bold">Recordatorios de fichaje</p>
+                <p className="mt-1 text-xs text-blue-100">
+                  Te avisaremos si pasan 10 minutos de tu hora de entrada sin fichar. Pulsa <span className="font-bold">Activar</span> y después <span className="font-bold">Permitir</span> en la ventana del navegador.
+                </p>
+                <div className="mt-3 flex gap-2">
+                  <button
+                    onClick={() => { setShowPushPrompt(false); enablePush(); }}
+                    disabled={pushBusy}
+                    className="rounded-lg bg-white px-4 py-2 text-xs font-bold text-blue-700 disabled:opacity-60"
+                  >
+                    {pushBusy ? 'Activando…' : 'Activar avisos'}
+                  </button>
+                  <button
+                    onClick={() => setShowPushPrompt(false)}
+                    className="rounded-lg bg-blue-500 px-4 py-2 text-xs font-bold text-white hover:bg-blue-400"
+                  >
+                    Ahora no
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Aviso: activar ubicacion (obligatoria para fichar) */}
+        {(geoState === 'prompt' || geoState === 'denied' || geoState === 'unsupported') && gpsMode !== 'off' && (
+          <div className="mb-4 rounded-2xl bg-amber-500 p-4 text-white shadow-lg">
+            <div className="flex items-start gap-3">
+              <MapPin size={22} className="mt-0.5 shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm font-bold">Ubicación necesaria</p>
+                <p className="mt-1 text-xs text-amber-50">
+                  {geoState === 'denied'
+                    ? 'La ubicación está bloqueada en este navegador. Para fichar debes activarla: en el navegador pulsa el icono del candado junto a la dirección → Permisos → Ubicación, y comprueba que el GPS del móvil está encendido.'
+                    : 'Para fichar necesitamos registrar tu ubicación. Pulsa Activar y después Permitir en la ventana del navegador.'}
+                </p>
+                {geoState === 'prompt' && (
+                  <button
+                    onClick={askGeo}
+                    className="mt-3 rounded-lg bg-white px-4 py-2 text-xs font-bold text-amber-700 hover:bg-amber-50"
+                  >
+                    Activar ubicación
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         )}
