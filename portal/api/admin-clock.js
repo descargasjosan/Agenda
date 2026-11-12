@@ -161,6 +161,7 @@ export default async function handler(req, res) {
             name: r.data.name,
             dni: r.data.dni,
             code: r.data.code,
+            contractType: r.data.contractType || null,
             state,
             count: effectiveLogs(logs).length,
             taskStart,

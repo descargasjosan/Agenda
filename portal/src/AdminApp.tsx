@@ -120,6 +120,7 @@ interface OverviewWorker {
   name: string;
   dni: string;
   code?: string;
+  contractType?: string | null;
   state: 'none' | 'in' | 'paused' | 'out';
   count: number;
   taskStart?: string | null;
@@ -594,7 +595,7 @@ function OverviewPanel({ workers, loading, onRefresh, onOpenHistory, graceMin, n
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        <p className="font-semibold text-slate-800 text-sm">{w.name}</p>
+                        <p className={`font-semibold text-sm ${w.contractType === 'Fijo Discontinuo' ? 'text-rose-600' : 'text-slate-800'}`}>{w.name}</p>
                         <p className="text-[10px] text-slate-400 uppercase tracking-tight">{w.dni}</p>
                       </td>
                       <td className="px-4 py-3 text-sm">
