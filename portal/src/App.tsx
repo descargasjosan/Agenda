@@ -653,8 +653,16 @@ function VacationsView({
     ? Math.floor((Date.parse(reqEnd) - Date.parse(reqStart)) / 86400000) + 1
     : 0;
 
+  // Mínimo una semana de antelación (fecha de Madrid)
+  const minReqStart = new Date(Date.now() + 7 * 86400000)
+    .toLocaleDateString('en-CA', { timeZone: 'Europe/Madrid' });
+
   const submitRequest = async () => {
     if (!reqStart || !reqEnd || reqDays <= 0 || reqBusy) return;
+    if (reqStart < minReqStart) {
+      setReqMsg({ ok: false, text: 'No se pueden solicitar vacaciones con menos de una semana de antelación. Comunícalo directamente al Whatsapp de la oficina' });
+      return;
+    }
     setReqBusy(true);
     setReqMsg(null);
     try {
@@ -856,6 +864,7 @@ function VacationsView({
                   <input
                     type="date"
                     value={reqStart}
+                    min={minReqStart}
                     onChange={e => setReqStart(e.target.value)}
                     className="w-full rounded-lg border border-slate-300 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />

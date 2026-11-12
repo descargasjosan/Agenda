@@ -1,9 +1,14 @@
 import webpush from 'web-push';
 import { parseJsonBody } from './_body.js';
-import { getSupabaseClient, authenticateWorker } from './_shared.js';
+import { getSupabaseClient, authenticateWorker, madridDateStr } from './_shared.js';
 
 const VALID_STATUS = new Set(['pending', 'approved', 'rejected', 'cancelled']);
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function addDaysIso(dateStr, days) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+}
 
 function initWebPush() {
   const pub = process.env.VAPID_PUBLIC_KEY;
@@ -122,6 +127,13 @@ export default async function handler(req, res) {
       }
       if (endDate < startDate) {
         return res.status(400).json({ error: 'Rango no válido', message: 'La fecha de fin no puede ser anterior a la de inicio' });
+      }
+      // Mínimo una semana de antelación
+      if (startDate < addDaysIso(madridDateStr(), 7)) {
+        return res.status(400).json({
+          error: 'Antelación insuficiente',
+          message: 'No se pueden solicitar vacaciones con menos de una semana de antelación. Comunícalo directamente al Whatsapp de la oficina'
+        });
       }
       const days = daysBetween(startDate, endDate);
       if (days > 62) {
