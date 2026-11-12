@@ -156,6 +156,7 @@ export interface Worker {
   apodo?: string; // Apodo o nombre alternativo para mostrar en badges
   dni: string;
   phone: string;
+  email?: string;
   role: string;
   status: WorkerStatus;
   statusStartDate?: string;

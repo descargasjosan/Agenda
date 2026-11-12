@@ -7223,19 +7223,23 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
               </div>
             </div>
 
-            {/* Segunda fila: Código - DNI - Teléfono */}
+            {/* Segunda fila: Código - DNI - Teléfono - Email */}
             <div className="grid grid-cols-12 gap-4 mb-6">
-              <div className="col-span-3 space-y-1">
+              <div className="col-span-2 space-y-1">
                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Código</label>
                  <input className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none" value={editingWorker.code} onChange={e => setEditingWorker({...editingWorker, code: e.target.value})} />
               </div>
-              <div className="col-span-4 space-y-1">
+              <div className="col-span-3 space-y-1">
                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">DNI / NIE</label>
                  <input className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none" value={editingWorker.dni} onChange={e => setEditingWorker({...editingWorker, dni: e.target.value})} />
               </div>
-              <div className="col-span-5 space-y-1">
+              <div className="col-span-3 space-y-1">
                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Teléfono</label>
                  <input className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none" value={editingWorker.phone} onChange={e => setEditingWorker({...editingWorker, phone: e.target.value})} />
+              </div>
+              <div className="col-span-4 space-y-1">
+                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Email</label>
+                 <input type="email" className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none" value={editingWorker.email || ''} onChange={e => setEditingWorker({...editingWorker, email: e.target.value || undefined})} placeholder="correo@ejemplo.com" />
               </div>
             </div>
 
