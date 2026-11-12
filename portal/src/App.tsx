@@ -880,6 +880,9 @@ function VacationsView({
                   />
                 </div>
               </div>
+              <p className="text-[11px] text-slate-500">
+                Las solicitudes deben hacerse con al menos una semana de antelación. Para fechas más cercanas, comunícalo al Whatsapp de la oficina.
+              </p>
               <input
                 type="text"
                 value={reqNote}
