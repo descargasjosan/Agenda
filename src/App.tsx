@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { 
-  CalendarIcon, Users, Building2, Car, HeartPulse, Settings, Download, Upload, Cloud, CloudOff, AlertCircle, CheckCircle2, X, ChevronLeft, ChevronRight, CalendarDays, Search, Plus, Trash2, Edit2, Copy, FileText, Loader2, LayoutGrid, Table, ListTodo, Bell, MessageSquare, Send, Filter, ArrowRight, Clock, User, Mail, Phone, MapPin, Briefcase, Star, TrendingUp, Activity, DownloadCloud, Database, RotateCcw, BarChart3, MessageCircle, Calendar, CheckCircle, XCircle, GraduationCap, FileSpreadsheet, ChevronDown, Sparkles, ClipboardList, Hash, Save, StickyNote, Fuel, AlertTriangle, RefreshCw, Camera 
+  CalendarIcon, Users, Building2, Car, HeartPulse, Settings, Download, Upload, Cloud, CloudOff, AlertCircle, CheckCircle2, X, ChevronLeft, ChevronRight, CalendarDays, Search, Plus, Trash2, Edit2, Copy, FileText, Loader2, LayoutGrid, Table, ListTodo, Bell, MessageSquare, Send, Filter, ArrowRight, Clock, User, Mail, Phone, MapPin, Briefcase, Star, TrendingUp, Activity, DownloadCloud, Database, RotateCcw, BarChart3, MessageCircle, Calendar, CheckCircle, XCircle, GraduationCap, FileSpreadsheet, ChevronDown, Sparkles, ClipboardList, Hash, Save, StickyNote, Fuel, AlertTriangle, RefreshCw, Camera, Lock, LockOpen 
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { useSupabaseData } from './hooks/useSupabaseData';
@@ -1201,6 +1201,7 @@ const saveVacationConfig = async () => {
   const [workerListModal, setWorkerListModal] = useState<{clientId: string, centerId: string, date: string} | null>(null);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [editingWorker, setEditingWorker] = useState<Worker | null>(null);
+  const [unlockedPinFor, setUnlockedPinFor] = useState<string | null>(null);
   const [editingStatusRecord, setEditingStatusRecord] = useState<{id?: string, status: WorkerStatus, startDate: string, endDate: string} | null>(null);
   const [showAddRecordForm, setShowAddRecordForm] = useState(false);
   const [duplicatingJob, setDuplicatingJob] = useState<Job | null>(null);
@@ -7277,27 +7278,45 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
               </div>
             </div>
 
-            {/* Cuarta fila: Salario Bruto - Salario Neto */}
+            {/* Cuarta fila: Cuenta bancaria - Código PIN Horas */}
             <div className="grid grid-cols-12 gap-4 mb-6">
-              <div className="col-span-6 space-y-1">
-                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Salario Bruto (€)</label>
-                 <input 
-                   className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none" 
-                   value={editingWorker.salary || ''} 
-                   onChange={e => setEditingWorker({...editingWorker, salary: e.target.value ? parseFloat(e.target.value) : undefined})} 
-                   placeholder="1500"
-                   type="number"
+              <div className="col-span-7 space-y-1">
+                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Cuenta Bancaria</label>
+                 <input
+                   className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none"
+                   value={editingWorker.bankAccount || ''}
+                   onChange={e => setEditingWorker({...editingWorker, bankAccount: e.target.value || undefined})}
+                   placeholder="ES00 0000 0000 0000 0000 0000"
                  />
               </div>
-              <div className="col-span-6 space-y-1">
-                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Salario Neto (€)</label>
-                 <input 
-                   className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none" 
-                   value={editingWorker.netSalary || ''} 
-                   onChange={e => setEditingWorker({...editingWorker, netSalary: e.target.value ? parseFloat(e.target.value) : undefined})} 
-                   placeholder="1200"
-                   type="number"
-                 />
+              <div className="col-span-5 space-y-1">
+                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Código PIN Horas</label>
+                 <div className="relative">
+                   <input
+                     className={`w-full border-none rounded-xl pl-4 pr-12 py-3 font-bold tracking-[0.3em] outline-none transition-colors ${
+                       unlockedPinFor === editingWorker.id
+                         ? 'bg-amber-50 text-slate-700 focus:ring-2 focus:ring-amber-500'
+                         : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                     }`}
+                     value={editingWorker.portalPin || ''}
+                     disabled={unlockedPinFor !== editingWorker.id}
+                     onChange={e => setEditingWorker({...editingWorker, portalPin: e.target.value.replace(/\D/g, '').slice(0, 6) || undefined})}
+                     placeholder="••••••"
+                     inputMode="numeric"
+                   />
+                   <button
+                     type="button"
+                     onClick={() => setUnlockedPinFor(unlockedPinFor === editingWorker.id ? null : editingWorker.id)}
+                     title={unlockedPinFor === editingWorker.id ? 'Bloquear edición del PIN' : 'Desbloquear para editar el PIN'}
+                     className={`absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-lg transition-colors ${
+                       unlockedPinFor === editingWorker.id
+                         ? 'bg-amber-100 text-amber-600 hover:bg-amber-200'
+                         : 'text-slate-400 hover:bg-slate-200 hover:text-slate-600'
+                     }`}
+                   >
+                     {unlockedPinFor === editingWorker.id ? <LockOpen className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
+                   </button>
+                 </div>
               </div>
             </div>
 

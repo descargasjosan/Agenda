@@ -157,6 +157,8 @@ export interface Worker {
   dni: string;
   phone: string;
   email?: string;
+  bankAccount?: string; // IBAN / cuenta bancaria
+  portalPin?: string;   // PIN de acceso al portal del operario
   role: string;
   status: WorkerStatus;
   statusStartDate?: string;
