@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import {
   Activity, CalendarDays, FileDown, LogOut, RefreshCw, Plus, Pencil, Ban,
-  AlertCircle, AlertTriangle, Loader2, Lock, Mail, ArrowRight, Clock, ShieldCheck, Settings, MapPin, Bell, ChevronRight
+  AlertCircle, AlertTriangle, Loader2, Lock, Mail, ArrowRight, Clock, ShieldCheck, Settings, MapPin, Bell, ChevronRight, X
 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
@@ -1288,34 +1288,6 @@ function SettingsPanel({ apiCall, token }: { apiCall: (payload: Record<string, u
               Vista previa de hoy
             </button>
 
-            {preview && (
-              <div className="rounded-2xl border-2 border-slate-200 bg-slate-50 p-4">
-                <p className="text-xs font-black text-slate-500 uppercase tracking-wide mb-3">
-                  {preview.alerts.length === 0
-                    ? `Sin incidencias el ${preview.date}`
-                    : `${preview.alerts.length} operario(s) recibirían aviso (${preview.date})`}
-                  {!preview.resendConfigured && ' — Resend no configurado: no se enviaría nada'}
-                </p>
-                <div className="space-y-2">
-                  {preview.alerts.map(a => (
-                    <div key={a.name} className="bg-white rounded-xl p-3 ring-1 ring-slate-200">
-                      <p className="text-sm font-black text-slate-900">
-                        {a.name}
-                        {!a.email && <span className="ml-2 text-[11px] font-black text-rose-500">SIN EMAIL</span>}
-                      </p>
-                      <ul className="mt-1 space-y-0.5">
-                        {a.violations.map((v, i) => (
-                          <li key={i} className="text-xs font-bold text-slate-500">• {v}</li>
-                        ))}
-                      </ul>
-                      {a.adminFixes.length > 0 && (
-                        <p className="mt-1 text-[11px] font-bold text-blue-600">Corregido por administración: {a.adminFixes.join(', ')}</p>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         )}
       </div>
@@ -1334,6 +1306,47 @@ function SettingsPanel({ apiCall, token }: { apiCall: (payload: Record<string, u
           <p className="mt-3 text-xs font-black uppercase tracking-widest text-green-600">✓ Guardado</p>
         )}
       </div>
+
+      {/* Panel lateral: vista previa de los avisos de hoy */}
+      {preview && (
+        <div className="fixed inset-y-0 right-0 z-50 w-full max-w-md bg-white shadow-2xl border-l border-slate-200 flex flex-col">
+          <div className="flex items-center justify-between gap-3 px-6 py-5 border-b border-slate-100">
+            <div>
+              <p className="text-sm font-black text-slate-900 uppercase tracking-tight">Vista previa · {preview.date}</p>
+              <p className="text-xs font-bold text-slate-400 mt-0.5">
+                {preview.alerts.length === 0
+                  ? 'Sin incidencias: no se enviaría ningún correo'
+                  : `${preview.alerts.length} operario(s) recibirían aviso`}
+                {!preview.resendConfigured && ' · Resend no configurado'}
+              </p>
+            </div>
+            <button
+              onClick={() => setPreview(null)}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-500 transition-colors hover:bg-slate-200"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-6 space-y-3">
+            {preview.alerts.map(a => (
+              <div key={a.name} className="bg-white rounded-2xl p-4 ring-1 ring-slate-200">
+                <p className="text-sm font-black text-slate-900">
+                  {a.name}
+                  {!a.email && <span className="ml-2 text-[11px] font-black text-rose-500">SIN EMAIL</span>}
+                </p>
+                <ul className="mt-1.5 space-y-1">
+                  {a.violations.map((v, i) => (
+                    <li key={i} className="text-xs font-bold text-slate-500">• {v}</li>
+                  ))}
+                </ul>
+                {a.adminFixes.length > 0 && (
+                  <p className="mt-2 text-[11px] font-bold text-blue-600">Corregido por administración: {a.adminFixes.join(', ')}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
