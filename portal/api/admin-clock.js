@@ -11,6 +11,11 @@ import {
   effectiveLogs,
   lastState,
   jobWorkerStart,
+  isOfficeJob,
+  OFFICE_WORKER_IDS,
+  getOfficeClientIds,
+  getEmailSettings,
+  saveEmailSettings,
   CLOCK_LABELS
 } from './_shared.js';
 
@@ -92,6 +97,37 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: true });
     }
 
+    // ---------- Ajustes de avisos por email ----------
+    if (action === 'email-settings') {
+      return res.status(200).json({ success: true, settings: await getEmailSettings(supabase) });
+    }
+
+    if (action === 'save-email-settings') {
+      const { settings } = body;
+      const hour = Number(settings?.sendHour);
+      const late = Number(settings?.lateMin);
+      const c = settings?.conditions || {};
+      const email = String(settings?.officeDigestEmail || '').trim();
+      if (
+        !settings || typeof settings.enabled !== 'boolean' ||
+        !Number.isFinite(hour) || hour < 0 || hour > 23 ||
+        !Number.isFinite(late) || late < 0 || late > 240 ||
+        typeof c.noEntry !== 'boolean' || typeof c.noExit !== 'boolean' ||
+        typeof c.openPause !== 'boolean' || typeof c.late !== 'boolean' ||
+        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+      ) {
+        return res.status(400).json({ error: 'Ajustes no válidos' });
+      }
+      await saveEmailSettings(supabase, {
+        enabled: settings.enabled,
+        sendHour: Math.round(hour),
+        lateMin: Math.round(late),
+        officeDigestEmail: email,
+        conditions: { noEntry: c.noEntry, noExit: c.noExit, openPause: c.openPause, late: c.late }
+      });
+      return res.status(200).json({ success: true });
+    }
+
     // ---------- Quién está dentro ahora ----------
     if (action === 'overview') {
       const today = madridDateStr();
@@ -102,26 +138,30 @@ export default async function handler(req, res) {
       const settings = await getClockSettings(supabase);
       const graceMin = Math.max(0, Number(settings.notifyDelayMin ?? 15));
 
-      const [workersRes, logsRes, jobsRes] = await Promise.all([
+      const [workersRes, logsRes, jobsRes, officeClientIds] = await Promise.all([
         supabase.from('workers').select('id, data'),
         supabase.from('clock_logs').select('*').gte('ts', start).lt('ts', end).order('ts', { ascending: true }),
-        supabase.from('jobs').select('id, data').eq('data->>date', date)
+        supabase.from('jobs').select('id, data').eq('data->>date', date),
+        getOfficeClientIds(supabase)
       ]);
 
       if (workersRes.error) throw workersRes.error;
       if (logsRes.error) throw logsRes.error;
       if (jobsRes.error) throw jobsRes.error;
 
-      // Primera hora de inicio del dia por operario (tareas no canceladas)
+      // Primera hora de inicio del dia por operario (tareas no canceladas;
+      // las citas de oficina no cuentan como inicio salvo personal de oficina)
       const taskStarts = {};
       for (const row of jobsRes.data || []) {
         const d = row.data || {};
         if (d.isCancelled) continue;
+        const office = isOfficeJob(d, officeClientIds);
         const ids = new Set([
           ...(d.assignedWorkerIds || []),
           ...(d.reinforcementGroups || []).flatMap(g => g.workerIds || [])
         ]);
         for (const wid of ids) {
+          if (office && !OFFICE_WORKER_IDS.includes(wid)) continue;
           const t = jobWorkerStart(d, wid);
           if (t && (!taskStarts[wid] || t < taskStarts[wid])) taskStarts[wid] = t;
         }

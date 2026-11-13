@@ -7,6 +7,7 @@ import { createClient } from '@supabase/supabase-js';
 
 const AUTH_API_URL = import.meta.env.VITE_API_ADMIN_AUTH_URL || '/api/admin-auth';
 const ADMIN_API_URL = import.meta.env.VITE_API_ADMIN_CLOCK_URL || '/api/admin-clock';
+const EMAIL_API_URL = import.meta.env.VITE_API_EMAIL_ALERTS_URL || '/api/email-alerts';
 const TOKEN_KEY = 'dj-portal-admin-token';
 const REFRESH_KEY = 'dj-portal-admin-refresh';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
@@ -973,13 +974,23 @@ function HistoryPanel({
   );
 }
 
-function SettingsPanel({ apiCall }: { apiCall: (payload: Record<string, unknown>) => Promise<any> }) {
+type EmailConds = { noEntry: boolean; noExit: boolean; openPause: boolean; late: boolean };
+
+function SettingsPanel({ apiCall, token }: { apiCall: (payload: Record<string, unknown>) => Promise<any>; token: string | null }) {
   const [gpsMode, setGpsMode] = useState<GpsMode>('optional');
   const [requireTask, setRequireTask] = useState(true);
   const [notifyDelayMin, setNotifyDelayMin] = useState(15);
+  const [emailEnabled, setEmailEnabled] = useState(false);
+  const [emailHour, setEmailHour] = useState(21);
+  const [emailLateMin, setEmailLateMin] = useState(10);
+  const [emailDigest, setEmailDigest] = useState('david.solano@descargasjosan.com');
+  const [emailConds, setEmailConds] = useState<EmailConds>({ noEntry: true, noExit: true, openPause: true, late: true });
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [preview, setPreview] = useState<{ date: string; resendConfigured: boolean; alerts: { name: string; email: string | null; violations: string[]; adminFixes: string[] }[] } | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     apiCall({ action: 'settings' })
@@ -990,6 +1001,17 @@ function SettingsPanel({ apiCall }: { apiCall: (payload: Record<string, unknown>
       })
       .catch(() => {})
       .finally(() => setLoading(false));
+    apiCall({ action: 'email-settings' })
+      .then(d => {
+        const s = d.settings;
+        if (!s) return;
+        if (typeof s.enabled === 'boolean') setEmailEnabled(s.enabled);
+        if (Number.isFinite(s.sendHour)) setEmailHour(s.sendHour);
+        if (Number.isFinite(s.lateMin)) setEmailLateMin(s.lateMin);
+        if (s.officeDigestEmail) setEmailDigest(s.officeDigestEmail);
+        if (s.conditions) setEmailConds({ noEntry: !!s.conditions.noEntry, noExit: !!s.conditions.noExit, openPause: !!s.conditions.openPause, late: !!s.conditions.late });
+      })
+      .catch(() => {});
   }, [apiCall]);
 
   const save = async () => {
@@ -997,10 +1019,33 @@ function SettingsPanel({ apiCall }: { apiCall: (payload: Record<string, unknown>
     setSaved(false);
     try {
       await apiCall({ action: 'save-settings', settings: { gpsMode, requireTask, notifyDelayMin } });
+      await apiCall({
+        action: 'save-email-settings',
+        settings: { enabled: emailEnabled, sendHour: emailHour, lateMin: emailLateMin, officeDigestEmail: emailDigest, conditions: emailConds }
+      });
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const runPreview = async () => {
+    setPreviewLoading(true);
+    setPreview(null);
+    try {
+      const res = await fetch(EMAIL_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: 'preview' })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || data.error || 'Error');
+      setPreview(data);
+    } catch (e: any) {
+      setError(e.message || 'Error');
+    } finally {
+      setPreviewLoading(false);
     }
   };
 
@@ -1111,6 +1156,133 @@ function SettingsPanel({ apiCall }: { apiCall: (payload: Record<string, unknown>
               className="w-20 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-center text-sm font-bold tabular-nums text-slate-900 outline-none focus:border-blue-500"
             />
             <span className="text-sm font-bold text-slate-400">min</span>
+          </div>
+        )}
+      </div>
+
+      {/* Avisos por email de fichajes incorrectos */}
+      <div className="max-w-xl bg-white rounded-3xl ring-1 ring-slate-200 p-8 shadow-sm mt-6">
+        <div className="flex items-center gap-3 mb-2">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
+            <Mail className="w-5 h-5" />
+          </div>
+          <h3 className="text-base font-black text-slate-900 uppercase tracking-tight">Avisos por email</h3>
+        </div>
+        <p className="text-xs font-bold text-slate-400 mb-6">
+          Cada noche se revisan los fichajes del día y se envía un correo de advertencia a los operarios que hayan incumplido. Las correcciones hechas desde administración se informan en el correo pero no anulan el aviso.
+        </p>
+
+        {loading ? null : (
+          <div className="space-y-4">
+            <button
+              onClick={() => setEmailEnabled(!emailEnabled)}
+              className="flex w-full items-center justify-between rounded-2xl border-2 border-slate-200 bg-white p-4 transition-all hover:border-slate-300"
+            >
+              <div className="text-left">
+                <p className="text-sm font-black text-slate-900 uppercase tracking-wide">Sistema de avisos</p>
+                <p className="text-xs font-bold text-slate-400 mt-0.5">
+                  {emailEnabled ? 'Activado: se enviarán correos a la hora programada.' : 'Desactivado: se calcula pero no se envía nada.'}
+                </p>
+              </div>
+              <div className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${emailEnabled ? 'bg-blue-600' : 'bg-slate-200'}`}>
+                <div className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-all ${emailEnabled ? 'left-[22px]' : 'left-0.5'}`} />
+              </div>
+            </button>
+
+            <div className="flex items-center gap-3 rounded-2xl border-2 border-slate-200 bg-white p-4">
+              <p className="flex-1 text-sm font-black text-slate-900 uppercase tracking-wide">Enviar cada día a las</p>
+              <input
+                type="number"
+                min={0}
+                max={23}
+                value={emailHour}
+                onChange={e => setEmailHour(Math.max(0, Math.min(23, Number(e.target.value) || 0)))}
+                className="w-20 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-center text-sm font-bold tabular-nums text-slate-900 outline-none focus:border-blue-500"
+              />
+              <span className="text-sm font-bold text-slate-400">h</span>
+            </div>
+
+            <div className="flex items-center gap-3 rounded-2xl border-2 border-slate-200 bg-white p-4">
+              <p className="flex-1 text-sm font-black text-slate-900 uppercase tracking-wide">Retraso a partir de</p>
+              <input
+                type="number"
+                min={0}
+                max={240}
+                value={emailLateMin}
+                onChange={e => setEmailLateMin(Math.max(0, Math.min(240, Number(e.target.value) || 0)))}
+                className="w-20 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-center text-sm font-bold tabular-nums text-slate-900 outline-none focus:border-blue-500"
+              />
+              <span className="text-sm font-bold text-slate-400">min</span>
+            </div>
+
+            <div className="rounded-2xl border-2 border-slate-200 bg-white p-4 space-y-3">
+              <p className="text-sm font-black text-slate-900 uppercase tracking-wide">Motivos de aviso</p>
+              {([
+                ['noEntry', 'Tenía tarea y no fichó entrada'],
+                ['noExit', 'Fichó entrada pero no fichó salida'],
+                ['openPause', 'Pausa abierta sin cerrar'],
+                ['late', 'Entrada con retraso']
+              ] as [keyof EmailConds, string][]).map(([k, label]) => (
+                <label key={k} className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={emailConds[k]}
+                    onChange={() => setEmailConds({ ...emailConds, [k]: !emailConds[k] })}
+                    className="h-5 w-5 rounded accent-blue-600"
+                  />
+                  <span className="text-sm font-bold text-slate-700">{label}</span>
+                </label>
+              ))}
+            </div>
+
+            <div className="rounded-2xl border-2 border-slate-200 bg-white p-4">
+              <p className="text-sm font-black text-slate-900 uppercase tracking-wide mb-2">Resumen diario a</p>
+              <input
+                type="email"
+                value={emailDigest}
+                onChange={e => setEmailDigest(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-bold text-slate-900 outline-none focus:border-blue-500"
+              />
+              <p className="text-[11px] font-bold text-slate-400 mt-1.5">Recibe un correo con todas las incidencias del día.</p>
+            </div>
+
+            <button
+              onClick={runPreview}
+              disabled={previewLoading}
+              className="w-full flex items-center justify-center gap-2 rounded-2xl border-2 border-blue-200 bg-blue-50 p-4 text-sm font-black text-blue-700 uppercase tracking-wide transition-all hover:border-blue-300 disabled:opacity-50"
+            >
+              {previewLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+              Vista previa de hoy
+            </button>
+
+            {preview && (
+              <div className="rounded-2xl border-2 border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-black text-slate-500 uppercase tracking-wide mb-3">
+                  {preview.alerts.length === 0
+                    ? `Sin incidencias el ${preview.date}`
+                    : `${preview.alerts.length} operario(s) recibirían aviso (${preview.date})`}
+                  {!preview.resendConfigured && ' — Resend no configurado: no se enviaría nada'}
+                </p>
+                <div className="space-y-2">
+                  {preview.alerts.map(a => (
+                    <div key={a.name} className="bg-white rounded-xl p-3 ring-1 ring-slate-200">
+                      <p className="text-sm font-black text-slate-900">
+                        {a.name}
+                        {!a.email && <span className="ml-2 text-[11px] font-black text-rose-500">SIN EMAIL</span>}
+                      </p>
+                      <ul className="mt-1 space-y-0.5">
+                        {a.violations.map((v, i) => (
+                          <li key={i} className="text-xs font-bold text-slate-500">• {v}</li>
+                        ))}
+                      </ul>
+                      {a.adminFixes.length > 0 && (
+                        <p className="mt-1 text-[11px] font-bold text-blue-600">Corregido por administración: {a.adminFixes.join(', ')}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1576,7 +1748,7 @@ export default function AdminApp() {
           {view === 'export' && (
             <ExportPanel apiCall={apiCall} month={exportMonth} onMonthChange={setExportMonth} />
           )}
-          {view === 'settings' && <SettingsPanel apiCall={apiCall} />}
+          {view === 'settings' && <SettingsPanel apiCall={apiCall} token={token} />}
         </main>
       </div>
 

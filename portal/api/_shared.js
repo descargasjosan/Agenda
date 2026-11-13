@@ -116,6 +116,36 @@ export function jobWorkerStart(jobData, workerId) {
   return (d.workerTimes && d.workerTimes[workerId]) || d.startTime || null;
 }
 
+// ---- Citas en oficina ----
+// A algunos operarios se les cita primero en la oficina (solo por transporte):
+// su jornada real empieza en la siguiente tarea. Los tres de la lista son
+// personal de oficina: para ellos la primera tarea SI es su inicio de jornada.
+
+export const OFFICE_WORKER_IDS = ['w-hphov06e8', 'w-dcjbr3ap2', 'w-10vyi3rbw'];
+
+export function isOfficeJob(jobData, officeClientIds) {
+  const d = jobData || {};
+  return d.type === 'Oficina' || d.customName === 'OFICINA' || (officeClientIds || []).includes(d.clientId);
+}
+
+// IDs de clientes cuyo nombre es "OFICINA" (una consulta pequena).
+export async function getOfficeClientIds(supabase) {
+  const { data } = await supabase.from('clients').select('id, data');
+  return (data || []).filter(r => /oficina/i.test(r.data?.name || '')).map(r => r.id);
+}
+
+// Hora de inicio real de la jornada del operario un dia dado: la primera tarea
+// descartando las citas de oficina (salvo personal de oficina). Devuelve 'HH:mm' o null.
+export function workerDayStart(jobsData, workerId, officeClientIds) {
+  const relevant = (jobsData || []).filter(
+    d => !d.isCancelled && (OFFICE_WORKER_IDS.includes(workerId) || !isOfficeJob(d, officeClientIds))
+  );
+  return relevant
+    .map(d => jobWorkerStart(d, workerId))
+    .filter(Boolean)
+    .sort()[0] || null;
+}
+
 // ---- Reglas del audit log ----
 // Un fichaje queda fuera del cómputo si existe otra fila con corrects_id = su id
 // (corrección o anulación). Las filas 'void' son solo marcadores: se excluyen.
@@ -164,5 +194,32 @@ export async function saveClockSettings(supabase, settings) {
   const { error } = await supabase
     .from('app_settings')
     .upsert({ key: 'clock', value: { ...CLOCK_SETTINGS_DEFAULTS, ...settings } });
+  if (error) throw error;
+}
+
+// ---- Avisos por email de fichajes incorrectos (app_settings key='emailAlerts') ----
+
+const EMAIL_SETTINGS_DEFAULTS = {
+  enabled: false,
+  sendHour: 21,
+  lateMin: 10,
+  officeDigestEmail: 'david.solano@descargasjosan.com',
+  conditions: { noEntry: true, noExit: true, openPause: true, late: true }
+};
+
+export async function getEmailSettings(supabase) {
+  const { data } = await supabase
+    .from('app_settings')
+    .select('value')
+    .eq('key', 'emailAlerts')
+    .maybeSingle();
+  const v = data?.value || {};
+  return { ...EMAIL_SETTINGS_DEFAULTS, ...v, conditions: { ...EMAIL_SETTINGS_DEFAULTS.conditions, ...(v.conditions || {}) } };
+}
+
+export async function saveEmailSettings(supabase, settings) {
+  const { error } = await supabase
+    .from('app_settings')
+    .upsert({ key: 'emailAlerts', value: settings });
   if (error) throw error;
 }

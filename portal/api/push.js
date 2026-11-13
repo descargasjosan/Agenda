@@ -8,7 +8,10 @@ import {
   madridDayRangeUtc,
   madridOffsetMinutes,
   effectiveLogs,
-  jobWorkerStart
+  jobWorkerStart,
+  isOfficeJob,
+  OFFICE_WORKER_IDS,
+  getOfficeClientIds
 } from './_shared.js';
 
 function initWebPush() {
@@ -24,21 +27,19 @@ function madridTimeToUtc(dateStr, timeStr) {
   return new Date(guess.getTime() - madridOffsetMinutes(guess) * 60000);
 }
 
-// Hora de inicio mas temprana del operario entre sus trabajos del dia
-const workerStartTime = (job, workerId) => jobWorkerStart(job.data, workerId);
-
 async function runPlan(supabase) {
   const today = madridDateStr();
   const settings = await getClockSettings(supabase);
   const graceMs = Math.max(0, Number(settings.notifyDelayMin ?? 15)) * 60000;
 
-  const { data: jobRows, error: jobsError } = await supabase
-    .from('jobs')
-    .select('data')
-    .eq('data->>date', today);
+  const [{ data: jobRows, error: jobsError }, officeClientIds] = await Promise.all([
+    supabase.from('jobs').select('data').eq('data->>date', today),
+    getOfficeClientIds(supabase)
+  ]);
   if (jobsError) throw jobsError;
 
-  // worker_id -> primera hora de inicio del dia
+  // worker_id -> hora de inicio real del dia (las citas de oficina no cuentan
+  // como inicio de jornada, salvo para el personal de oficina)
   const starts = new Map();
   for (const row of jobRows || []) {
     const d = row.data || {};
@@ -47,8 +48,10 @@ async function runPlan(supabase) {
       ...(d.assignedWorkerIds || []),
       ...(d.reinforcementGroups || []).flatMap(g => g.workerIds || [])
     ]);
+    const office = isOfficeJob(d, officeClientIds);
     for (const wid of ids) {
-      const t = workerStartTime(row, wid);
+      if (office && !OFFICE_WORKER_IDS.includes(wid)) continue;
+      const t = jobWorkerStart(d, wid);
       if (!t) continue;
       if (!starts.has(wid) || t < starts.get(wid)) starts.set(wid, t);
     }
