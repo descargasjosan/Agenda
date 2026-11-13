@@ -76,12 +76,19 @@ const jobWorkerStartLocal = (d: any, wid: string): string | null => {
   return (d.workerTimes && d.workerTimes[wid]) || d.startTime || null;
 };
 
-// Primera hora de inicio del operario entre las tareas (no canceladas) del día indicado
-const computeTaskStart = (jobsData: { id: string; data: any }[], wid: string, today: string) => {
+// Una tarea es "cita de oficina" si el cliente es la oficina o el tipo lo indica
+const isOfficeJobLocal = (d: any, officeClientIds: string[]) =>
+  d?.type === 'Oficina' || d?.customName === 'OFICINA' || officeClientIds.includes(d?.clientId);
+
+// Primera hora de inicio del operario entre las tareas (no canceladas) del día indicado.
+// Las citas de oficina no cuentan como inicio, salvo para el personal de oficina.
+const computeTaskStart = (jobsData: { id: string; data: any; isOffice?: boolean }[], wid: string, today: string, officeStaff?: boolean, officeClientIds: string[] = []) => {
   let best: string | null = null;
   for (const j of jobsData) {
     const d = j.data || {};
     if (d.date !== today || d.isCancelled) continue;
+    const office = j.isOffice ?? isOfficeJobLocal(d, officeClientIds);
+    if (office && !officeStaff) continue;
     const t = jobWorkerStartLocal(d, wid);
     if (t && (!best || t < best)) best = t;
   }
@@ -122,6 +129,7 @@ interface OverviewWorker {
   dni: string;
   code?: string;
   contractType?: string | null;
+  officeStaff?: boolean;
   state: 'none' | 'in' | 'paused' | 'out';
   count: number;
   taskStart?: string | null;
@@ -1466,7 +1474,8 @@ export default function AdminApp() {
   const [modal, setModal] = useState<ModalState | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [jobsData, setJobsData] = useState<{ id: string; data: any }[]>([]);
+  const [jobsData, setJobsData] = useState<{ id: string; data: any; isOffice?: boolean }[]>([]);
+  const [officeClientIds, setOfficeClientIds] = useState<string[]>([]);
   const [graceMin, setGraceMin] = useState(15);
   const [todayStr, setTodayStr] = useState(madridDateStrLocal());
   const [overviewDate, setOverviewDate] = useState(madridDateStrLocal());
@@ -1496,6 +1505,7 @@ export default function AdminApp() {
       const data = await apiCall({ action: 'overview', date: overviewDate });
       setWorkers(data.workers || []);
       setJobsData(data.jobs || []);
+      setOfficeClientIds(data.officeClientIds || []);
       setGraceMin(Number(data.graceMin ?? 15));
     } catch (err) {
       if (err instanceof Error && err.message !== 'Sesión caducada') setError(err.message);
@@ -1568,12 +1578,12 @@ export default function AdminApp() {
         setJobsData(prev => {
           const next = p.eventType === 'DELETE'
             ? prev.filter(j => j.id !== (p.old as any)?.id)
-            : [...prev.filter(j => j.id !== (p.new as any)?.id), { id: (p.new as any).id, data: (p.new as any).data }];
+            : [...prev.filter(j => j.id !== (p.new as any)?.id), { id: (p.new as any).id, data: (p.new as any).data, isOffice: isOfficeJobLocal((p.new as any).data, officeClientIds) }];
           const nowMin = overviewDate === madridDateStrLocal()
             ? madridNowMinutes()
             : (overviewDate < madridDateStrLocal() ? 1439 : 0);
           setWorkers(ws => sortOverview(ws.map(w => {
-            const taskStart = computeTaskStart(next, w.id, overviewDate);
+            const taskStart = computeTaskStart(next, w.id, overviewDate, w.officeStaff, officeClientIds);
             return { ...w, taskStart, taskDue: Boolean(taskStart && minutesOf(taskStart) <= nowMin) };
           })));
           return next;
@@ -1582,7 +1592,7 @@ export default function AdminApp() {
       .subscribe();
 
     return () => { sb.removeChannel(channel); };
-  }, [token, overviewDate]);
+  }, [token, overviewDate, officeClientIds]);
 
   // Timer de 1 min: repinta contadores ("hace Xm") y detecta el cambio de día
   useEffect(() => {

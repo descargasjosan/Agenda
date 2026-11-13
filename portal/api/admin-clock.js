@@ -202,6 +202,7 @@ export default async function handler(req, res) {
             dni: r.data.dni,
             code: r.data.code,
             contractType: r.data.contractType || null,
+            officeStaff: OFFICE_WORKER_IDS.includes(r.id),
             state,
             count: effectiveLogs(logs).length,
             taskStart,
@@ -228,8 +229,8 @@ export default async function handler(req, res) {
         });
 
       return res.status(200).json({
-        success: true, date, workers, graceMin,
-        jobs: (jobsRes.data || []).map(r => ({ id: r.id, data: r.data }))
+        success: true, date, workers, graceMin, officeClientIds,
+        jobs: (jobsRes.data || []).map(r => ({ id: r.id, data: r.data, isOffice: isOfficeJob(r.data, officeClientIds) }))
       });
     }
 
