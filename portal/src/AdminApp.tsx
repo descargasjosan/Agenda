@@ -999,6 +999,7 @@ function SettingsPanel({ apiCall, token }: { apiCall: (payload: Record<string, u
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<'clock' | 'push' | 'email'>('clock');
 
   useEffect(() => {
     apiCall({ action: 'settings' })
@@ -1065,6 +1066,28 @@ function SettingsPanel({ apiCall, token }: { apiCall: (payload: Record<string, u
 
   return (
     <div className="p-6">
+      {/* Pestañas de secciones */}
+      <div className="max-w-xl flex gap-2 mb-6">
+        {([
+          ['clock', 'Fichaje'],
+          ['push', 'Aviso push'],
+          ['email', 'Avisos por email']
+        ] as const).map(([id, label]) => (
+          <button
+            key={id}
+            onClick={() => setTab(id)}
+            className={`px-5 py-2.5 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all ${
+              tab === id
+                ? 'bg-slate-900 text-white shadow-lg shadow-slate-200'
+                : 'bg-white text-slate-500 ring-1 ring-slate-200 hover:text-slate-700 hover:ring-slate-300'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'clock' && (<>
       <div className="max-w-xl bg-white rounded-3xl ring-1 ring-slate-200 p-8 shadow-sm">
         <div className="flex items-center gap-3 mb-2">
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
@@ -1139,9 +1162,10 @@ function SettingsPanel({ apiCall, token }: { apiCall: (payload: Record<string, u
           </button>
         )}
       </div>
+      </>)}
 
-      {/* Aviso push si no ficha */}
-      <div className="max-w-xl bg-white rounded-3xl ring-1 ring-slate-200 p-8 shadow-sm mt-6">
+      {tab === 'push' && (
+      <div className="max-w-xl bg-white rounded-3xl ring-1 ring-slate-200 p-8 shadow-sm">
         <div className="flex items-center gap-3 mb-2">
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
             <Bell className="w-5 h-5" />
@@ -1167,9 +1191,10 @@ function SettingsPanel({ apiCall, token }: { apiCall: (payload: Record<string, u
           </div>
         )}
       </div>
+      )}
 
-      {/* Avisos por email de fichajes incorrectos */}
-      <div className="max-w-xl bg-white rounded-3xl ring-1 ring-slate-200 p-8 shadow-sm mt-6">
+      {tab === 'email' && (
+      <div className="max-w-xl bg-white rounded-3xl ring-1 ring-slate-200 p-8 shadow-sm">
         <div className="flex items-center gap-3 mb-2">
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
             <Mail className="w-5 h-5" />
@@ -1294,6 +1319,7 @@ function SettingsPanel({ apiCall, token }: { apiCall: (payload: Record<string, u
           </div>
         )}
       </div>
+      )}
 
       <div className="max-w-xl mt-6">
         <button
