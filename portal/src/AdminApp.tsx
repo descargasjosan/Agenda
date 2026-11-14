@@ -307,9 +307,20 @@ function ActionModal({
     const local = new Date(base.getTime() - base.getTimezoneOffset() * 60000);
     return local.toISOString().slice(0, 16);
   });
-  const [reason, setReason] = useState('');
+  const [reasonChoice, setReasonChoice] = useState('');
+  const [reasonText, setReasonText] = useState('');
 
   const titles = { add: 'Añadir Fichaje', correct: 'Corregir Hora', void: 'Anular Fichaje' };
+
+  const REASON_OPTIONS = [
+    'Olvido de fichaje del operario',
+    'Error al fichar (hora o tipo incorrecto)',
+    'Problema técnico (app, GPS o cobertura)',
+    'Comunicado a la oficina'
+  ];
+  const OTHER = '__otros';
+  const finalReason = reasonChoice === OTHER ? reasonText.trim() : reasonChoice;
+  const reasonValid = reasonChoice === OTHER ? Boolean(reasonText.trim()) : Boolean(reasonChoice);
 
   return (
     <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4" onClick={onClose}>
@@ -355,13 +366,25 @@ function ActionModal({
 
           <div>
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 block mb-1.5">Motivo *</label>
-            <input
-              type="text"
-              value={reason}
-              onChange={e => setReason(e.target.value)}
-              placeholder="Ej: Olvido de fichaje"
-              className="w-full bg-slate-50 text-sm font-bold px-4 py-3.5 rounded-2xl border border-slate-200 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50 placeholder:text-slate-300"
-            />
+            <select
+              value={reasonChoice}
+              onChange={e => setReasonChoice(e.target.value)}
+              className="w-full bg-slate-50 text-sm font-bold px-4 py-3.5 rounded-2xl border border-slate-200 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
+            >
+              <option value="">— Selecciona un motivo —</option>
+              {REASON_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
+              <option value={OTHER}>Otros…</option>
+            </select>
+            {reasonChoice === OTHER && (
+              <input
+                type="text"
+                value={reasonText}
+                onChange={e => setReasonText(e.target.value)}
+                placeholder="Escribe el motivo"
+                autoFocus
+                className="mt-2 w-full bg-slate-50 text-sm font-bold px-4 py-3.5 rounded-2xl border border-slate-200 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50 placeholder:text-slate-300"
+              />
+            )}
           </div>
         </div>
 
@@ -373,8 +396,8 @@ function ActionModal({
             Cancelar
           </button>
           <button
-            onClick={() => onSubmit({ type, ts: dateTime, reason })}
-            disabled={saving || !reason.trim()}
+            onClick={() => onSubmit({ type, ts: dateTime, reason: finalReason })}
+            disabled={saving || !reasonValid}
             className="flex-1 py-4 rounded-2xl bg-slate-900 text-white font-black text-[11px] uppercase tracking-widest hover:bg-slate-800 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {saving && <Loader2 className="w-4 h-4 animate-spin" />}
