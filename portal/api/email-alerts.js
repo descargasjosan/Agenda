@@ -4,7 +4,9 @@ import {
   madridDateStr,
   madridTimeStr,
   madridDayRangeUtc,
+  madridOffsetMinutes,
   effectiveLogs,
+  lastState,
   isOfficeJob,
   OFFICE_WORKER_IDS,
   getOfficeClientIds,
@@ -26,6 +28,11 @@ import {
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const toMin = t => { const [h, m] = String(t).split(':').map(Number); return h * 60 + m; };
 const ddmmyyyy = d => d.split('-').reverse().join('/');
+
+// Cierre automatico de jornada: a esta hora (Madrid) nadie sigue trabajando,
+// asi que quien no cerro la salida lo hizo por olvido.
+const AUTO_CLOSE_HOUR = 21;
+const AUTO_CLOSE_REASON = 'Cerrado automáticamente por olvido de fichaje';
 
 // Estado del operario ese dia segun sus statusRecords (mismo criterio que la app)
 function workerStatusForDate(data, dateStr) {
@@ -232,6 +239,43 @@ async function getRunState(supabase) {
   return data?.value || {};
 }
 
+// ---- Cierre automatico de jornada a las 21:00 ----
+// Inserta una salida de administrador a quien siga dentro (o en pausa) al final
+// del dia. Si esta en pausa tambien se cierra la pausa primero. El motivo queda
+// registrado; el correo de incidencias sigue avisando del olvido.
+
+async function autoCloseOpenShifts(supabase, date) {
+  const [dayStart, dayEnd] = madridDayRangeUtc(date);
+  const { data: logs, error } = await supabase
+    .from('clock_logs')
+    .select('*')
+    .gte('ts', dayStart).lt('ts', dayEnd)
+    .order('ts', { ascending: true });
+  if (error) throw error;
+
+  const byWorker = {};
+  for (const l of logs || []) (byWorker[l.worker_id] = byWorker[l.worker_id] || []).push(l);
+
+  // '21:00' de ese dia en horario de Madrid -> UTC
+  const guess = new Date(`${date}T${String(AUTO_CLOSE_HOUR).padStart(2, '0')}:00:00Z`);
+  const closeTs = new Date(guess.getTime() - madridOffsetMinutes(guess) * 60000).toISOString();
+
+  const inserts = [];
+  for (const [wid, wlogs] of Object.entries(byWorker)) {
+    const st = lastState(wlogs);
+    if (st === 'paused') {
+      inserts.push({ worker_id: wid, type: 'pause_end', ts: closeTs, source: 'admin', correction_reason: AUTO_CLOSE_REASON, created_by: 'auto-cierre' });
+    }
+    if (st === 'in' || st === 'paused') {
+      inserts.push({ worker_id: wid, type: 'out', ts: closeTs, source: 'admin', correction_reason: AUTO_CLOSE_REASON, created_by: 'auto-cierre' });
+    }
+  }
+  if (inserts.length === 0) return 0;
+  const { error: insErr } = await supabase.from('clock_logs').insert(inserts);
+  if (insErr) throw insErr;
+  return inserts.filter(i => i.type === 'out').length;
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -252,10 +296,16 @@ export default async function handler(req, res) {
       }
       const settings = await getEmailSettings(supabase);
       const nowHour = Number(madridTimeStr(new Date()).split(':')[0]);
-      if (nowHour !== settings.sendHour) return res.status(200).json({ success: true, skipped: 'not-send-hour' });
-      if (!settings.enabled) return res.status(200).json({ success: true, skipped: 'disabled' });
-
       const date = madridDateStr();
+
+      // A las 21:00 se cierran las jornadas olvidadas (independiente del email)
+      let autoClosed = 0;
+      if (nowHour === AUTO_CLOSE_HOUR) {
+        autoClosed = await autoCloseOpenShifts(supabase, date);
+      }
+
+      if (nowHour !== settings.sendHour) return res.status(200).json({ success: true, skipped: 'not-send-hour', autoClosed });
+      if (!settings.enabled) return res.status(200).json({ success: true, skipped: 'disabled', autoClosed });
 
       // No reenviar si ya se mando el informe de hoy
       const state = await getRunState(supabase);
@@ -263,7 +313,7 @@ export default async function handler(req, res) {
 
       const alerts = await computeAlerts(supabase, date, settings);
 
-      const report = { date, alerts: alerts.length, emailsSent: 0, skippedNoEmail: 0, digestSent: false, resendConfigured: !!process.env.RESEND_API_KEY };
+      const report = { date, autoClosed, alerts: alerts.length, emailsSent: 0, skippedNoEmail: 0, digestSent: false, resendConfigured: !!process.env.RESEND_API_KEY };
       if (alerts.length === 0) {
         await supabase.from('app_settings').upsert({ key: 'emailAlertsState', value: { lastSentDate: date } });
         return res.status(200).json({ success: true, ...report });
