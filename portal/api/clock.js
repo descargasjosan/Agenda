@@ -82,6 +82,14 @@ export default async function handler(req, res) {
         });
       }
 
+      // No se puede cerrar la jornada con una pausa abierta
+      if (punch === 'out' && lastState(logs) === 'paused') {
+        return res.status(400).json({
+          error: 'Pausa abierta',
+          message: 'Tienes una pausa en curso. Finaliza la pausa antes de fichar la salida.'
+        });
+      }
+
       const hasCoords =
         typeof lat === 'number' && Number.isFinite(lat) &&
         typeof lng === 'number' && Number.isFinite(lng);

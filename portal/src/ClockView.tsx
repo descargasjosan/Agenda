@@ -379,13 +379,15 @@ export default function ClockView({
                   Fin Pausa
                 </button>
                 <button
-                  onClick={() => callClock('out')}
-                  disabled={punching}
-                  className="flex items-center justify-center gap-2 rounded-2xl bg-rose-600 px-4 py-[18px] text-sm font-black uppercase tracking-wider text-white shadow-lg shadow-rose-200 transition hover:bg-rose-700 active:scale-[0.98] disabled:opacity-60"
+                  disabled
+                  className="flex cursor-not-allowed items-center justify-center gap-2 rounded-2xl bg-slate-300 px-4 py-[18px] text-sm font-black uppercase tracking-wider text-white"
                 >
-                  {punching ? <Loader2 size={22} className="animate-spin" /> : <LogOut size={22} />}
+                  <LogOut size={22} />
                   Fichar Salida
                 </button>
+                <p className="col-span-2 -mt-1 text-center text-xs font-bold text-amber-600">
+                  Finaliza la pausa para poder fichar la salida
+                </p>
               </>
             )}
           </div>
