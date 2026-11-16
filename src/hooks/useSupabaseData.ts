@@ -16,7 +16,7 @@ import { toLocalISODate } from '../lib/utils';
 import {
   PlanningState, Worker, Client, Job, StandardTask,
   Vehicle, VehicleAssignment, FuelRecord, DailyNote,
-  MedicalCourse, Holiday, Course, ReinforcementGroup, WorkerControl
+  MedicalCourse, Holiday, Course, ReinforcementGroup, WorkerControl, WorkerDocument
 } from '../lib/types';
 
 // ─── Estado inicial vacío ──────────────────────────────────────────────────
@@ -38,6 +38,7 @@ const EMPTY_STATE: PlanningState = {
   vehicles: [],
   vehicleAssignments: [],
   workerControls: [],
+  workerDocuments: [],
 };
 
 // ─── Helper: extraer array de registros Supabase ───────────────────────────
@@ -111,6 +112,10 @@ interface UseSupabaseDataReturn {
   saveWorkerControl: (control: WorkerControl) => Promise<void>;
   deleteWorkerControl: (id: string) => Promise<void>;
 
+  // Worker Documents (documentos firmados por la plantilla)
+  saveWorkerDocument: (doc: WorkerDocument) => Promise<void>;
+  deleteWorkerDocument: (id: string) => Promise<void>;
+
   showNotification: (message: string, type: 'error' | 'success' | 'warning' | 'info') => void;
   notification: { message: string; type: 'error' | 'success' | 'warning' | 'info' } | null;
 }
@@ -146,7 +151,7 @@ if (typeof window !== 'undefined') {
           workersRes, clientsRes, jobsRes, tasksRes,
           vehiclesRes, assignmentsRes, fuelRes, notesRes,
           medicalRes, holidaysRes, coursesRes, settingsRes,
-          workerControlsRes
+          workerControlsRes, docsRes
         ] = await Promise.all([
           supabase.from('workers').select('data'),
           supabase.from('clients').select('data'),
@@ -229,7 +234,8 @@ if (typeof window !== 'undefined') {
   
   console.log(`📊 [PAGINATION] Total cargado: ${allData.length} registros de worker_control_data`);
   return { data: allData, error: null };
-})()
+})(),
+          supabase.from('worker_documents').select('id, data')
         ]);
 
         // Comprobar errores críticos
@@ -273,7 +279,8 @@ if (typeof window !== 'undefined') {
           });
           
           return extracted;
-        })()
+        })(),
+          workerDocuments: (docsRes.data || []).map((r: any) => ({ ...r.data, id: r.id ?? r.data?.id }))
         };
 
         console.log('✅ Datos cargados correctamente:', {
@@ -476,6 +483,12 @@ if (typeof window !== 'undefined') {
         setPlanning((prev) => ({
           ...prev,
           workerControls: applyChange<WorkerControl>(prev.workerControls, payload),
+        }));
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'worker_documents' }, (payload) => {
+        setPlanning((prev) => ({
+          ...prev,
+          workerDocuments: applyChange<WorkerDocument>(prev.workerDocuments, payload),
         }));
       })
       .subscribe((status) => {
@@ -766,6 +779,25 @@ if (typeof window !== 'undefined') {
     await remove('worker_control_data', id);
   }, [remove]);
 
+  // ─── Worker Documents ──────────────────────────────────────────────────
+  const saveWorkerDocument = useCallback(async (doc: WorkerDocument) => {
+    setPlanning((prev) => ({
+      ...prev,
+      workerDocuments: prev.workerDocuments.some((d) => d.id === doc.id)
+        ? prev.workerDocuments.map((d) => (d.id === doc.id ? doc : d))
+        : [...prev.workerDocuments, doc],
+    }));
+    await upsert('worker_documents', doc.id, doc);
+  }, [upsert]);
+
+  const deleteWorkerDocument = useCallback(async (id: string) => {
+    setPlanning((prev) => ({
+      ...prev,
+      workerDocuments: prev.workerDocuments.filter((d) => d.id !== id)
+    }));
+    await remove('worker_documents', id);
+  }, [remove]);
+
   return {
     planning,
     setPlanning,
@@ -784,6 +816,7 @@ if (typeof window !== 'undefined') {
     saveHoliday, deleteHoliday,
     saveAppSettings,
     saveWorkerControl, deleteWorkerControl,
+    saveWorkerDocument, deleteWorkerDocument,
     showNotification,
     notification,
   };

@@ -11,7 +11,7 @@ import PlanningBoard from './components/PlanningBoard';
 import StatisticsPanel from './components/StatisticsPanel';
 import CompactPlanningView from './components/CompactPlanningView';
 import FleetManager from './components/FleetManager';
-import { PlanningState, Worker, Client, Job, Holiday, Vehicle, FuelRecord, DailyNote, MedicalCourse, Course, StandardTask, VehicleAssignment, ContractType, WorkerStatus, WorkerStatusRecord, ViewType, JobType, NoteType, WorkerControlData, WorkerControl, TerminationReason, TerminationNotificationStatus } from './lib/types';
+import { PlanningState, Worker, Client, Job, Holiday, Vehicle, FuelRecord, DailyNote, MedicalCourse, Course, StandardTask, VehicleAssignment, ContractType, WorkerStatus, WorkerStatusRecord, ViewType, JobType, NoteType, WorkerControlData, WorkerControl, WorkerDocument, TerminationReason, TerminationNotificationStatus } from './lib/types';
 import { formatDateDMY, isHoliday, isWorkingDay, getPreviousWorkingDay, toLocalISODate, getWorkerDisplayName, getCurrentWorkerStatus, getCurrentWorkerStatusForDate, getNextStatusChange, addOrUpdateStatusRecord, removeStatusRecord, validateAssignment, getWorkerSSFormat } from './lib/utils';
 import { WORKER_ROLES, GENERAL_NOTE_WORKER_ID } from './lib/constants';
 
@@ -168,6 +168,8 @@ const App: React.FC = () => {
     saveHoliday: persistHoliday,
     deleteHoliday: persistDeleteHoliday,
     saveWorkerControl, deleteWorkerControl,
+    saveWorkerDocument: persistWorkerDocument,
+    deleteWorkerDocument: persistDeleteWorkerDocument,
     showNotification, notification,
   } = useSupabaseData();
 
@@ -1262,6 +1264,13 @@ const saveVacationConfig = async () => {
   const [selectedTrackingCourse, setSelectedTrackingCourse] = useState('');
   const [courseTrackingFilter, setCourseTrackingFilter] = useState<'all' | 'done' | 'not-done'>('all');
   const [courseTrackingSearch, setCourseTrackingSearch] = useState('');
+  const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
+  const [docFilter, setDocFilter] = useState<'all' | 'done' | 'not-done'>('all');
+  const [docSearch, setDocSearch] = useState('');
+  const [newDocName, setNewDocName] = useState('');
+  const [renamingDocId, setRenamingDocId] = useState<string | null>(null);
+  const [renamingDocName, setRenamingDocName] = useState('');
+  const [confirmDeleteDocId, setConfirmDeleteDocId] = useState<string | null>(null);
 const [planningFilter, setPlanningFilter] = useState('');
   const [exportHistory, setExportHistory] = useState(() => {
     const saved = localStorage.getItem('exportHistory');
@@ -5186,6 +5195,16 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                >
                  📊 Seguimiento
                </button>
+               <button 
+                 onClick={() => setPlanning(prev => ({ ...prev, selectedMedicalTab: 'documents' }))}
+                 className={`pb-3 px-1 text-xs font-black uppercase tracking-wider border-b-2 transition-colors ${
+                   planning.selectedMedicalTab === 'documents' 
+                     ? 'text-blue-600 border-blue-600' 
+                     : 'text-slate-400 border-transparent hover:text-slate-600'
+                 } text-xs`}
+               >
+                 📄 Documentos
+               </button>
              </div>
 
              {/* Registros Médicos */}
@@ -5631,6 +5650,244 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                  )}
                </div>
              )}
+
+             {/* 📄 Documentos a devolver firmados */}
+             {planning.selectedMedicalTab === 'documents' && (() => {
+               const docs = [...planning.workerDocuments].sort((a, b) => a.name.localeCompare(b.name));
+               const selectedDoc = docs.find(d => d.id === selectedDocId) || null;
+
+               const toggleDelivery = (doc: WorkerDocument, workerId: string) => {
+                 const deliveries = { ...(doc.deliveries || {}) };
+                 if (deliveries[workerId]) delete deliveries[workerId];
+                 else deliveries[workerId] = toLocalISODate(new Date());
+                 persistWorkerDocument({ ...doc, deliveries });
+               };
+
+               const setDeliveryDate = (doc: WorkerDocument, workerId: string, date: string) => {
+                 if (!date) return;
+                 persistWorkerDocument({ ...doc, deliveries: { ...(doc.deliveries || {}), [workerId]: date } });
+               };
+
+               const addDoc = async () => {
+                 const name = newDocName.trim();
+                 if (!name) return;
+                 const doc: WorkerDocument = {
+                   id: `doc-${Date.now()}`,
+                   name,
+                   createdAt: new Date().toISOString(),
+                   deliveries: {}
+                 };
+                 setNewDocName('');
+                 setSelectedDocId(doc.id);
+                 await persistWorkerDocument(doc);
+               };
+
+               return (
+                 <div className="grid grid-cols-12 gap-6">
+                   {/* Lista de documentos */}
+                   <div className="col-span-12 lg:col-span-3">
+                     <div className="bg-white rounded-xl border border-slate-200 p-4">
+                       <div className="flex gap-2 mb-4">
+                         <input
+                           type="text"
+                           value={newDocName}
+                           onChange={e => setNewDocName(e.target.value)}
+                           onKeyDown={e => { if (e.key === 'Enter') addDoc(); }}
+                           placeholder="Nombre del documento"
+                           className="flex-1 min-w-0 px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                         />
+                         <button
+                           onClick={addDoc}
+                           disabled={!newDocName.trim()}
+                           className="px-3 py-2 bg-blue-600 text-white rounded-xl text-xs font-black uppercase hover:bg-blue-700 transition-colors disabled:opacity-40"
+                         >
+                           <Plus className="w-4 h-4" />
+                         </button>
+                       </div>
+                       <div className="space-y-1 max-h-[60vh] overflow-y-auto custom-scrollbar">
+                         {docs.length === 0 && (
+                           <p className="text-xs font-bold text-slate-400 uppercase tracking-widest text-center py-6">Sin documentos</p>
+                         )}
+                         {docs.map(doc => (
+                           <div
+                             key={doc.id}
+                             onClick={() => setSelectedDocId(doc.id)}
+                             className={`group flex items-center gap-2 px-3 py-2.5 rounded-xl cursor-pointer transition-colors ${
+                               selectedDocId === doc.id ? 'bg-blue-50 ring-1 ring-blue-200' : 'hover:bg-slate-50'
+                             }`}
+                           >
+                             {renamingDocId === doc.id ? (
+                               <input
+                                 autoFocus
+                                 value={renamingDocName}
+                                 onChange={e => setRenamingDocName(e.target.value)}
+                                 onClick={e => e.stopPropagation()}
+                                 onKeyDown={e => {
+                                   if (e.key === 'Enter' && renamingDocName.trim()) {
+                                     persistWorkerDocument({ ...doc, name: renamingDocName.trim() });
+                                     setRenamingDocId(null);
+                                   }
+                                   if (e.key === 'Escape') setRenamingDocId(null);
+                                 }}
+                                 onBlur={() => {
+                                   if (renamingDocName.trim()) persistWorkerDocument({ ...doc, name: renamingDocName.trim() });
+                                   setRenamingDocId(null);
+                                 }}
+                                 className="flex-1 min-w-0 px-2 py-1 border border-slate-300 rounded-lg text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                               />
+                             ) : (
+                               <>
+                                 <FileText className="w-4 h-4 text-slate-400 shrink-0" />
+                                 <span className="flex-1 min-w-0 text-sm font-bold text-slate-700 truncate">{doc.name}</span>
+                                 <span className="text-[10px] font-black text-slate-400 shrink-0">
+                                   {Object.keys(doc.deliveries || {}).length}
+                                 </span>
+                                 <button
+                                   onClick={e => { e.stopPropagation(); setRenamingDocId(doc.id); setRenamingDocName(doc.name); }}
+                                   className="p-1 text-slate-300 hover:text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                                   title="Renombrar"
+                                 >
+                                   <Edit2 className="w-3.5 h-3.5" />
+                                 </button>
+                                 {confirmDeleteDocId === doc.id ? (
+                                   <button
+                                     onClick={e => {
+                                       e.stopPropagation();
+                                       persistDeleteWorkerDocument(doc.id);
+                                       if (selectedDocId === doc.id) setSelectedDocId(null);
+                                       setConfirmDeleteDocId(null);
+                                     }}
+                                     className="px-2 py-0.5 bg-rose-600 text-white rounded-lg text-[10px] font-black uppercase"
+                                   >
+                                     Eliminar
+                                   </button>
+                                 ) : (
+                                   <button
+                                     onClick={e => { e.stopPropagation(); setConfirmDeleteDocId(doc.id); }}
+                                     onMouseLeave={() => { if (confirmDeleteDocId === doc.id) setConfirmDeleteDocId(null); }}
+                                     className="p-1 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                                     title="Eliminar"
+                                   >
+                                     <Trash2 className="w-3.5 h-3.5" />
+                                   </button>
+                                 )}
+                               </>
+                             )}
+                           </div>
+                         ))}
+                       </div>
+                     </div>
+                   </div>
+
+                   {/* Panel de entrega */}
+                   <div className="col-span-12 lg:col-span-9">
+                     {!selectedDoc ? (
+                       <div className="text-center py-16 text-slate-400 bg-white rounded-xl border border-slate-200">
+                         <div className="text-4xl mb-3">📄</div>
+                         <p className="font-bold uppercase text-xs tracking-widest">
+                           {docs.length === 0 ? 'Añade el primer documento para empezar' : 'Selecciona un documento para ver las entregas'}
+                         </p>
+                       </div>
+                     ) : (() => {
+                       const activeWorkers = planning.workers
+                         .filter(w => !w.isArchived)
+                         .filter(w => {
+                           if (!docSearch) return true;
+                           const q = docSearch.toLowerCase();
+                           return w.name.toLowerCase().includes(q) || w.code.toLowerCase().includes(q);
+                         })
+                         .sort((a, b) => a.name.localeCompare(b.name));
+
+                       const rows = activeWorkers.map(worker => {
+                         const deliveredAt = (selectedDoc.deliveries || {})[worker.id] || null;
+                         const has = !!deliveredAt;
+                         if (docFilter === 'done' && !has) return null;
+                         if (docFilter === 'not-done' && has) return null;
+                         return { worker, deliveredAt, has };
+                       }).filter(Boolean) as { worker: Worker; deliveredAt: string | null; has: boolean }[];
+
+                       return (
+                         <div>
+                           <div className="mb-4 flex flex-wrap items-center gap-4">
+                             <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest mr-2">{selectedDoc.name}</h3>
+                             <div className="flex gap-2">
+                               {(['all', 'done', 'not-done'] as const).map(f => (
+                                 <button
+                                   key={f}
+                                   onClick={() => setDocFilter(f)}
+                                   className={`px-4 py-2 rounded-xl text-xs font-black uppercase border transition-colors ${
+                                     docFilter === f
+                                       ? 'bg-blue-600 text-white border-blue-600'
+                                       : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                                   }`}
+                                 >
+                                   {f === 'all' ? 'Todos' : f === 'done' ? 'Entregados' : 'Pendientes'}
+                                 </button>
+                               ))}
+                             </div>
+                             <div className="flex-1 min-w-[220px] relative">
+                               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                               <input
+                                 type="text"
+                                 value={docSearch}
+                                 onChange={e => setDocSearch(e.target.value)}
+                                 className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                 placeholder="Buscar operario..."
+                               />
+                             </div>
+                           </div>
+
+                           <div className="mb-4 flex flex-wrap gap-4 text-sm font-black">
+                             <span className="text-green-600">✅ Entregados: {rows.filter(r => r.has).length}</span>
+                             <span className="text-red-600">❌ Pendientes: {rows.filter(r => !r.has).length}</span>
+                             <span className="text-slate-500">Total: {rows.length}</span>
+                           </div>
+
+                           {rows.length > 0 ? (
+                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                               {rows.map(({ worker, deliveredAt, has }) => (
+                                 <div
+                                   key={worker.id}
+                                   onClick={() => toggleDelivery(selectedDoc, worker.id)}
+                                   className={`p-4 rounded-xl border transition-colors cursor-pointer ${
+                                     has ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200 hover:border-red-300'
+                                   }`}
+                                 >
+                                   <div className="flex items-center gap-3">
+                                     <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-sm text-lg shrink-0">
+                                       {has ? '✅' : '❌'}
+                                     </div>
+                                     <div className="min-w-0">
+                                       <h4 className="font-black text-slate-900 truncate">{worker.name}</h4>
+                                       <p className="text-xs text-slate-500 font-bold">{worker.code} • {worker.role || 'Sin rol'}</p>
+                                     </div>
+                                   </div>
+                                   {has && (
+                                     <div className="mt-3 flex items-center gap-2" onClick={e => e.stopPropagation()}>
+                                       <span className="text-[10px] font-black text-slate-400 uppercase">Entregado:</span>
+                                       <input
+                                         type="date"
+                                         value={deliveredAt || ''}
+                                         onChange={e => setDeliveryDate(selectedDoc, worker.id, e.target.value)}
+                                         className="px-2 py-1 border border-green-200 bg-white rounded-lg text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-green-500"
+                                       />
+                                     </div>
+                                   )}
+                                 </div>
+                               ))}
+                             </div>
+                           ) : (
+                             <div className="text-center py-12 text-slate-400">
+                               <p className="font-bold uppercase text-xs tracking-widest">No hay operarios que coincidan con el filtro</p>
+                             </div>
+                           )}
+                         </div>
+                       );
+                     })()}
+                   </div>
+                 </div>
+               );
+             })()}
 
            </div>
          )}

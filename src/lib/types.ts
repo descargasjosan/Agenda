@@ -262,6 +262,14 @@ export interface VehicleAssignment {
   startTime?: string; // Opcional, por defecto turno completo
 }
 
+// --- DOCUMENTOS QUE LA PLANTILLA DEBE DEVOLVER FIRMADOS ---
+export interface WorkerDocument {
+  id: string;
+  name: string;
+  createdAt: string;
+  deliveries: Record<string, string>; // workerId -> fecha de entrega 'YYYY-MM-DD'
+}
+
 export interface PlanningState {
   currentDate: string;
   workers: Worker[];
@@ -272,7 +280,8 @@ export interface PlanningState {
   courses: Course[]; // Sistema de cursos general (se mantendrá para compatibilidad)
   medicalCourses: MedicalCourse[]; // 🏥 Cursos y reconocimientos médicos
   medicalAlerts: MedicalAlert[]; // ⚠️ Alertas médicas calculadas
-  selectedMedicalTab: 'dashboard' | 'courses' | 'alerts' | 'workers' | 'courseTracking'; // 📋 Pestaña activa en Salud Laboral
+  workerDocuments: WorkerDocument[]; // 📄 Documentos firmados por la plantilla
+  selectedMedicalTab: 'dashboard' | 'courses' | 'alerts' | 'workers' | 'courseTracking' | 'documents'; // 📋 Pestaña activa en Salud Laboral
   editingMedicalCourse: MedicalCourse | null; // 📝 Curso médico en edición
   standardTasks: StandardTask[]; 
   dailyNotes: DailyNote[]; 
