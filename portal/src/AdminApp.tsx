@@ -1110,8 +1110,8 @@ function SettingsPanel({ apiCall, token }: { apiCall: (payload: Record<string, u
         ))}
       </div>
 
-      <div className="flex items-start gap-6">
-      <div className="min-w-0 flex-1">
+      <div className="flex items-start gap-5">
+      <div className="min-w-0 shrink-0">
       {tab === 'clock' && (<>
       <div className="max-w-xl bg-white rounded-3xl ring-1 ring-slate-200 p-8 shadow-sm">
         <div className="flex items-center gap-3 mb-2">
