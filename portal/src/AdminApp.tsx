@@ -1110,6 +1110,8 @@ function SettingsPanel({ apiCall, token }: { apiCall: (payload: Record<string, u
         ))}
       </div>
 
+      <div className="flex items-start gap-6">
+      <div className="min-w-0 flex-1">
       {tab === 'clock' && (<>
       <div className="max-w-xl bg-white rounded-3xl ring-1 ring-slate-200 p-8 shadow-sm">
         <div className="flex items-center gap-3 mb-2">
@@ -1329,10 +1331,11 @@ function SettingsPanel({ apiCall, token }: { apiCall: (payload: Record<string, u
           <p className="mt-3 text-xs font-black uppercase tracking-widest text-green-600">✓ Guardado</p>
         )}
       </div>
+      </div>
 
       {/* Panel lateral: vista previa de los avisos de hoy */}
       {preview && (
-        <div className="fixed inset-y-0 right-0 z-50 w-full max-w-md bg-white shadow-2xl border-l border-slate-200 flex flex-col">
+        <div className="sticky top-6 w-full max-w-md shrink-0 self-start bg-white rounded-3xl ring-1 ring-slate-200 shadow-sm flex flex-col max-h-[calc(100vh-3rem)]">
           <div className="flex items-center justify-between gap-3 px-6 py-5 border-b border-slate-100">
             <div>
               <p className="text-sm font-black text-slate-900 uppercase tracking-tight">Vista previa · {preview.date}</p>
@@ -1370,6 +1373,7 @@ function SettingsPanel({ apiCall, token }: { apiCall: (payload: Record<string, u
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }
