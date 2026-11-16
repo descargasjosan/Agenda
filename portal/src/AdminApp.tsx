@@ -1335,7 +1335,7 @@ function SettingsPanel({ apiCall, token }: { apiCall: (payload: Record<string, u
 
       {/* Panel lateral: vista previa de los avisos de hoy */}
       {preview && (
-        <div className="sticky top-6 w-full max-w-md shrink-0 self-start bg-white rounded-3xl ring-1 ring-slate-200 shadow-sm flex flex-col max-h-[calc(100vh-3rem)]">
+        <div className="sticky top-6 w-full max-w-4xl shrink-0 self-start bg-white rounded-3xl ring-1 ring-slate-200 shadow-sm flex flex-col max-h-[calc(100vh-3rem)]">
           <div className="flex items-center justify-between gap-3 px-6 py-5 border-b border-slate-100">
             <div>
               <p className="text-sm font-black text-slate-900 uppercase tracking-tight">Vista previa · {preview.date}</p>
