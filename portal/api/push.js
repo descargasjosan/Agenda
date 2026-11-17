@@ -258,6 +258,73 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: true, sent, total: subs.length, errors });
     }
 
+    // Recordatorio manual desde el panel admin (Bearer)
+    if (action === 'remind') {
+      const token = (req.headers.authorization || '').replace('Bearer ', '').trim();
+      const { workerId } = body || {};
+      if (!workerId) return res.status(400).json({ error: 'Falta workerId' });
+
+      const supabase = getSupabaseClient();
+      const { data: authData, error: authError } = await supabase.auth.getUser(token);
+      if (authError || !authData?.user) return res.status(401).json({ error: 'No autorizado' });
+
+      // Inicio real del dia para el operario (misma regla que runPlan)
+      const today = madridDateStr();
+      const [jobsRes, officeClientIds] = await Promise.all([
+        supabase.from('jobs').select('data').eq('data->>date', today),
+        getOfficeClientIds(supabase)
+      ]);
+      if (jobsRes.error) throw jobsRes.error;
+
+      const officeStaff = OFFICE_WORKER_IDS.includes(workerId);
+      let start = null;
+      for (const row of jobsRes.data || []) {
+        const d = row.data || {};
+        if (d.isCancelled) continue;
+        const inJob = (d.assignedWorkerIds || []).includes(workerId) ||
+          (d.reinforcementGroups || []).some(g => (g.workerIds || []).includes(workerId));
+        if (!inJob) continue;
+        if (isOfficeJob(d, officeClientIds) && !officeStaff) continue;
+        const t = jobWorkerStart(d, workerId);
+        if (t && (!start || t < start)) start = t;
+      }
+
+      const { data: subs } = await supabase
+        .from('push_subscriptions')
+        .select('id, endpoint, p256dh, auth')
+        .eq('worker_id', workerId);
+      if (!subs || subs.length === 0) {
+        return res.status(200).json({ success: true, sent: 0, message: 'El operario no tiene activadas las notificaciones' });
+      }
+
+      initWebPush();
+      const payload = JSON.stringify({
+        title: 'Recordatorio de fichaje',
+        body: start
+          ? `Tu jornada empezaba a las ${start}. No olvides fichar la entrada.`
+          : 'No olvides fichar la entrada.',
+        tag: `clock-remind-${today}`
+      });
+
+      let sent = 0;
+      for (const sub of subs) {
+        try {
+          await webpush.sendNotification(
+            { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+            payload
+          );
+          sent++;
+        } catch (e) {
+          if (e.statusCode === 404 || e.statusCode === 410) {
+            await supabase.from('push_subscriptions').delete().eq('id', sub.id);
+          } else {
+            console.error('Push remind error:', e.statusCode, e.message);
+          }
+        }
+      }
+      return res.status(200).json({ success: true, sent, start });
+    }
+
     // Clave publica VAPID (es publica por diseño, no necesita auth)
     if (action === 'key') {
       return res.status(200).json({ publicKey: process.env.VAPID_PUBLIC_KEY || null });

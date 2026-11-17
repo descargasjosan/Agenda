@@ -1,13 +1,14 @@
 import { useState, useCallback, useEffect } from 'react';
 import {
   Activity, CalendarDays, FileDown, LogOut, RefreshCw, Plus, Pencil, Ban,
-  AlertCircle, AlertTriangle, Loader2, Lock, Mail, ArrowRight, Clock, ShieldCheck, Settings, MapPin, Bell, ChevronRight, X
+  AlertCircle, AlertTriangle, Loader2, Lock, Mail, ArrowRight, Clock, ShieldCheck, Settings, MapPin, Bell, ChevronRight, X, CheckCircle2
 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
 const AUTH_API_URL = import.meta.env.VITE_API_ADMIN_AUTH_URL || '/api/admin-auth';
 const ADMIN_API_URL = import.meta.env.VITE_API_ADMIN_CLOCK_URL || '/api/admin-clock';
 const EMAIL_API_URL = import.meta.env.VITE_API_EMAIL_ALERTS_URL || '/api/email-alerts';
+const PUSH_API_URL = import.meta.env.VITE_API_PUSH_URL || '/api/push';
 const TOKEN_KEY = 'dj-portal-admin-token';
 const REFRESH_KEY = 'dj-portal-admin-refresh';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
@@ -420,7 +421,7 @@ const STATE_DOT: Record<OverviewWorker['state'], string> = {
   none: 'bg-slate-300'
 };
 
-function OverviewPanel({ workers, loading, onRefresh, onOpenHistory, graceMin, nowMin, date, onDateChange }: {
+function OverviewPanel({ workers, loading, onRefresh, onOpenHistory, graceMin, nowMin, date, onDateChange, onRemind }: {
   workers: OverviewWorker[];
   loading: boolean;
   onRefresh: () => void;
@@ -429,10 +430,12 @@ function OverviewPanel({ workers, loading, onRefresh, onOpenHistory, graceMin, n
   nowMin: number;
   date: string;
   onDateChange: (date: string) => void;
+  onRemind: (workerId: string) => Promise<{ sent: number; message?: string }>;
 }) {
   const [filter, setFilter] = useState('');
   const [stateFilter, setStateFilter] = useState<OverviewFilter>('all');
   const [idleOpen, setIdleOpen] = useState(false);
+  const [remindState, setRemindState] = useState<Record<string, 'sending' | 'sent' | 'nosub' | 'error'>>({});
   const isToday = date === madridDateStrLocal();
 
   const counts = {
@@ -691,6 +694,7 @@ function OverviewPanel({ workers, loading, onRefresh, onOpenHistory, graceMin, n
                         </span>
                       </td>
                       <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
                         {(() => {
                           const sinceMin = w.state === 'none' && w.taskStart
                             ? nowMin - minutesOf(w.taskStart) : null;
@@ -710,6 +714,44 @@ function OverviewPanel({ workers, loading, onRefresh, onOpenHistory, graceMin, n
                             </span>
                           );
                         })()}
+                        {w.state === 'none' && (
+                          <button
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              if (remindState[w.id] === 'sending') return;
+                              setRemindState(s => ({ ...s, [w.id]: 'sending' }));
+                              try {
+                                const r = await onRemind(w.id);
+                                setRemindState(s => ({ ...s, [w.id]: r.sent > 0 ? 'sent' : 'nosub' }));
+                              } catch {
+                                setRemindState(s => ({ ...s, [w.id]: 'error' }));
+                              }
+                            }}
+                            disabled={remindState[w.id] === 'sending'}
+                            title={
+                              remindState[w.id] === 'sent' ? 'Recordatorio enviado' :
+                              remindState[w.id] === 'nosub' ? 'Sin notificaciones activadas en su móvil' :
+                              remindState[w.id] === 'error' ? 'Error al enviar — pulsa para reintentar' :
+                              'Enviar recordatorio de fichaje'
+                            }
+                            className={`shrink-0 flex h-7 w-7 items-center justify-center rounded-lg transition-colors ${
+                              remindState[w.id] === 'sent'
+                                ? 'bg-green-100 text-green-600'
+                                : remindState[w.id] === 'nosub'
+                                  ? 'bg-amber-100 text-amber-600'
+                                  : remindState[w.id] === 'error'
+                                    ? 'bg-rose-100 text-rose-600'
+                                    : 'bg-slate-100 text-slate-500 hover:bg-blue-100 hover:text-blue-600'
+                            }`}
+                          >
+                            {remindState[w.id] === 'sending'
+                              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              : remindState[w.id] === 'sent'
+                                ? <CheckCircle2 className="w-3.5 h-3.5" />
+                                : <Bell className="w-3.5 h-3.5" />}
+                          </button>
+                        )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -1580,6 +1622,17 @@ export default function AdminApp() {
     }
   }, [token, apiCall, overviewDate]);
 
+  const handleRemind = useCallback(async (workerId: string): Promise<{ sent: number; message?: string }> => {
+    const res = await fetch(PUSH_API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ action: 'remind', workerId })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || data.error || 'Error');
+    return data;
+  }, [token]);
+
   const loadHistory = useCallback(async () => {
     if (!token || !historyWorker) return;
     setHistoryLoading(true);
@@ -1806,6 +1859,7 @@ export default function AdminApp() {
               nowMin={overviewDate === todayStr ? madridNowMinutes() : (overviewDate < todayStr ? 1439 : 0)}
               date={overviewDate}
               onDateChange={setOverviewDate}
+              onRemind={handleRemind}
             />
           )}
           {view === 'history' && (
