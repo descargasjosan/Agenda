@@ -212,14 +212,50 @@ export default async function handler(req, res) {
     const { action } = body || {};
 
     // Acciones de cron (secreto compartido)
-    if (action === 'plan' || action === 'tick') {
+    if (action === 'plan' || action === 'tick' || action === 'test-push') {
       if (req.headers['x-cron-secret'] !== process.env.CRON_SECRET) {
         return res.status(401).json({ error: 'No autorizado' });
       }
       const supabase = getSupabaseClient();
       if (action === 'plan') return res.status(200).json({ success: true, ...(await runPlan(supabase)) });
+      if (action === 'tick') {
+        initWebPush();
+        return res.status(200).json({ success: true, ...(await runTick(supabase)) });
+      }
+
+      // Prueba: envia una notificacion a todas las suscripciones de un operario
+      const { workerId } = body || {};
+      if (!workerId) return res.status(400).json({ error: 'Falta workerId' });
       initWebPush();
-      return res.status(200).json({ success: true, ...(await runTick(supabase)) });
+      const { data: subs } = await supabase
+        .from('push_subscriptions')
+        .select('id, endpoint, p256dh, auth')
+        .eq('worker_id', workerId);
+      if (!subs || subs.length === 0) {
+        return res.status(200).json({ success: true, sent: 0, message: 'Sin suscripciones' });
+      }
+      const payload = JSON.stringify({
+        title: 'Prueba de notificación',
+        body: 'Si ves este aviso, las notificaciones push funcionan correctamente.',
+        tag: 'test-push'
+      });
+      let sent = 0;
+      const errors = [];
+      for (const sub of subs) {
+        try {
+          await webpush.sendNotification(
+            { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+            payload
+          );
+          sent++;
+        } catch (e) {
+          if (e.statusCode === 404 || e.statusCode === 410) {
+            await supabase.from('push_subscriptions').delete().eq('id', sub.id);
+          }
+          errors.push(`${e.statusCode || ''} ${e.message}`.trim());
+        }
+      }
+      return res.status(200).json({ success: true, sent, total: subs.length, errors });
     }
 
     // Clave publica VAPID (es publica por diseño, no necesita auth)
