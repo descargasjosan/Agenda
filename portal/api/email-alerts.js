@@ -331,10 +331,15 @@ export default async function handler(req, res) {
         report.emailsSent++;
       }
 
-      if (settings.officeDigestEmail) {
+      const digestRecipients = String(settings.officeDigestEmail || '')
+        .split(/[;,]/)
+        .map(e => e.trim())
+        .filter(e => EMAIL_RE.test(e));
+      if (digestRecipients.length) {
         const mail = digestEmail(date, alerts);
-        await sendEmail({ to: settings.officeDigestEmail, ...mail });
+        for (const to of digestRecipients) await sendEmail({ to, ...mail });
         report.digestSent = true;
+        report.digestRecipients = digestRecipients.length;
       }
 
       await supabase.from('app_settings').upsert({ key: 'emailAlertsState', value: { lastSentDate: date } });

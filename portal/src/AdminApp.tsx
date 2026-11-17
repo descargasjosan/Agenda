@@ -1349,12 +1349,12 @@ function SettingsPanel({ apiCall, token }: { apiCall: (payload: Record<string, u
             <div className="rounded-2xl border-2 border-slate-200 bg-white p-4">
               <p className="text-sm font-black text-slate-900 uppercase tracking-wide mb-2">Resumen diario a</p>
               <input
-                type="email"
+                type="text"
                 value={emailDigest}
                 onChange={e => setEmailDigest(e.target.value)}
                 className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-bold text-slate-900 outline-none focus:border-blue-500"
               />
-              <p className="text-[11px] font-bold text-slate-400 mt-1.5">Recibe un correo con todas las incidencias del día.</p>
+              <p className="text-[11px] font-bold text-slate-400 mt-1.5">Recibe un correo con todas las incidencias del día. Puedes poner varios correos separados por comas.</p>
             </div>
 
             <button
