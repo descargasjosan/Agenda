@@ -4979,9 +4979,13 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                            </div>
                         </td>
                         <td className="px-6 py-3">
-                           <p className="font-black text-slate-900 text-sm">
+                           <button
+                             onClick={() => { navigator.clipboard?.writeText(worker.name); showNotification(`Nombre copiado: ${worker.name}`, 'success'); }}
+                             title="Clic para copiar nombre completo"
+                             className="font-black text-slate-900 text-sm text-left hover:text-blue-600 transition-colors cursor-copy"
+                           >
                              {worker.firstName || worker.name?.split(' ')[0] || worker.name}
-                           </p>
+                           </button>
                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">{worker.role}</p>
                            {worker.termination && (
                              <p className="mt-1">
@@ -4992,11 +4996,23 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                            )}
                         </td>
                         <td className="px-6 py-3">
-                           <p className="font-black text-slate-900 text-sm">
+                           <button
+                             onClick={() => { navigator.clipboard?.writeText(worker.name); showNotification(`Nombre copiado: ${worker.name}`, 'success'); }}
+                             title="Clic para copiar nombre completo"
+                             className="font-black text-slate-900 text-sm text-left hover:text-blue-600 transition-colors cursor-copy"
+                           >
                              {worker.lastName || worker.name?.split(' ').slice(1).join(' ') || ''}
-                           </p>
+                           </button>
                         </td>
-                        <td className="px-6 py-3 text-xs font-bold text-slate-500 uppercase">{worker.dni}</td>
+                        <td className="px-6 py-3">
+                          <button
+                            onClick={() => { navigator.clipboard?.writeText(worker.dni); showNotification(`DNI copiado: ${worker.dni}`, 'success'); }}
+                            title="Clic para copiar el DNI"
+                            className="text-xs font-bold text-slate-500 uppercase hover:text-slate-700 hover:bg-slate-100 px-1.5 py-0.5 rounded transition-colors cursor-copy"
+                          >
+                            {worker.dni}
+                          </button>
+                        </td>
                         <td className="px-6 py-3">
                           <button
                             onClick={() => { navigator.clipboard?.writeText(worker.id); showNotification(`ID copiado: ${worker.id}`, 'success'); }}
