@@ -138,11 +138,12 @@ export default async function handler(req, res) {
       const settings = await getClockSettings(supabase);
       const graceMin = Math.max(0, Number(settings.notifyDelayMin ?? 15));
 
-      const [workersRes, logsRes, jobsRes, officeClientIds] = await Promise.all([
+      const [workersRes, logsRes, jobsRes, officeClientIds, pushRes] = await Promise.all([
         supabase.from('workers').select('id, data'),
         supabase.from('clock_logs').select('*').gte('ts', start).lt('ts', end).order('ts', { ascending: true }),
         supabase.from('jobs').select('id, data').eq('data->>date', date),
-        getOfficeClientIds(supabase)
+        getOfficeClientIds(supabase),
+        supabase.from('push_subscriptions').select('worker_id')
       ]);
 
       if (workersRes.error) throw workersRes.error;
@@ -179,6 +180,8 @@ export default async function handler(req, res) {
         allLogs.filter(l => l.corrects_id && l.type !== 'void' && !voidIds.has(l.id)).map(l => l.corrects_id)
       );
 
+      const pushIds = new Set((pushRes.data || []).map(r => r.worker_id));
+
       const workers = (workersRes.data || [])
         .filter(r => !r.data.isArchived)
         .map(r => {
@@ -203,6 +206,7 @@ export default async function handler(req, res) {
             code: r.data.code,
             contractType: r.data.contractType || null,
             officeStaff: OFFICE_WORKER_IDS.includes(r.id),
+            hasPush: pushIds.has(r.id),
             state,
             count: effectiveLogs(logs).length,
             taskStart,

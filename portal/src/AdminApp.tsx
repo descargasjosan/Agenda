@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import {
   Activity, CalendarDays, FileDown, LogOut, RefreshCw, Plus, Pencil, Ban,
-  AlertCircle, AlertTriangle, Loader2, Lock, Mail, ArrowRight, Clock, ShieldCheck, Settings, MapPin, Bell, ChevronRight, X, CheckCircle2
+  AlertCircle, AlertTriangle, Loader2, Lock, Mail, ArrowRight, Clock, ShieldCheck, Settings, MapPin, Bell, BellOff, ChevronRight, X, CheckCircle2
 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
@@ -131,6 +131,7 @@ interface OverviewWorker {
   code?: string;
   contractType?: string | null;
   officeStaff?: boolean;
+  hasPush?: boolean;
   state: 'none' | 'in' | 'paused' | 'out';
   count: number;
   taskStart?: string | null;
@@ -412,7 +413,7 @@ function ActionModal({
 
 // ---------- Vistas ----------
 
-type OverviewFilter = 'all' | OverviewWorker['state'] | 'notask';
+type OverviewFilter = 'all' | OverviewWorker['state'] | 'notask' | 'nopush';
 
 const STATE_DOT: Record<OverviewWorker['state'], string> = {
   in: 'bg-green-500',
@@ -443,13 +444,15 @@ function OverviewPanel({ workers, loading, onRefresh, onOpenHistory, graceMin, n
     paused: workers.filter(w => w.state === 'paused').length,
     out: workers.filter(w => w.state === 'out').length,
     none: workers.filter(w => w.state === 'none' && w.taskStart).length,
-    notask: workers.filter(w => w.state === 'none' && !w.taskStart).length
+    notask: workers.filter(w => w.state === 'none' && !w.taskStart).length,
+    nopush: workers.filter(w => !w.hasPush).length
   };
 
   const filtered = workers.filter(w => {
     if (stateFilter === 'none' && !(w.state === 'none' && w.taskStart)) return false;
     else if (stateFilter === 'notask' && !(w.state === 'none' && !w.taskStart)) return false;
-    else if (stateFilter !== 'all' && stateFilter !== 'none' && stateFilter !== 'notask' && w.state !== stateFilter) return false;
+    else if (stateFilter === 'nopush' && w.hasPush) return false;
+    else if (stateFilter !== 'all' && stateFilter !== 'none' && stateFilter !== 'notask' && stateFilter !== 'nopush' && w.state !== stateFilter) return false;
     if (!filter) return true;
     const q = filter.toLowerCase();
     return (
@@ -465,7 +468,8 @@ function OverviewPanel({ workers, loading, onRefresh, onOpenHistory, graceMin, n
     { id: 'paused', label: 'En pausa', count: counts.paused },
     { id: 'out', label: 'Cerrados', count: counts.out },
     { id: 'none', label: 'Sin fichar', count: counts.none },
-    { id: 'notask', label: 'No trabaja', count: counts.notask }
+    { id: 'notask', label: 'No trabaja', count: counts.notask },
+    { id: 'nopush', label: 'Sin push', count: counts.nopush }
   ];
 
   // Los que no trabajan van colapsados en un grupo al final (salvo al filtrar por ellos)
@@ -473,7 +477,9 @@ function OverviewPanel({ workers, loading, onRefresh, onOpenHistory, graceMin, n
   const activeRows = filtered.filter(w => !(w.state === 'none' && !w.taskStart));
   const display: (OverviewWorker | 'idle-header')[] = stateFilter === 'notask'
     ? idleRows
-    : [...activeRows, ...(idleRows.length ? (['idle-header'] as const) : []), ...(idleOpen ? idleRows : [])];
+    : stateFilter === 'nopush'
+      ? filtered
+      : [...activeRows, ...(idleRows.length ? (['idle-header'] as const) : []), ...(idleOpen ? idleRows : [])];
 
   return (
     <div className="p-6">
@@ -630,7 +636,12 @@ function OverviewPanel({ workers, loading, onRefresh, onOpenHistory, graceMin, n
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        <p className={`font-semibold text-sm ${w.contractType === 'Fijo Discontinuo' ? 'text-rose-600' : 'text-slate-800'}`}>{w.name}</p>
+                        <div className="flex items-center gap-1.5">
+                          <p className={`font-semibold text-sm ${w.contractType === 'Fijo Discontinuo' ? 'text-rose-600' : 'text-slate-800'}`}>{w.name}</p>
+                          {w.hasPush
+                            ? <span title="Notificaciones push activadas"><Bell className="w-3 h-3 text-emerald-500" /></span>
+                            : <span title="Sin notificaciones push — no recibirá avisos"><BellOff className="w-3 h-3 text-slate-300" /></span>}
+                        </div>
                         <p className="text-[10px] text-slate-400 uppercase tracking-tight">{w.dni}</p>
                       </td>
                       <td className="px-4 py-3 text-sm">
