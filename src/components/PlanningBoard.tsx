@@ -3,8 +3,22 @@ import * as React from 'react';
 import { useState, useEffect, useRef } from 'react';
 import { Clock, MapPin, Users, Plus, Edit2, X, AlertCircle, Search, Move, AlertTriangle, Euro, ArrowRightLeft, CheckCircle2, MoreHorizontal, CalendarPlus, Ban, Flag, Briefcase, Award, TrendingUp, UserCheck, StickyNote, Stethoscope, FileText, List, FileSpreadsheet } from 'lucide-react';
 import { Job, PlanningState, Worker, WorkerStatus, ContractType, ReinforcementGroup } from '../lib/types';
-import { isTimeOverlap, checkContinuityRisk, formatDateDMY, getWorkerDisplayName, toLocalISODate } from '../lib/utils';
+import { isTimeOverlap, checkContinuityRisk, formatDateDMY, getWorkerDisplayName, toLocalISODate, getCurrentWorkerStatusForDate } from '../lib/utils';
 import { GENERAL_NOTE_WORKER_ID } from '../lib/constants';
+
+// Estados que impiden asignar a un operario en una fecha dada
+const UNAVAILABLE_STATUSES: WorkerStatus[] = [
+  WorkerStatus.VACACIONES,
+  WorkerStatus.BAJA_MEDICA,
+  WorkerStatus.BAJA_PATERNIDAD,
+  WorkerStatus.PERMISO_RETRIBUIDO,
+  WorkerStatus.FALTA,
+  WorkerStatus.REPOSO,
+  WorkerStatus.NO_DISPONIBLE
+];
+
+const isWorkerUnavailableOnDate = (worker: Worker, date: string) =>
+  UNAVAILABLE_STATUSES.includes(getCurrentWorkerStatusForDate(worker, date).status);
 
 interface PlanningBoardProps {
   planning: PlanningState;
@@ -1022,6 +1036,10 @@ const PlanningBoard: React.FC<PlanningBoardProps> = ({
                             .filter(w => !group.workerIds.includes(w.id))
                             .filter(w => !reinforcementModal.groups.some(g => g.id !== group.id && g.workerIds.includes(w.id)))
                             .filter(w => {
+                              const currentDate = planning.jobs.find(j => j.id === reinforcementModal.jobId)?.date || toLocalISODate(new Date());
+                              return !isWorkerUnavailableOnDate(w, currentDate);
+                            })
+                            .filter(w => {
                               const search = groupWorkerSearch[group.id] || '';
                               return search === '' || 
                                 w.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -1096,26 +1114,11 @@ const PlanningBoard: React.FC<PlanningBoardProps> = ({
                   {planning.workers
                     .filter(w => !w.isArchived)
                     .filter(w => {
-                      // 🎯 USAR LA MISMA LÓGICA DE DISPONIBILIDAD QUE EL SIDEBAR
-                      const currentDate = reinforcementModal?.jobId ? 
+                      // 🎯 MISMA LÓGICA DE DISPONIBILIDAD QUE EL SELECTOR PRINCIPAL
+                      const currentDate = reinforcementModal?.jobId ?
                         planning.jobs.find(j => j.id === reinforcementModal.jobId)?.date || toLocalISODate(new Date()) :
                         toLocalISODate(new Date());
-                      
-                      // Si el estado es "NO DISPONIBLE", comprobar si ya ha expirado
-                      const isUnavailableStatus = [
-                        WorkerStatus.VACACIONES, 
-                        WorkerStatus.BAJA_MEDICA, 
-                        WorkerStatus.BAJA_PATERNIDAD
-                      ].includes(w.status);
-
-                      if (isUnavailableStatus) {
-                         // Si no tiene fecha fin, o la fecha fin es futura, no mostrar
-                         if (!w.statusEndDate || w.statusEndDate >= currentDate) {
-                            return false;
-                         }
-                      }
-                      
-                      return true;
+                      return !isWorkerUnavailableOnDate(w, currentDate);
                     })
                     .filter(w => 
                       reinforcementWorkerSearch === '' || 
