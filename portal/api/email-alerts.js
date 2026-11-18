@@ -91,7 +91,7 @@ function workerEmail(name, dateStr, violations, adminFixes) {
   return { subject: `Aviso de fichaje incorrecto – ${d}`, text, html };
 }
 
-function digestEmail(dateStr, alerts) {
+function digestEmail(dateStr, alerts, failures = []) {
   const d = ddmmyyyy(dateStr);
   const blocks = alerts.map(a => {
     const lines = a.violations.map(violationText);
@@ -101,7 +101,8 @@ function digestEmail(dateStr, alerts) {
   const text = [
     `Incidencias de fichaje del ${d}: ${alerts.length} operario(s).`,
     ``,
-    ...blocks
+    ...blocks,
+    ...(failures.length ? [``, `ENVÍOS FALLIDOS (${failures.length}):`, ...failures.map(f => `  - ${f}`)] : [])
   ].join('\n');
   const html = `
 <div style="font-family:Arial,sans-serif;font-size:14px;color:#1e293b;max-width:640px">
@@ -112,6 +113,11 @@ function digestEmail(dateStr, alerts) {
     <ul style="margin:0;padding-left:18px">${a.violations.map(v => `<li>${esc(violationText(v))}</li>`).join('')}</ul>
     ${a.adminFixes.length ? `<p style="margin:6px 0 0;color:#1d4ed8">Corregido por administración: ${esc(a.adminFixes.join('; '))}</p>` : ''}
   </div>`).join('')}
+  ${failures.length ? `
+  <div style="border:1px solid #fecaca;background:#fef2f2;border-radius:8px;padding:12px 16px;margin:10px 0">
+    <p style="margin:0 0 6px;color:#b91c1c"><b>Envíos fallidos (${failures.length})</b> — no llegó el correo a:</p>
+    <ul style="margin:0;padding-left:18px;color:#b91c1c">${failures.map(f => `<li>${esc(f)}</li>`).join('')}</ul>
+  </div>` : ''}
 </div>`;
   return { subject: `Incidencias de fichaje – ${d} (${alerts.length} operarios)`, text, html };
 }
@@ -313,7 +319,7 @@ export default async function handler(req, res) {
 
       const alerts = await computeAlerts(supabase, date, settings);
 
-      const report = { date, autoClosed, alerts: alerts.length, emailsSent: 0, skippedNoEmail: 0, digestSent: false, resendConfigured: !!process.env.RESEND_API_KEY };
+      const report = { date, autoClosed, alerts: alerts.length, emailsSent: 0, skippedNoEmail: 0, digestSent: false, failures: [], resendConfigured: !!process.env.RESEND_API_KEY };
       if (alerts.length === 0) {
         await supabase.from('app_settings').upsert({ key: 'emailAlertsState', value: { lastSentDate: date } });
         return res.status(200).json({ success: true, ...report });
@@ -324,11 +330,21 @@ export default async function handler(req, res) {
         return res.status(200).json({ success: true, ...report, pending: alerts.map(a => a.name) });
       }
 
-      for (const a of alerts) {
-        if (!a.email || !EMAIL_RE.test(a.email)) { report.skippedNoEmail++; continue; }
-        const mail = workerEmail(a.name, date, a.violations, a.adminFixes);
-        await sendEmail({ to: a.email, ...mail });
-        report.emailsSent++;
+      // Envios en tandas de 5: un fallo puntual no aborta el resto
+      const mailable = alerts.filter(a => a.email && EMAIL_RE.test(a.email));
+      report.skippedNoEmail = alerts.length - mailable.length;
+      for (let i = 0; i < mailable.length; i += 5) {
+        const batch = mailable.slice(i, i + 5);
+        await Promise.all(batch.map(async a => {
+          try {
+            const mail = workerEmail(a.name, date, a.violations, a.adminFixes);
+            await sendEmail({ to: a.email, ...mail });
+            report.emailsSent++;
+          } catch (e) {
+            console.error(`Fallo enviando aviso a ${a.name}:`, e.message);
+            report.failures.push(`${a.name} <${a.email}>: ${e.message}`);
+          }
+        }));
       }
 
       const digestRecipients = String(settings.officeDigestEmail || '')
@@ -336,14 +352,45 @@ export default async function handler(req, res) {
         .map(e => e.trim())
         .filter(e => EMAIL_RE.test(e));
       if (digestRecipients.length) {
-        const mail = digestEmail(date, alerts);
-        for (const to of digestRecipients) await sendEmail({ to, ...mail });
-        report.digestSent = true;
+        const mail = digestEmail(date, alerts, report.failures);
+        for (const to of digestRecipients) {
+          try {
+            await sendEmail({ to, ...mail });
+            report.digestSent = true;
+          } catch (e) {
+            console.error(`Fallo enviando resumen a ${to}:`, e.message);
+            report.failures.push(`Resumen a ${to}: ${e.message}`);
+          }
+        }
         report.digestRecipients = digestRecipients.length;
       }
 
-      await supabase.from('app_settings').upsert({ key: 'emailAlertsState', value: { lastSentDate: date } });
+      await supabase.from('app_settings').upsert({ key: 'emailAlertsState', value: { lastSentDate: date, lastReport: report } });
       return res.status(200).json({ success: true, ...report });
+    }
+
+    // ---------- Reenvio manual del resumen de oficina de un dia (x-cron-secret) ----------
+    if (action === 'resend-digest') {
+      if (req.headers['x-cron-secret'] !== process.env.CRON_SECRET) {
+        return res.status(401).json({ error: 'No autorizado' });
+      }
+      const settings = await getEmailSettings(supabase);
+      const date = typeof body.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.date) ? body.date : madridDateStr();
+      const alerts = await computeAlerts(supabase, date, settings);
+      const digestRecipients = String(settings.officeDigestEmail || '')
+        .split(/[;,]/)
+        .map(e => e.trim())
+        .filter(e => EMAIL_RE.test(e));
+      if (!process.env.RESEND_API_KEY || digestRecipients.length === 0) {
+        return res.status(200).json({ success: true, date, alerts: alerts.length, sent: 0, resendConfigured: !!process.env.RESEND_API_KEY });
+      }
+      const mail = digestEmail(date, alerts);
+      let sent = 0;
+      for (const to of digestRecipients) {
+        try { await sendEmail({ to, ...mail }); sent++; }
+        catch (e) { console.error(`Fallo resumen a ${to}:`, e.message); }
+      }
+      return res.status(200).json({ success: true, date, alerts: alerts.length, sent });
     }
 
     // ---------- Vista previa (admin) ----------
