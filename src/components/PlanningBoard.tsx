@@ -1,7 +1,7 @@
 
 import * as React from 'react';
 import { useState, useEffect, useRef } from 'react';
-import { Clock, MapPin, Users, Plus, Edit2, X, AlertCircle, Search, Move, AlertTriangle, Euro, ArrowRightLeft, CheckCircle2, MoreHorizontal, CalendarPlus, Ban, Flag, Briefcase, Award, TrendingUp, UserCheck, StickyNote, Stethoscope, FileText, List, FileSpreadsheet } from 'lucide-react';
+import { Clock, MapPin, Users, Plus, Edit2, X, AlertCircle, Search, Move, AlertTriangle, Euro, ArrowRightLeft, CheckCircle2, Check, MoreHorizontal, CalendarPlus, Ban, Flag, Briefcase, Award, TrendingUp, UserCheck, StickyNote, Stethoscope, FileText, List, FileSpreadsheet } from 'lucide-react';
 import { Job, PlanningState, Worker, WorkerStatus, ContractType, ReinforcementGroup } from '../lib/types';
 import { isTimeOverlap, checkContinuityRisk, formatDateDMY, getWorkerDisplayName, toLocalISODate, getCurrentWorkerStatusForDate } from '../lib/utils';
 import { GENERAL_NOTE_WORKER_ID } from '../lib/constants';
@@ -644,9 +644,9 @@ const PlanningBoard: React.FC<PlanningBoardProps> = ({
                                     <button
                                       onClick={(e) => { e.stopPropagation(); handleToggleVerified(job); }}
                                       title={job.isVerified ? 'Verificada — pulsar para quitar la marca' : 'Marcar datos de la tarea como verificados'}
-                                      className="shrink-0 transition-colors"
+                                      className={`shrink-0 w-4 h-4 rounded-full flex items-center justify-center transition-colors ${job.isVerified ? 'bg-green-600 shadow-sm' : 'border-2 border-slate-300 hover:border-slate-400'}`}
                                     >
-                                      <CheckCircle2 className={`w-3.5 h-3.5 transition-colors ${job.isVerified ? 'text-green-500' : 'text-slate-300 hover:text-slate-400'}`} />
+                                      {job.isVerified && <Check className="w-2.5 h-2.5 text-white" strokeWidth={4} />}
                                     </button>
                                   </div>
                                 </div>
