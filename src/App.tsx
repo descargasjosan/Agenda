@@ -6783,13 +6783,13 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                            <div className="text-[10px] font-bold text-blue-500 uppercase">Derecho</div>
                            <div className="text-[9px] text-blue-400">{vac.totalDays} + {vac.carryOver} arr.</div>
                         </div>
-                        <div className="bg-amber-50 rounded-xl p-3 text-center">
-                           <div className="text-xl font-black text-amber-700">{vac.usedDays}</div>
-                           <div className="text-[10px] font-bold text-amber-500 uppercase">Disfrutados</div>
+                        <div className="bg-emerald-50 rounded-xl p-3 text-center">
+                           <div className="text-xl font-black text-emerald-700">{vac.usedDays}</div>
+                           <div className="text-[10px] font-bold text-emerald-500 uppercase">Disfrutados</div>
                         </div>
-                        <div className={`rounded-xl p-3 text-center ${vac.remaining >= 0 ? 'bg-emerald-50' : 'bg-red-50'}`}>
-                           <div className={`text-xl font-black ${vac.remaining >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>{vac.remaining}</div>
-                           <div className={`text-[10px] font-bold uppercase ${vac.remaining >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>Pendientes</div>
+                        <div className={`rounded-xl p-3 text-center ${vac.remaining >= 0 ? 'bg-orange-50' : 'bg-red-50'}`}>
+                           <div className={`text-xl font-black ${vac.remaining >= 0 ? 'text-orange-600' : 'text-red-700'}`}>{vac.remaining}</div>
+                           <div className={`text-[10px] font-bold uppercase ${vac.remaining >= 0 ? 'text-orange-500' : 'text-red-500'}`}>Pendientes</div>
                         </div>
                      </div>
 
@@ -6874,13 +6874,13 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                                  <div className="text-xs font-black text-blue-700 leading-none">{vac.entitled}</div>
                                  <div className="text-[8px] font-bold text-blue-500 uppercase mt-0.5">Derecho</div>
                               </div>
-                              <div className="bg-amber-50 rounded-lg px-2.5 py-1.5 text-center">
-                                 <div className="text-xs font-black text-amber-700 leading-none">{vac.usedDays}</div>
-                                 <div className="text-[8px] font-bold text-amber-500 uppercase mt-0.5">Disfrut.</div>
+                              <div className="bg-emerald-50 rounded-lg px-2.5 py-1.5 text-center">
+                                 <div className="text-xs font-black text-emerald-700 leading-none">{vac.usedDays}</div>
+                                 <div className="text-[8px] font-bold text-emerald-500 uppercase mt-0.5">Disfrut.</div>
                               </div>
-                              <div className={`rounded-lg px-2.5 py-1.5 text-center ${vac.remaining >= 0 ? 'bg-emerald-50' : 'bg-red-50'}`}>
-                                 <div className={`text-xs font-black leading-none ${vac.remaining >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>{vac.remaining}</div>
-                                 <div className={`text-[8px] font-bold uppercase mt-0.5 ${vac.remaining >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>Pend.</div>
+                              <div className={`rounded-lg px-2.5 py-1.5 text-center ${vac.remaining >= 0 ? 'bg-orange-50' : 'bg-red-50'}`}>
+                                 <div className={`text-xs font-black leading-none ${vac.remaining >= 0 ? 'text-orange-600' : 'text-red-700'}`}>{vac.remaining}</div>
+                                 <div className={`text-[8px] font-bold uppercase mt-0.5 ${vac.remaining >= 0 ? 'text-orange-500' : 'text-red-500'}`}>Pend.</div>
                               </div>
                            </div>
                         </div>
