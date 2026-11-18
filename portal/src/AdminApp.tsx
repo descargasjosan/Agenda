@@ -1070,6 +1070,7 @@ function SettingsPanel({ apiCall, token }: { apiCall: (payload: Record<string, u
   const [emailDigest, setEmailDigest] = useState('david.solano@descargasjosan.com');
   const [emailConds, setEmailConds] = useState<EmailConds>({ noEntry: true, noExit: true, openPause: true, late: true });
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewDate, setPreviewDate] = useState(madridDateStrLocal());
   const [preview, setPreview] = useState<{ date: string; resendConfigured: boolean; alerts: { name: string; email: string | null; violations: string[]; adminFixes: string[] }[] } | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -1122,7 +1123,7 @@ function SettingsPanel({ apiCall, token }: { apiCall: (payload: Record<string, u
       const res = await fetch(EMAIL_API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ action: 'preview' })
+        body: JSON.stringify({ action: 'preview', date: previewDate })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || data.error || 'Error');
@@ -1357,14 +1358,22 @@ function SettingsPanel({ apiCall, token }: { apiCall: (payload: Record<string, u
               <p className="text-[11px] font-bold text-slate-400 mt-1.5">Recibe un correo con todas las incidencias del día. Puedes poner varios correos separados por comas.</p>
             </div>
 
-            <button
-              onClick={runPreview}
-              disabled={previewLoading}
-              className="w-full flex items-center justify-center gap-2 rounded-2xl border-2 border-blue-200 bg-blue-50 p-4 text-sm font-black text-blue-700 uppercase tracking-wide transition-all hover:border-blue-300 disabled:opacity-50"
-            >
-              {previewLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
-              Vista previa de hoy
-            </button>
+            <div className="flex gap-2">
+              <input
+                type="date"
+                value={previewDate}
+                onChange={e => e.target.value && setPreviewDate(e.target.value)}
+                className="w-40 rounded-2xl border-2 border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-900 outline-none focus:border-blue-500"
+              />
+              <button
+                onClick={runPreview}
+                disabled={previewLoading}
+                className="flex-1 flex items-center justify-center gap-2 rounded-2xl border-2 border-blue-200 bg-blue-50 p-4 text-sm font-black text-blue-700 uppercase tracking-wide transition-all hover:border-blue-300 disabled:opacity-50"
+              >
+                {previewLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+                Vista previa
+              </button>
+            </div>
 
           </div>
         )}
