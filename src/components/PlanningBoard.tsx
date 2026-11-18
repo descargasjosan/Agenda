@@ -655,12 +655,10 @@ const PlanningBoard: React.FC<PlanningBoardProps> = ({
                                 <div className="lg:w-64 px-4 py-1 border-b lg:border-b-0 lg:border-r border-slate-100 shrink-0 group/actions">
                                   <div className="flex items-center justify-between">
                                     {/* Columna A: Texto y Referencia */}
-                                    <div className="text-left flex-1">
-                                      <div className="flex items-center gap-1">
-                                        <p className="text-[11px] font-black text-slate-900 leading-tight truncate">
-                                          {(job.customName || job.type).length > 256 
-                                            ? `${(job.customName || job.type).substring(0, 256)}...` 
-                                            : (job.customName || job.type)}
+                                    <div className="text-left flex-1 min-w-0">
+                                      <div className="flex items-start gap-1">
+                                        <p className="text-[11px] font-black text-slate-900 leading-tight line-clamp-2 min-w-0" title={job.customName || job.type}>
+                                          {(job.customName || job.type)}
                                         </p>
                                         {job.notes && (
                                           <button
@@ -680,8 +678,8 @@ const PlanningBoard: React.FC<PlanningBoardProps> = ({
                                       {job.ref && <p className="text-[10px] font-bold text-slate-600 truncate italic">{job.ref}</p>}
                                     </div>
                                     
-                                    {/* Columna B: Iconos */}
-                                    <div className="grid grid-cols-2 gap-0.5 z-30 relative">
+                                    {/* Columna B: Iconos (columna fija, no se comprime) */}
+                                    <div className="grid grid-cols-2 gap-0.5 z-30 relative shrink-0 ml-1.5 w-8">
                                       <button 
                                         onClick={(e) => { e.stopPropagation(); onDuplicateJob(job); }} 
                                         onMouseDown={(e) => e.stopPropagation()}
