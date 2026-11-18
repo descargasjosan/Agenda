@@ -164,14 +164,14 @@ async function runTick(supabase) {
       tag: `clock-${item.notify_date}`
     });
 
-    let ok = false;
+    let sentCount = 0;
     for (const sub of subs) {
       try {
         await webpush.sendNotification(
           { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
           payload
         );
-        ok = true;
+        sentCount++;
       } catch (e) {
         // 404/410: suscripcion muerta -> borrarla
         if (e.statusCode === 404 || e.statusCode === 410) {
@@ -184,9 +184,9 @@ async function runTick(supabase) {
 
     await supabase
       .from('push_queue')
-      .update({ sent_at: now, result: ok ? 'sent' : 'failed' })
+      .update({ sent_at: now, result: `${sentCount > 0 ? 'sent' : 'failed'} ${sentCount}/${subs.length}` })
       .eq('id', item.id);
-    ok ? results.sent++ : results.failed++;
+    sentCount > 0 ? results.sent++ : results.failed++;
   }
 
   await pruneQueue(supabase);
