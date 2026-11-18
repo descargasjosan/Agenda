@@ -234,6 +234,7 @@ export interface Job {
   isCancelled?: boolean; 
   cancellationReason?: string; 
   isFinished?: boolean;
+  isVerified?: boolean; // Marca de datos verificados (check junto al albarán)
   isImposed?: boolean; // 🆕 Si es una imposición del cliente
 }
 

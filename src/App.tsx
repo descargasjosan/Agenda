@@ -2129,7 +2129,8 @@ const [planningFilter, setPlanningFilter] = useState('');
       ref: keepDeliveryNoteOnDuplicate ? (duplicatingJob.ref || '') : '', // Control explícito del ref
       deliveryNote: keepDeliveryNoteOnDuplicate ? (duplicatingJob.deliveryNote || '') : '', // Control explícito del deliveryNote
       reinforcementGroups: [], // 🛡️ FORZAR: Siempre vacío en duplicación
-      workerTimes: {} // 🛡️ FORZAR: Siempre vacío en duplicación
+      workerTimes: {}, // 🛡️ FORZAR: Siempre vacío en duplicación
+      isVerified: false // La copia para otra fecha debe reverificarse
     };
     
     

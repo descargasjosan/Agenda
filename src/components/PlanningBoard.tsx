@@ -92,10 +92,21 @@ const PlanningBoard: React.FC<PlanningBoardProps> = ({
     }, 50);
   };
 
+  // FUNCIÓN PARA VERIFICAR TAREA (check junto al albarán)
+  const handleToggleVerified = (job: Job) => {
+    const updatedJob = { ...job, isVerified: !job.isVerified };
+    if (persistJob) {
+      persistJob(updatedJob);
+    } else {
+      onEditJob(updatedJob);
+    }
+  };
+
   const handleDeliveryNoteSave = (jobId: string, newValue: string) => {
     const job = planning.jobs.find(j => j.id === jobId);
     if (job) {
-      const updatedJob = { ...job, deliveryNote: newValue };
+      // Si el albarán cambia, la verificación deja de ser válida
+      const updatedJob = { ...job, deliveryNote: newValue, isVerified: newValue === job.deliveryNote ? job.isVerified : false };
       // Guardar directamente usando persistJob si está disponible
       if (persistJob) {
         persistJob(updatedJob);
@@ -630,6 +641,13 @@ const PlanningBoard: React.FC<PlanningBoardProps> = ({
                                         {job.deliveryNote || '-'}
                                       </span>
                                     )}
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); handleToggleVerified(job); }}
+                                      title={job.isVerified ? 'Verificada — pulsar para quitar la marca' : 'Marcar datos de la tarea como verificados'}
+                                      className="shrink-0 transition-colors"
+                                    >
+                                      <CheckCircle2 className={`w-3.5 h-3.5 transition-colors ${job.isVerified ? 'text-green-500' : 'text-slate-300 hover:text-slate-400'}`} />
+                                    </button>
                                   </div>
                                 </div>
 
