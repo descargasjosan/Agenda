@@ -251,6 +251,7 @@ const [settleCutoff, setSettleCutoff] = useState<number>(() => {
   return isNaN(saved) ? 28 : saved;
 });
 const [vacationModal, setVacationModal] = useState<{workerId: string} | null>(null);
+const [vacationCalendar, setVacationCalendar] = useState<string | null>(null);
 const [vacationModalData, setVacationModalData] = useState<{totalDays: number, carryOver: number}>({totalDays: 34, carryOver: 0});
 
 // Función para actualizar el mes seleccionado
@@ -6445,13 +6446,22 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                                           const vac = calculateVacationBalance(worker.id);
                                           const color = vac.remaining > 0 ? 'text-emerald-600' : vac.remaining < 0 ? 'text-red-600' : 'text-slate-400';
                                           return (
+                                            <div className="flex items-center justify-center gap-0.5">
                                              <button
                                                 onClick={() => openVacationModal(worker.id)}
                                                 title={`Derecho: ${vac.totalDays} días${vac.carryOver !== 0 ? ` + ${vac.carryOver} arrastre` : ''} | Disfrutados: ${vac.usedDays} | Pendientes: ${vac.remaining}`}
-                                                className="w-full flex items-center justify-center px-1 py-0.5 rounded-lg hover:bg-emerald-50 transition-colors"
+                                                className="flex-1 flex items-center justify-center px-1 py-0.5 rounded-lg hover:bg-emerald-50 transition-colors"
                                              >
                                                 <span className={`text-xs font-black ${color}`}>{vac.remaining}</span>
                                              </button>
+                                             <button
+                                                onClick={(e) => { e.stopPropagation(); setVacationCalendar(worker.id); }}
+                                                title="Ver calendario anual de vacaciones"
+                                                className="px-1 py-0.5 rounded-lg text-slate-300 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+                                             >
+                                                <CalendarDays className="w-3.5 h-3.5" />
+                                             </button>
+                                            </div>
                                           );
                                        })()}
                                     </td>
@@ -6813,6 +6823,69 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                         <button onClick={() => setVacationModal(null)} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-xs font-black text-slate-600 hover:bg-slate-50 transition-colors">Cancelar</button>
                         <button onClick={saveVacationConfig} className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white text-xs font-black hover:bg-emerald-700 transition-colors">Guardar</button>
                      </div>
+                  </div>
+               </div>
+            );
+         })()}
+
+         {/* Modal: calendario anual de vacaciones */}
+         {vacationCalendar && (() => {
+            const worker = planning.workers.find(w => w.id === vacationCalendar);
+            const year = selectedMonth.split('-')[0];
+            const todayStr = toLocalISODate(new Date());
+            const vacationDays = new Set<string>();
+            for (const r of worker?.statusRecords || []) {
+               const st = r.status as string;
+               if (st !== WorkerStatus.VACACIONES && st !== 'Vacaciones' && st !== 'VACACIONES') continue;
+               const d = new Date(`${r.startDate}T00:00:00`);
+               const end = new Date(`${r.endDate || '9999-12-31'}T00:00:00`);
+               for (let guard = 0; d <= end && guard < 400; guard++) {
+                  const ds = toLocalISODate(d);
+                  if (ds.startsWith(year)) vacationDays.add(ds);
+                  d.setDate(d.getDate() + 1);
+               }
+            }
+            const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+            const WD = ['L','M','X','J','V','S','D'];
+            return (
+               <div className="fixed inset-0 z-[400] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4" onClick={() => setVacationCalendar(null)}>
+                  <div className="bg-white w-full max-w-4xl rounded-[28px] p-6 shadow-2xl animate-in zoom-in-95 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                     <div className="flex justify-between items-center mb-5">
+                        <div>
+                           <h3 className="text-base font-black text-slate-900 uppercase italic">Vacaciones {year}</h3>
+                           <p className="text-xs text-slate-500 font-bold">{worker?.name}</p>
+                        </div>
+                        <button onClick={() => setVacationCalendar(null)} className="p-2 rounded-xl hover:bg-slate-100 transition-colors">
+                           <X className="w-4 h-4 text-slate-500" />
+                        </button>
+                     </div>
+                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                        {MONTHS.map((mName, m) => {
+                           const daysInMonth = new Date(Number(year), m + 1, 0).getDate();
+                           const startCol = (new Date(Number(year), m, 1).getDay() + 6) % 7;
+                           return (
+                              <div key={m} className="bg-slate-50 rounded-xl p-3">
+                                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">{mName}</p>
+                                 <div className="grid grid-cols-7 gap-0.5 text-center">
+                                    {WD.map((d, i) => <span key={i} className="text-[8px] font-bold text-slate-300">{d}</span>)}
+                                    {Array.from({ length: startCol }).map((_, i) => <span key={`b${i}`} />)}
+                                    {Array.from({ length: daysInMonth }, (_, i) => {
+                                       const ds = `${year}-${String(m + 1).padStart(2, '0')}-${String(i + 1).padStart(2, '0')}`;
+                                       const isVac = vacationDays.has(ds);
+                                       return (
+                                          <span key={i} className={`text-[9px] py-0.5 rounded ${
+                                             isVac ? 'bg-green-300 text-green-900 font-black' : 'text-slate-500'
+                                          } ${ds === todayStr ? 'ring-1 ring-blue-500' : ''}`}>{i + 1}</span>
+                                       );
+                                    })}
+                                 </div>
+                              </div>
+                           );
+                        })}
+                     </div>
+                     <p className="mt-4 flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                        <span className="w-3 h-3 rounded bg-green-300 inline-block" /> Días de vacaciones
+                     </p>
                   </div>
                </div>
             );
