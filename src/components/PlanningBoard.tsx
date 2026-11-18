@@ -105,8 +105,7 @@ const PlanningBoard: React.FC<PlanningBoardProps> = ({
   const handleDeliveryNoteSave = (jobId: string, newValue: string) => {
     const job = planning.jobs.find(j => j.id === jobId);
     if (job) {
-      // Si el albarán cambia, la verificación deja de ser válida
-      const updatedJob = { ...job, deliveryNote: newValue, isVerified: newValue === job.deliveryNote ? job.isVerified : false };
+      const updatedJob = { ...job, deliveryNote: newValue };
       // Guardar directamente usando persistJob si está disponible
       if (persistJob) {
         persistJob(updatedJob);
