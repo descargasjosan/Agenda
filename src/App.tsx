@@ -6445,6 +6445,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                                        {(() => {
                                           const vac = calculateVacationBalance(worker.id);
                                           const color = vac.remaining > 0 ? 'text-emerald-600' : vac.remaining < 0 ? 'text-red-600' : 'text-slate-400';
+                                          const hasPendingReq = vacationRequests.some(r => r.worker_id === worker.id);
                                           return (
                                             <div className="flex items-center justify-center gap-0.5">
                                              <button
@@ -6456,8 +6457,8 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                                              </button>
                                              <button
                                                 onClick={(e) => { e.stopPropagation(); setVacationCalendar(worker.id); }}
-                                                title="Ver calendario anual de vacaciones"
-                                                className="px-1 py-0.5 rounded-lg text-slate-300 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+                                                title={hasPendingReq ? 'Ver calendario anual — tiene solicitudes pendientes' : 'Ver calendario anual de vacaciones'}
+                                                className={`px-1 py-0.5 rounded-lg transition-colors ${hasPendingReq ? 'text-orange-400 bg-orange-50 hover:bg-orange-100' : 'text-slate-300 hover:text-emerald-600 hover:bg-emerald-50'}`}
                                              >
                                                 <CalendarDays className="w-3.5 h-3.5" />
                                              </button>
