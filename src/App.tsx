@@ -6847,6 +6847,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
             }
             const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
             const WD = ['L','M','X','J','V','S','D'];
+            const vac = calculateVacationBalance(vacationCalendar);
             return (
                <div className="fixed inset-0 z-[400] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4" onClick={() => setVacationCalendar(null)}>
                   <div className="bg-white w-full max-w-4xl rounded-[28px] p-6 shadow-2xl animate-in zoom-in-95 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
@@ -6859,6 +6860,24 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                            <X className="w-4 h-4 text-slate-500" />
                         </button>
                      </div>
+
+                     {/* Resumen de saldo (solo lectura) */}
+                     <div className="grid grid-cols-3 gap-2 mb-5 max-w-md">
+                        <div className="bg-blue-50 rounded-xl p-3 text-center">
+                           <div className="text-xl font-black text-blue-700">{vac.entitled}</div>
+                           <div className="text-[10px] font-bold text-blue-500 uppercase">Derecho</div>
+                           <div className="text-[9px] text-blue-400">{vac.totalDays} + {vac.carryOver} arr.</div>
+                        </div>
+                        <div className="bg-amber-50 rounded-xl p-3 text-center">
+                           <div className="text-xl font-black text-amber-700">{vac.usedDays}</div>
+                           <div className="text-[10px] font-bold text-amber-500 uppercase">Disfrutados</div>
+                        </div>
+                        <div className={`rounded-xl p-3 text-center ${vac.remaining >= 0 ? 'bg-emerald-50' : 'bg-red-50'}`}>
+                           <div className={`text-xl font-black ${vac.remaining >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>{vac.remaining}</div>
+                           <div className={`text-[10px] font-bold uppercase ${vac.remaining >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>Pendientes</div>
+                        </div>
+                     </div>
+
                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                         {MONTHS.map((mName, m) => {
                            const daysInMonth = new Date(Number(year), m + 1, 0).getDate();
@@ -6872,9 +6891,10 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                                     {Array.from({ length: daysInMonth }, (_, i) => {
                                        const ds = `${year}-${String(m + 1).padStart(2, '0')}-${String(i + 1).padStart(2, '0')}`;
                                        const isVac = vacationDays.has(ds);
+                                       const isHol = Boolean(isHoliday(ds, planning.customHolidays));
                                        return (
                                           <span key={i} className={`text-[9px] py-0.5 rounded ${
-                                             isVac ? 'bg-green-300 text-green-900 font-black' : 'text-slate-500'
+                                             isVac ? 'bg-green-300 text-green-900 font-black' : isHol ? 'text-red-500 font-black' : 'text-slate-500'
                                           } ${ds === todayStr ? 'ring-1 ring-blue-500' : ''}`}>{i + 1}</span>
                                        );
                                     })}
@@ -6883,8 +6903,9 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                            );
                         })}
                      </div>
-                     <p className="mt-4 flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                        <span className="w-3 h-3 rounded bg-green-300 inline-block" /> Días de vacaciones
+                     <p className="mt-4 flex items-center gap-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-green-300 inline-block" /> Vacaciones</span>
+                        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-red-500 inline-block" /> Festivos</span>
                      </p>
                   </div>
                </div>
