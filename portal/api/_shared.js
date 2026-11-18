@@ -123,7 +123,7 @@ export function jobWorkerStart(jobData, workerId) {
 // su jornada real empieza en la siguiente tarea. Los tres de la lista son
 // personal de oficina: para ellos la primera tarea SI es su inicio de jornada.
 
-export const OFFICE_WORKER_IDS = ['w-hphov06e8', 'w-dcjbr3ap2', 'w-10vyi3rbw'];
+export const OFFICE_WORKER_IDS = ['w-hphov06e8', 'w-dcjbr3ap2', 'w-10vyi3rbw', 'w-muqt3bdin', 'w-flwqqbyzf'];
 
 export function isOfficeJob(jobData, officeClientIds) {
   const d = jobData || {};
