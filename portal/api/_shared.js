@@ -23,8 +23,7 @@ export async function authenticateWorker(supabase, res, dni, pin) {
   const { data: workerRows, error: workerError } = await supabase
     .from('workers')
     .select('id, data')
-    .ilike('data->>dni', normalizedDni)
-    .limit(1);
+    .ilike('data->>dni', normalizedDni);
 
   if (workerError) {
     console.error('Error buscando operario:', workerError);
@@ -42,7 +41,10 @@ export async function authenticateWorker(supabase, res, dni, pin) {
     return { error: true };
   }
 
-  const worker = { ...workerRows[0].data, id: workerRows[0].id };
+  // Puede haber fichas duplicadas por DNI (p.ej. una archivada y otra
+  // activa tras una reincorporacion): se usa la activa si existe.
+  const row = workerRows.find(r => !(r.data || {}).isArchived) || workerRows[0];
+  const worker = { ...row.data, id: row.id };
 
   if (worker.isArchived || !verifyPin(worker, String(pin || ''))) {
     denied();
