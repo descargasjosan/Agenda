@@ -6851,31 +6851,31 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
             return (
                <div className="fixed inset-0 z-[400] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4" onClick={() => setVacationCalendar(null)}>
                   <div className="bg-white w-full max-w-4xl rounded-[28px] p-6 shadow-2xl animate-in zoom-in-95 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-                     <div className="flex justify-between items-center mb-5">
-                        <div>
-                           <h3 className="text-base font-black text-slate-900 uppercase italic">Vacaciones {year}</h3>
-                           <p className="text-xs text-slate-500 font-bold">{worker?.name}</p>
+                     <div className="flex justify-between items-center gap-4 mb-5">
+                        <div className="flex items-center gap-4 min-w-0">
+                           <div className="min-w-0">
+                              <h3 className="text-base font-black text-slate-900 uppercase italic">Vacaciones {year}</h3>
+                              <p className="text-xs text-slate-500 font-bold truncate">{worker?.name}</p>
+                           </div>
+                           {/* Resumen de saldo (solo lectura) */}
+                           <div className="flex gap-1.5 shrink-0">
+                              <div className="bg-blue-50 rounded-lg px-2.5 py-1.5 text-center">
+                                 <div className="text-xs font-black text-blue-700 leading-none">{vac.entitled}</div>
+                                 <div className="text-[8px] font-bold text-blue-500 uppercase mt-0.5">Derecho</div>
+                              </div>
+                              <div className="bg-amber-50 rounded-lg px-2.5 py-1.5 text-center">
+                                 <div className="text-xs font-black text-amber-700 leading-none">{vac.usedDays}</div>
+                                 <div className="text-[8px] font-bold text-amber-500 uppercase mt-0.5">Disfrut.</div>
+                              </div>
+                              <div className={`rounded-lg px-2.5 py-1.5 text-center ${vac.remaining >= 0 ? 'bg-emerald-50' : 'bg-red-50'}`}>
+                                 <div className={`text-xs font-black leading-none ${vac.remaining >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>{vac.remaining}</div>
+                                 <div className={`text-[8px] font-bold uppercase mt-0.5 ${vac.remaining >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>Pend.</div>
+                              </div>
+                           </div>
                         </div>
-                        <button onClick={() => setVacationCalendar(null)} className="p-2 rounded-xl hover:bg-slate-100 transition-colors">
+                        <button onClick={() => setVacationCalendar(null)} className="p-2 rounded-xl hover:bg-slate-100 transition-colors shrink-0">
                            <X className="w-4 h-4 text-slate-500" />
                         </button>
-                     </div>
-
-                     {/* Resumen de saldo (solo lectura) */}
-                     <div className="grid grid-cols-3 gap-2 mb-5 max-w-md">
-                        <div className="bg-blue-50 rounded-xl p-3 text-center">
-                           <div className="text-xl font-black text-blue-700">{vac.entitled}</div>
-                           <div className="text-[10px] font-bold text-blue-500 uppercase">Derecho</div>
-                           <div className="text-[9px] text-blue-400">{vac.totalDays} + {vac.carryOver} arr.</div>
-                        </div>
-                        <div className="bg-amber-50 rounded-xl p-3 text-center">
-                           <div className="text-xl font-black text-amber-700">{vac.usedDays}</div>
-                           <div className="text-[10px] font-bold text-amber-500 uppercase">Disfrutados</div>
-                        </div>
-                        <div className={`rounded-xl p-3 text-center ${vac.remaining >= 0 ? 'bg-emerald-50' : 'bg-red-50'}`}>
-                           <div className={`text-xl font-black ${vac.remaining >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>{vac.remaining}</div>
-                           <div className={`text-[10px] font-bold uppercase ${vac.remaining >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>Pendientes</div>
-                        </div>
                      </div>
 
                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
