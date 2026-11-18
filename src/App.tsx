@@ -6845,6 +6845,17 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                   d.setDate(d.getDate() + 1);
                }
             }
+            const pendingDays = new Set<string>();
+            for (const req of vacationRequests) {
+               if (req.worker_id !== vacationCalendar || !req.start_date || !req.end_date) continue;
+               const d = new Date(`${req.start_date}T00:00:00`);
+               const end = new Date(`${req.end_date}T00:00:00`);
+               for (let guard = 0; d <= end && guard < 400; guard++) {
+                  const ds = toLocalISODate(d);
+                  if (ds.startsWith(year)) pendingDays.add(ds);
+                  d.setDate(d.getDate() + 1);
+               }
+            }
             const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
             const WD = ['L','M','X','J','V','S','D'];
             const vac = calculateVacationBalance(vacationCalendar);
@@ -6891,10 +6902,11 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                                     {Array.from({ length: daysInMonth }, (_, i) => {
                                        const ds = `${year}-${String(m + 1).padStart(2, '0')}-${String(i + 1).padStart(2, '0')}`;
                                        const isVac = vacationDays.has(ds);
+                                       const isPend = !isVac && pendingDays.has(ds);
                                        const isHol = Boolean(isHoliday(ds, planning.customHolidays));
                                        return (
                                           <span key={i} className={`text-[9px] py-0.5 rounded ${
-                                             isVac ? 'bg-green-300 text-green-900 font-black' : isHol ? 'text-red-500 font-black' : 'text-slate-500'
+                                             isVac ? 'bg-green-300 text-green-900 font-black' : isPend ? 'bg-orange-200 text-orange-800 font-black' : isHol ? 'text-red-500 font-black' : 'text-slate-500'
                                           } ${ds === todayStr ? 'ring-1 ring-blue-500' : ''}`}>{i + 1}</span>
                                        );
                                     })}
@@ -6905,6 +6917,7 @@ const getCorrectWorkerStatus = (worker: Worker): WorkerStatus => getCurrentWorke
                      </div>
                      <p className="mt-4 flex items-center gap-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                         <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-green-300 inline-block" /> Vacaciones</span>
+                        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-orange-200 inline-block" /> Solicitadas</span>
                         <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-red-500 inline-block" /> Festivos</span>
                      </p>
                   </div>
