@@ -3,3 +3,6 @@ dist/
 .env.local
 .env
 *.local
+
+# Datos locales de importación (datos personales, no versionar)
+*.csv
