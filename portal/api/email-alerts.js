@@ -229,15 +229,80 @@ async function computeAlerts(supabase, date, settings) {
 
 // ---- Envio por Resend ----
 
+const mailFrom = () => process.env.EMAIL_FROM || 'Descargas Josan <avisos@descargasjosan.com>';
+
 async function sendEmail(mail) {
-  const apiKey = process.env.RESEND_API_KEY;
-  const from = process.env.EMAIL_FROM || 'Descargas Josan <avisos@descargasjosan.com>';
   const r = await fetch('https://api.resend.com/emails', {
     method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from, to: mail.to, subject: mail.subject, text: mail.text, html: mail.html })
+    headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from: mailFrom(), to: mail.to, subject: mail.subject, text: mail.text, html: mail.html })
   });
   if (!r.ok) throw new Error(`Resend ${r.status}: ${await r.text()}`);
+}
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// Envio por lotes: toda la remesa en UNA peticion a Resend (hasta 100 correos).
+// Evita el limite de 10 peticiones/segundo que tumbo el envio masivo.
+// Devuelve un Set con los emails que fallaron (validacion individual).
+async function sendEmailsBatch(mails) {
+  const r = await fetch('https://api.resend.com/emails/batch', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(mails.map(m => ({ from: mailFrom(), to: m.to, subject: m.subject, text: m.text, html: m.html })))
+  });
+  const body = await r.text();
+  if (!r.ok) throw new Error(`Resend batch ${r.status}: ${body}`);
+  // Si algun correo individual falla la validacion, Resend lo reporta en errors
+  try {
+    const parsed = JSON.parse(body);
+    const failed = new Set();
+    for (const e of parsed.errors || []) {
+      if (e?.email) failed.add(e.email);
+    }
+    return failed;
+  } catch { return new Set(); }
+}
+
+// Fallback secuencial espaciado + reintento ante 429
+async function sendEmailsSequentially(items, report, label = '') {
+  for (const a of items) {
+    const mail = workerEmail(a.name, report.date, a.violations, a.adminFixes);
+    try {
+      await sendEmail({ to: a.email, ...mail });
+      report.emailsSent++;
+    } catch (e) {
+      if (/429/.test(e.message)) {
+        await sleep(1200);
+        try {
+          await sendEmail({ to: a.email, ...mail });
+          report.emailsSent++;
+          continue;
+        } catch (e2) {
+          report.failures.push(`${label}${a.name} <${a.email}>: ${e2.message}`);
+          continue;
+        }
+      }
+      report.failures.push(`${label}${a.name} <${a.email}>: ${e.message}`);
+    }
+    await sleep(120);
+  }
+}
+
+// Envia los avisos de operario: intenta el lote; si el endpoint falla,
+// va uno a uno espaciado (mas lento pero siempre por debajo del rate limit)
+async function sendWorkerEmails(mailable, report) {
+  try {
+    const mails = mailable.map(a => ({ to: a.email, ...workerEmail(a.name, report.date, a.violations, a.adminFixes) }));
+    const failed = await sendEmailsBatch(mails);
+    for (const a of mailable) {
+      if (failed.has(a.email)) report.failures.push(`${a.name} <${a.email}>: rechazado en lote`);
+      else report.emailsSent++;
+    }
+  } catch (e) {
+    console.error('Lote Resend fallido, envio secuencial:', e.message);
+    await sendEmailsSequentially(mailable, report);
+  }
 }
 
 async function getRunState(supabase) {
@@ -330,22 +395,10 @@ export default async function handler(req, res) {
         return res.status(200).json({ success: true, ...report, pending: alerts.map(a => a.name) });
       }
 
-      // Envios en tandas de 5: un fallo puntual no aborta el resto
+      // Toda la remesa en una unica peticion (lote Resend); fallback secuencial
       const mailable = alerts.filter(a => a.email && EMAIL_RE.test(a.email));
       report.skippedNoEmail = alerts.length - mailable.length;
-      for (let i = 0; i < mailable.length; i += 5) {
-        const batch = mailable.slice(i, i + 5);
-        await Promise.all(batch.map(async a => {
-          try {
-            const mail = workerEmail(a.name, date, a.violations, a.adminFixes);
-            await sendEmail({ to: a.email, ...mail });
-            report.emailsSent++;
-          } catch (e) {
-            console.error(`Fallo enviando aviso a ${a.name}:`, e.message);
-            report.failures.push(`${a.name} <${a.email}>: ${e.message}`);
-          }
-        }));
-      }
+      await sendWorkerEmails(mailable, report);
 
       const digestRecipients = String(settings.officeDigestEmail || '')
         .split(/[;,]/)
@@ -361,6 +414,7 @@ export default async function handler(req, res) {
             console.error(`Fallo enviando resumen a ${to}:`, e.message);
             report.failures.push(`Resumen a ${to}: ${e.message}`);
           }
+          await sleep(200);
         }
         report.digestRecipients = digestRecipients.length;
       }
@@ -391,6 +445,57 @@ export default async function handler(req, res) {
         catch (e) { console.error(`Fallo resumen a ${to}:`, e.message); }
       }
       return res.status(200).json({ success: true, date, alerts: alerts.length, sent });
+    }
+
+    // ---------- Reintento de los envios que fallaron en la ultima ejecucion ----------
+    if (action === 'retry-failures') {
+      if (req.headers['x-cron-secret'] !== process.env.CRON_SECRET) {
+        return res.status(401).json({ error: 'No autorizado' });
+      }
+      const settings = await getEmailSettings(supabase);
+      const state = await getRunState(supabase);
+      const prev = state.lastReport;
+      if (!prev || !prev.date) {
+        return res.status(400).json({ error: 'No hay informe previo' });
+      }
+      if (!process.env.RESEND_API_KEY) {
+        return res.status(200).json({ success: false, error: 'Resend no configurado' });
+      }
+      const date = prev.date;
+      const alerts = await computeAlerts(supabase, date, settings);
+      const failedEmails = new Set(
+        (prev.failures || []).map(f => (f.match(EMAIL_RE) || [])[0]).filter(Boolean)
+      );
+
+      const report = { ...prev, failures: [] };
+
+      // Reenviar solo a los operarios cuyo correo fallo
+      const toResend = alerts.filter(a => a.email && failedEmails.has(a.email));
+      await sendWorkerEmails(toResend, report);
+
+      // Reenviar el resumen si no salio
+      if (!prev.digestSent) {
+        const digestRecipients = String(settings.officeDigestEmail || '')
+          .split(/[;,]/)
+          .map(e => e.trim())
+          .filter(e => EMAIL_RE.test(e));
+        if (digestRecipients.length) {
+          const mail = digestEmail(date, alerts, report.failures);
+          for (const to of digestRecipients) {
+            try {
+              await sendEmail({ to, ...mail });
+              report.digestSent = true;
+            } catch (e) {
+              report.failures.push(`Resumen a ${to}: ${e.message}`);
+            }
+            await sleep(200);
+          }
+          report.digestRecipients = digestRecipients.length;
+        }
+      }
+
+      await supabase.from('app_settings').upsert({ key: 'emailAlertsState', value: { lastSentDate: date, lastReport: report } });
+      return res.status(200).json({ success: true, retried: toResend.length, ...report });
     }
 
     // ---------- Vista previa (admin) ----------
