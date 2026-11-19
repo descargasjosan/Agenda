@@ -290,6 +290,7 @@ interface ModalState {
   workerId: string;
   date: string;
   log?: AdminLog;
+  defaultType?: string;
 }
 
 function ActionModal({
@@ -303,7 +304,7 @@ function ActionModal({
   onSubmit: (payload: { type?: string; ts?: string; reason: string }) => void;
   saving: boolean;
 }) {
-  const [type, setType] = useState('in');
+  const [type, setType] = useState(modal.defaultType || 'in');
   const [dateTime, setDateTime] = useState(() => {
     const base = modal.log ? new Date(modal.log.ts) : new Date(`${modal.date}T08:00`);
     const local = new Date(base.getTime() - base.getTimezoneOffset() * 60000);
@@ -422,7 +423,7 @@ const STATE_DOT: Record<OverviewWorker['state'], string> = {
   none: 'bg-slate-300'
 };
 
-function OverviewPanel({ workers, loading, onRefresh, onOpenHistory, graceMin, nowMin, date, onDateChange, onRemind }: {
+function OverviewPanel({ workers, loading, onRefresh, onOpenHistory, graceMin, nowMin, date, onDateChange, onRemind, onAction }: {
   workers: OverviewWorker[];
   loading: boolean;
   onRefresh: () => void;
@@ -432,6 +433,7 @@ function OverviewPanel({ workers, loading, onRefresh, onOpenHistory, graceMin, n
   date: string;
   onDateChange: (date: string) => void;
   onRemind: (workerId: string) => Promise<{ sent: number; message?: string }>;
+  onAction: (m: ModalState) => void;
 }) {
   const [filter, setFilter] = useState('');
   const [stateFilter, setStateFilter] = useState<OverviewFilter>('all');
@@ -593,7 +595,15 @@ function OverviewPanel({ workers, loading, onRefresh, onOpenHistory, graceMin, n
 
                   const Time = ({ t, log }: { t: string; log?: AdminLog }) => (
                     <span className={`inline-flex items-center gap-1 font-medium tabular-nums ${log && (log.source === 'admin' || log.correctsId) ? 'text-blue-600' : 'text-slate-800'}`}>
-                      {t}
+                      {log ? (
+                        <button
+                          onClick={e => { e.stopPropagation(); onAction({ kind: 'correct', workerId: w.id, date, log }); }}
+                          title="Corregir esta hora"
+                          className="hover:underline decoration-dotted underline-offset-2 rounded px-0.5 -mx-0.5 hover:bg-blue-50 transition-colors cursor-pointer"
+                        >
+                          {t}
+                        </button>
+                      ) : t}
                       {log && log.lat != null && log.lng != null && (
                         <a
                           href={`https://www.google.com/maps?q=${log.lat},${log.lng}`}
@@ -607,6 +617,16 @@ function OverviewPanel({ workers, loading, onRefresh, onOpenHistory, graceMin, n
                         </a>
                       )}
                     </span>
+                  );
+
+                  const AddCell = ({ defaultType }: { defaultType: string }) => (
+                    <button
+                      onClick={e => { e.stopPropagation(); onAction({ kind: 'add', workerId: w.id, date, defaultType }); }}
+                      title="Añadir fichaje"
+                      className="text-slate-300 font-bold hover:text-blue-500 hover:bg-blue-50 rounded px-1 transition-colors"
+                    >
+                      —
+                    </button>
                   );
 
                   return (
@@ -653,7 +673,7 @@ function OverviewPanel({ workers, loading, onRefresh, onOpenHistory, graceMin, n
                       </td>
                       <td className="px-4 py-3 text-sm">
                         {entries.length === 0 ? (
-                          <span className="text-slate-300 font-bold">—</span>
+                          <AddCell defaultType="in" />
                         ) : (
                           <div className="space-y-0.5">
                             {entries.map(l => <div key={l.id}><Time t={l.time} log={l} /></div>)}
@@ -662,7 +682,7 @@ function OverviewPanel({ workers, loading, onRefresh, onOpenHistory, graceMin, n
                       </td>
                       <td className="px-4 py-3 text-sm">
                         {pauses.length === 0 ? (
-                          <span className="text-slate-300 font-bold">—</span>
+                          <AddCell defaultType="pause_start" />
                         ) : (
                           <div className="space-y-0.5">
                             {pauses.map((p, i) => (
@@ -677,7 +697,7 @@ function OverviewPanel({ workers, loading, onRefresh, onOpenHistory, graceMin, n
                       </td>
                       <td className="px-4 py-3 text-sm">
                         {exits.length === 0 ? (
-                          <span className="text-slate-300 font-bold">—</span>
+                          <AddCell defaultType="out" />
                         ) : (
                           <div className="space-y-0.5">
                             {exits.map(l => <div key={l.id}><Time t={l.time} log={l} /></div>)}
@@ -1880,6 +1900,7 @@ export default function AdminApp() {
               date={overviewDate}
               onDateChange={setOverviewDate}
               onRemind={handleRemind}
+              onAction={setModal}
             />
           )}
           {view === 'history' && (
