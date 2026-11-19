@@ -464,10 +464,13 @@ export default async function handler(req, res) {
       if (!process.env.RESEND_API_KEY) {
         return res.status(200).json({ success: false, error: 'Resend no configurado' });
       }
-      const date = prev.date;
+      const date = typeof body.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.date) ? body.date : prev.date;
       const alerts = await computeAlerts(supabase, date, settings);
+      // Lista explicita de destinatarios (body.emails) o los fallidos del informe
       const failedEmails = new Set(
-        (prev.failures || []).map(f => (f.match(/[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+/) || [])[0]).filter(Boolean)
+        Array.isArray(body.emails) && body.emails.length
+          ? body.emails.map(e => String(e).trim()).filter(e => EMAIL_RE.test(e))
+          : (prev.failures || []).map(f => (f.match(/[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+/) || [])[0]).filter(Boolean)
       );
 
       const report = { ...prev, failures: [] };
@@ -476,8 +479,8 @@ export default async function handler(req, res) {
       const toResend = alerts.filter(a => a.email && failedEmails.has(a.email));
       await sendWorkerEmails(toResend, report);
 
-      // Reenviar el resumen si no salio
-      if (!prev.digestSent) {
+      // Reenviar el resumen si no salio (o si se pide expresamente)
+      if (!prev.digestSent || body.digest === true) {
         const digestRecipients = String(settings.officeDigestEmail || '')
           .split(/[;,]/)
           .map(e => e.trim())
