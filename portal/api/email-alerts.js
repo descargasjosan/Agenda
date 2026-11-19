@@ -467,7 +467,7 @@ export default async function handler(req, res) {
       const date = prev.date;
       const alerts = await computeAlerts(supabase, date, settings);
       const failedEmails = new Set(
-        (prev.failures || []).map(f => (f.match(EMAIL_RE) || [])[0]).filter(Boolean)
+        (prev.failures || []).map(f => (f.match(/[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+/) || [])[0]).filter(Boolean)
       );
 
       const report = { ...prev, failures: [] };
