@@ -449,7 +449,10 @@ export default async function handler(req, res) {
 
     // ---------- Reintento de los envios que fallaron en la ultima ejecucion ----------
     if (action === 'retry-failures') {
-      if (req.headers['x-cron-secret'] !== process.env.CRON_SECRET) {
+      const isCron = req.headers['x-cron-secret'] === process.env.CRON_SECRET;
+      const isService = process.env.SUPABASE_SERVICE_ROLE_KEY &&
+        req.headers['x-service-key'] === process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (!isCron && !isService) {
         return res.status(401).json({ error: 'No autorizado' });
       }
       const settings = await getEmailSettings(supabase);
